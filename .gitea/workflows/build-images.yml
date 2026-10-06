@@ -1,0 +1,61 @@
+# Build images on this Gitea and publish them to its own package registry.
+#
+# This is the Gitea counterpart of .github/workflows/release-images.yml.
+# Because this .gitea/workflows directory exists, Gitea runs only the
+# workflows in here and ignores .github/workflows; GitHub ignores this one.
+#
+# The runner shares the Docker daemon of the box it runs on, so the registry
+# is addressed as localhost:3002. Docker allows plain HTTP to localhost,
+# which means no daemon configuration is needed to push or to pull.
+#
+# One-time setup:
+#   - a Gitea Actions runner on the same box as Gitea, with the Docker socket
+#   - a repository secret REGISTRY_TOKEN: a Gitea access token with
+#     write:package scope
+#
+# Tags per image: the 7-char commit SHA always, plus a moving latest.
+name: Build images
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/traffic/**"
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ppp-app
+            target: runner
+          - name: ppp-migrate
+            target: migrator
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          short="${GITHUB_SHA::7}"
+          image="localhost:3002/${{ github.repository_owner }}/${{ matrix.name }}"
+          docker build --target "${{ matrix.target }}" -t "$image:$short" -t "$image:latest" .
+          echo "IMAGE=$image" >> "$GITHUB_ENV"
+          echo "SHORT=$short" >> "$GITHUB_ENV"
+
+      - name: Push
+        env:
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "$REGISTRY_TOKEN" | docker login localhost:3002 -u "${{ github.repository_owner }}" --password-stdin
+          docker push "$IMAGE:$SHORT"
+          docker push "$IMAGE:latest"
+          docker logout localhost:3002
