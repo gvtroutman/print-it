@@ -280,7 +280,7 @@ export const auth = betterAuth({
         return {
           error: "invite_required",
           errorDescription:
-            "Pretty Please Print is invite-only. Ask the printer owner for a link.",
+            "Print It! is invite-only. Ask the printer owner for a link.",
         };
       }
     },
