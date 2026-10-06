@@ -28,12 +28,10 @@ export default async function UploadPage() {
       <main className="mx-auto w-full max-w-[1180px] px-[26.4px] pb-[80px] pt-[35.2px]">
         <div className="max-w-[780px]">
           <Kicker>New order</Kicker>
-          {/* Still a sentence someone would say out loud — which was the
-              point of the original H1, and survives the rename. */}
           {/* Still a sentence someone would say out loud, which was the point
-              of the original H1 and survives both the rename and the redesign. */}
+              of the original H1 and survives every rename since. */}
           <h1 className="m-0 mb-[13.2px] text-[46px] leading-[0.98] text-ink">
-            Pretty please print
+            Print It!
           </h1>
           <p className="m-0 mb-[26.4px] text-[16.5px] leading-[1.5] text-ink-2 text-pretty">
             Drop an <span className="font-mono">.stl</span> or{" "}

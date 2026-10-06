@@ -40,6 +40,13 @@ Notable changes. Every entry names a released version; deployments pin
 
 ### Changed
 
+- **The app calls itself Print It!** The wordmark in the header, the browser
+  tab, the heading on the request form, the sign-in screen and the API console
+  all say *Print It!* now. Emails, the passkey prompt and the OpenAPI title
+  still say *Pretty Please Print*, and cookies, `PPP-` ticket numbers and
+  `ppp://` slicer links are unchanged, so nobody is signed out and no link
+  breaks.
+
 - **Opening a ticket from a model's bytes lives in one place.** It was the body
   of the upload route while that was the only way a model arrived;
   `src/lib/intake.ts` now holds it and the upload and the import both call it.
