@@ -13,9 +13,9 @@ import "./_env";
 import { db } from "../src/lib/db";
 import { clientIpFrom, ipSource } from "../src/lib/client-ip";
 import { BOARD, nextStatus, storyRef as storyRefOf } from "../src/lib/scope";
-import { ensureCredentials, signInWithPassword, usernameFor } from "./_accounts";
+import { actAs, createClient } from "./_accounts";
 
-const APP = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+const APP = process.env.APP_URL ?? "http://localhost:3000";
 
 let passed = 0;
 const failures: string[] = [];
@@ -96,21 +96,20 @@ const unescapeHtml = (s: string) =>
    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 
 /**
- * A signed-in browser for an existing user row.
- *
- * Takes the id as well as the address because a password is set against the
- * account, not the mailbox: `ensureCredentials` gives the row a username and
- * a password through the app's own reset endpoint, and the sign-in below is
- * the same request the sign-in form makes. `verify:auth` owns the real
- * registration path; this is the short way to a session.
+ * A browser that has already said who it is: the cookie picking a name on
+ * `/hello` leaves behind, or for the owner the one `/owner` does. The owner
+ * section below also unlocks through the real form, once, to prove the short
+ * way and the long way agree.
  */
-async function signIn(user: { id: string; email: string }): Promise<Browser> {
-  const b = new Browser();
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  await ensureCredentials(APP, user.id, usernameFor(user.email));
-  await signInWithPassword(b, APP, usernameFor(user.email));
-  return b;
-}
+const as = (user: { id: string; role: string }) => actAs(new Browser(), user);
+
+/**
+ * Where an owner-only surface sends somebody who is not the owner: to the
+ * password prompt, carrying them back afterwards. Pages and form actions both
+ * end in a redirect there; neither renders anything of the owner's first.
+ */
+const toOwnerPrompt = (r: Response) =>
+  r.status >= 300 && r.status < 400 && (r.headers.get("location") ?? "").includes("/owner");
 
 /** Finds the index of the form whose markup contains a marker. */
 function formIndexContaining(html: string, marker: string): number {
@@ -131,30 +130,27 @@ async function makeStory(uploaderId: string, title: string, status = "Requested"
 
 async function main() {
   section("setup");
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
   await db.auditEvent.deleteMany();
   await db.notification.deleteMany();
   await db.story.deleteMany();
-  await db.verification.deleteMany();
-  await db.session.deleteMany();
-  await db.invite.deleteMany();
   await db.user.deleteMany({ where: { role: "client" } });
 
   const admin = await db.user.findFirst({ where: { role: "admin" } });
   if (!admin) throw new Error("No admin — run npm run db:seed");
-  const ayla = await db.user.create({
-    data: { email: "ayla@office.example", name: "Ayla Berg", initials: "AY",
-            role: "client", emailVerified: true, invitedById: admin.id },
-  });
+  const ayla = await createClient("Ayla Berg", { email: "ayla@office.example" });
 
-  const ruben = await signIn(admin);
-  const client = await signIn(ayla);
-  console.info(`  admin=${admin.email}  client=${ayla.email}`);
+  const ruben = as(admin);
+  const client = as(ayla);
+  console.info(`  admin=${admin.name}  client=${ayla.name}`);
 
   // ------------------------------------------------------------------
   section("the queue is admin-only");
-  const denied = await client.go(`${APP}/queue`);
-  check("a client gets 404, not 403", denied.status === 404, `status ${denied.status}`);
+  const denied = await client.raw(`${APP}/queue`);
+  check("a client is sent to the owner password prompt", toOwnerPrompt(denied),
+        `status ${denied.status} ${denied.headers.get("location") ?? ""}`);
+  check("which brings them back to the queue once unlocked",
+        paramOf(denied.headers.get("location"), "next") === "/queue",
+        denied.headers.get("location") ?? "");
 
   const home = await client.go(`${APP}/`);
   check("a client's home is the rail, not the queue",
@@ -233,18 +229,16 @@ async function main() {
 
   // ------------------------------------------------------------------
   section("prints by person — the owner picks people and sees what they sent");
-  const bea = await db.user.create({
-    data: { email: "bea@office.example", name: "Bea Quist", initials: "BQ", role: "client",
-            emailVerified: true, invitedById: admin.id },
-  });
+  const bea = await createClient("Bea Quist", { email: "bea@office.example", initials: "BQ" });
   const aylaPart = await makeStory(ayla.id, "Ayla's cable clip");
   const beaPart = await makeStory(bea.id, "Bea's phone stand", "Done");
   const beaOther = await makeStory(bea.id, "Bea's declined thing", "Declined");
 
-  const hidden = await client.go(`${APP}/admin/prints`);
-  check("a client gets 404 for the page", hidden.status === 404, `status ${hidden.status}`);
-  check("and for a selection naming a colleague",
-        (await client.go(`${APP}/admin/prints?who=${bea.id}`)).status === 404);
+  const hidden = await client.raw(`${APP}/admin/prints`);
+  check("a client is sent to the owner prompt from the page", toOwnerPrompt(hidden),
+        `status ${hidden.status}`);
+  check("and from a selection naming a colleague",
+        toOwnerPrompt(await client.raw(`${APP}/admin/prints?who=${bea.id}`)));
 
   const nobody = rendered(await (await ruben.go(`${APP}/admin/prints`)).text());
   check("with nobody picked it lists the people, each with their count, and no tickets",
@@ -270,10 +264,6 @@ async function main() {
   check("an id that names nobody is dropped — it is in none of the links the page builds",
         junk.includes("Bea's phone stand") && !/href="[^"]*nobody-real/.test(junk) &&
         junk.includes("2 tickets from Bea Quist"));
-
-  const guestRows = await (await ruben.go(`${APP}/admin/invites`)).text();
-  check("the guest list links each member to their prints",
-        guestRows.includes(`/admin/prints?who=${bea.id}`));
 
   await db.story.deleteMany({ where: { id: { in: [aylaPart.id, beaPart.id, beaOther.id] } } });
   await db.user.delete({ where: { id: bea.id } });
@@ -380,6 +370,22 @@ async function main() {
     check(`posting the ${label} action as a client changes nothing`,
           after?.status === before, `status became ${after?.status}`);
   }
+  // A bare POST carries no action id, so the two above prove only that a
+  // stray request is inert. Replaying the owner's own form — the real action
+  // id, lifted from a page the client cannot load — is the attack that
+  // matters, and it has to meet `requireAdmin` inside the action.
+  const ownersQueue = await (await ruben.go(`${APP}/queue`)).text();
+  const acceptTarget = (ownersQueue.match(/<form\b[\s\S]*?<\/form>/g) ?? [])
+    .findIndex((f) => f.includes("Accept it") && f.includes(`value="${target.id}"`));
+  check("the owner's queue offers to accept it", acceptTarget >= 0);
+  if (acceptTarget >= 0) {
+    const stolen = await client.submit(`${APP}/queue`, ownersQueue, acceptTarget, {});
+    check("replaying the owner's real Accept form as a client changes nothing",
+          (await db.story.findUnique({ where: { id: target.id } }))?.status === before);
+    check("and sends them to the owner prompt instead", toOwnerPrompt(stolen),
+          `status ${stolen.status} ${stolen.headers.get("location") ?? ""}`);
+  }
+
   // The verbs those owner actions write, named — not every `story.*`. A client
   // is a legitimate actor on some of them now (changing the priority of their
   // own ticket, above), and "no story verb at all" would have this check fail
@@ -445,11 +451,8 @@ async function main() {
         paramOf(emptySaid.headers.get("location"), "error"));
 
   // Someone else's ticket is not a place to talk.
-  const mallory = await db.user.create({
-    data: { email: "mallory@office.example", name: "Mallory Vance", initials: "MA",
-            role: "client", emailVerified: true, invitedById: admin.id },
-  });
-  const other = await signIn(mallory);
+  const mallory = await createClient("Mallory Vance", { email: "mallory@office.example" });
+  const other = as(mallory);
   const trespass = new FormData();
   trespass.set("storyId", String(talk.id));
   trespass.set("body", "I should not be able to say this");
@@ -471,108 +474,105 @@ async function main() {
         "raw markup from a comment reached the page");
 
   // ------------------------------------------------------------------
-  section("resetting a password from the guest list");
+  section("saying who you are, through the real form");
+  /*
+   * Everywhere else in this suite the cookies are minted directly. This is the
+   * one place the front door is walked, so the short way round cannot drift
+   * from what `/hello` actually does.
+   */
+  const newcomer = new Browser();
+  const hello = await newcomer.go(`${APP}/hello`);
+  const helloHtml = await hello.text();
+  check("the name picker opens with no cookie at all", hello.status === 200, `status ${hello.status}`);
+  check("and lists the people who have picked a name",
+        rendered(helloHtml).includes("Ayla Berg"));
+  check("but never the printer owner, who is not on that list",
+        !helloHtml.includes(`value="${admin.id}"`));
 
-  const guestList = await (await ruben.go(`${APP}/admin/invites`)).text();
-  check("members are listed with a recovery control",
-        rendered(guestList).includes("Ayla Berg") && guestList.includes("Forgotten password?"));
+  const addIdx = formIndexContaining(helloHtml, 'name="name"');
+  const added = await newcomer.submit(`${APP}/hello`, helloHtml, addIdx, { name: "Gwen Oner" });
+  const gwen = await db.user.findFirst({ where: { name: "Gwen Oner" } });
+  check("adding a name makes a client row", gwen?.role === "client", `status ${added.status}`);
+  check("and remembers it on this device", newcomer.jar.has("ppp.who"));
+  check("which is enough to reach the board",
+        rendered(await (await newcomer.go(`${APP}/board`)).text()).includes("backlog"));
+  check("the new name is in the trail",
+        (await db.auditEvent.count({ where: { action: "name.added", actorId: gwen?.id } })) === 1);
 
-  const resetIdx = formIndexContaining(guestList, `value="${ayla.id}"`);
-  check("the control targets the right member", resetIdx >= 0);
-  const reset = await ruben.submit(`${APP}/admin/invites`, guestList, resetIdx, {});
-  const resetBody = await reset.text();
+  const twin = new Browser();
+  const twinPage = await (await twin.go(`${APP}/hello`)).text();
+  await twin.submit(`${APP}/hello`, twinPage, formIndexContaining(twinPage, 'name="name"'), {
+    name: "  gwen   ONER ",
+  });
+  check("typing a name that exists picks that person instead of making a twin",
+        (await db.user.count({ where: { name: { equals: "Gwen Oner", mode: "insensitive" } } })) === 1 &&
+        (await db.auditEvent.count({ where: { action: "name.picked", actorId: gwen?.id } })) === 1);
 
-  // A transport is configured in this run, so the link goes to her inbox and
-  // the admin is told it was sent rather than being handed the token.
-  check("the admin is told it went out, not shown the link",
-        resetBody.includes("Sent to") && !resetBody.includes("/set-password?token="),
-        resetBody.slice(0, 200));
+  const posing = new Browser();
+  const posePage = await (await posing.go(`${APP}/hello`)).text();
+  const posed = await posing.submit(`${APP}/hello`, posePage,
+    formIndexContaining(posePage, 'name="name"'), { name: admin.name.toUpperCase() });
+  check("the owner's name cannot be added as a client",
+        paramOf(posed.headers.get("location"), "error") === "owner" && !posing.jar.has("ppp.who"),
+        posed.headers.get("location") ?? "");
 
-  check("and it is recorded, by the admin who asked for it",
-        (await db.auditEvent.count({
-          where: { action: "password.reset_requested", actorId: admin.id },
-        })) === 1);
-
-  // Asking for a reset must not itself sign anybody out. Only using the link
-  // does that, which is what makes the control safe to press by mistake.
-  check("her existing session survives the request",
-        (await db.session.count({ where: { userId: ayla.id } })) > 0,
-        "requesting a reset revoked a session before a password was set");
-
-  const clientTry = new FormData();
-  clientTry.set("userId", admin.id);
-  await client.raw(`${APP}/admin/invites`, { method: "POST", body: clientTry });
-  check("a client cannot mint one for anybody",
-        (await db.auditEvent.count({ where: { action: "password.reset_requested" } })) === 1,
-        "a client triggered a password reset");
+  // The pick buttons carry the id in the button, not a hidden input, so the
+  // id is whatever the request says. Naming the owner's row must not work.
+  const pickIdx = formIndexContaining(posePage, 'name="userId"');
+  check("existing names are offered as buttons", pickIdx >= 0);
+  if (pickIdx >= 0) {
+    const picked = await posing.submit(`${APP}/hello`, posePage, pickIdx, { userId: admin.id });
+    check("picking the owner's row by id is refused",
+          paramOf(picked.headers.get("location"), "error") === "unknown" && !posing.jar.has("ppp.who"),
+          picked.headers.get("location") ?? "");
+  }
 
   // ------------------------------------------------------------------
-  section("revoking a member's access");
+  section("the owner pages are unlocked with ADMIN_PASSWORD");
 
-  const goner = await db.user.create({
-    data: { email: "goner@office.example", name: "Gwen Oner", initials: "GW",
-            role: "client", emailVerified: true, invitedById: admin.id },
+  const counter = new Browser();
+  const prompt = await counter.go(`${APP}/owner?next=/admin/prints`);
+  const promptHtml = await prompt.text();
+  check("the owner prompt opens with no cookie", prompt.status === 200, `status ${prompt.status}`);
+  const unlockIdx = formIndexContaining(promptHtml, 'name="password"');
+  check("and asks for the password", unlockIdx >= 0);
+
+  const refusedBefore = await db.auditEvent.count({ where: { action: "owner.unlock_refused" } });
+  const wrong = await counter.submit(`${APP}/owner`, promptHtml, unlockIdx, {
+    password: "not-the-owner-password",
   });
-  const gonerB = await signIn(goner);
-  check("the member can reach the app",
-        rendered(await (await gonerB.go(`${APP}/board`)).text()).includes("backlog"));
-  check("and holds a live session",
-        (await db.session.count({ where: { userId: goner.id } })) > 0);
+  check("a wrong password is refused",
+        paramOf(wrong.headers.get("location"), "error") === "wrong" && !counter.jar.has("ppp.owner"),
+        wrong.headers.get("location") ?? "");
+  check("and the refusal is in the trail, with no actor",
+        (await db.auditEvent.count({ where: { action: "owner.unlock_refused", actorId: null } })) ===
+          refusedBefore + 1);
 
-  let guests = await (await ruben.go(`${APP}/admin/invites`)).text();
-  check("the guest list offers a revoke control", guests.includes("Revoke access?"));
+  const password = process.env.ADMIN_PASSWORD ?? "";
+  const right = await counter.submit(`${APP}/owner`, promptHtml, unlockIdx, { password });
+  check("the right password unlocks the owner pages", counter.jar.has("ppp.owner"),
+        `status ${right.status} ${right.headers.get("location") ?? ""} — does ADMIN_PASSWORD match the app's?`);
+  check("and goes where it was asked to",
+        (right.headers.get("location") ?? "").endsWith("/admin/prints"),
+        right.headers.get("location") ?? "");
+  // No Max-Age: it should not outlive the browser. Its own expiry is in the
+  // signed value, which the security probe tests separately.
+  const ownerSetCookie = right.headers.getSetCookie().find((c) => c.startsWith("ppp.owner=")) ?? "";
+  check("the owner cookie is a browser-session cookie, HttpOnly",
+        ownerSetCookie !== "" && !/max-age|expires/i.test(ownerSetCookie) && /httponly/i.test(ownerSetCookie),
+        ownerSetCookie);
+  check("the unlocked browser is the owner",
+        (await counter.raw(`${APP}/queue`)).status === 200);
+  check("and unlocking is audited, as the owner",
+        (await db.auditEvent.count({ where: { action: "owner.unlocked", actorId: admin.id } })) >= 1);
+  check("the trail never holds the password",
+        (await db.auditEvent.findMany({ where: { action: { startsWith: "owner." } } }))
+          .every((e) => !JSON.stringify(e).includes("not-the-owner-password") &&
+                        (!password || !JSON.stringify(e).includes(password))));
 
-  const revokeIdx = formIndexContaining(guests, 'name="revoke"');
-  const revoked = await ruben.submit(`${APP}/admin/invites`, guests, revokeIdx, {
-    userId: goner.id, revoke: "true",
-  });
-  check("revoking is accepted", revoked.status < 400, `status ${revoked.status}`);
-  check("the account is suspended",
-        (await db.user.findUnique({ where: { id: goner.id } }))?.banned === true);
-  // The admin plugin refuses to CREATE a session for a suspended account but
-  // does nothing about one already held — so the sessions have to go too, or
-  // the control only closes the door they are already through.
-  check("their live sessions are revoked with it",
-        (await db.session.count({ where: { userId: goner.id } })) === 0);
-  check("the session they were holding stops working",
-        !rendered(await (await gonerB.go(`${APP}/board`)).text()).includes("backlog"));
-
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  const lockedOut = await signInWithPassword(new Browser(), APP, usernameFor(goner.email));
-  check("and they cannot sign back in", lockedOut.status >= 400, `status ${lockedOut.status}`);
-  check("revocation is audited",
-        (await db.auditEvent.count({
-          where: { action: "access.revoked", subject: goner.email } })) === 1);
-
-  // The printer owner is the only way into the admin surface; suspending them
-  // would lock the app with no way back.
-  guests = await (await ruben.go(`${APP}/admin/invites`)).text();
-  check("the admin session is still live (or the guard below proves nothing)",
-        guests.includes("The guest list"));
-  await ruben.submit(`${APP}/admin/invites`, guests,
-    formIndexContaining(guests, 'name="revoke"'), { userId: admin.id, revoke: "true" });
-  check("the printer owner cannot be suspended",
-        (await db.user.findUnique({ where: { id: admin.id } }))?.banned !== true);
-
-  const clientRevoke = new FormData();
-  clientRevoke.set("userId", admin.id);
-  clientRevoke.set("revoke", "true");
-  await client.raw(`${APP}/admin/invites`, { method: "POST", body: clientRevoke });
-  check("a client cannot revoke anybody",
-        (await db.auditEvent.count({ where: { action: "access.revoked" } })) === 1);
-
-  guests = await (await ruben.go(`${APP}/admin/invites`)).text();
-  check("a suspended member reads as suspended", guests.includes("Suspended"));
-  await ruben.submit(`${APP}/admin/invites`, guests,
-    formIndexContaining(guests, 'name="revoke"'), { userId: goner.id, revoke: "false" });
-  check("restoring clears the suspension",
-        (await db.user.findUnique({ where: { id: goner.id } }))?.banned === false);
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  check("and they sign in again with the password they already had",
-        (await signInWithPassword(new Browser(), APP, usernameFor(goner.email))).status === 200);
-  check("the restore is audited",
-        (await db.auditEvent.count({
-          where: { action: "access.restored", subject: goner.email } })) === 1);
+  const clientPrompt = await client.go(`${APP}/owner`);
+  check("a client may open the prompt — it is the only way in",
+        clientPrompt.status === 200 && (await clientPrompt.text()).includes('name="password"'));
 
   // ------------------------------------------------------------------
   section("Done is the end of the line, and leaves the rail");
@@ -717,15 +717,15 @@ async function main() {
   // ------------------------------------------------------------------
   section("the AGPL source offer, and the brand mark");
 
-  const anonPage = await (await new Browser().go(`${APP}/signin`)).text();
-  check("the source offer reaches signed-out visitors",
+  const anonPage = await (await new Browser().go(`${APP}/hello`)).text();
+  check("the source offer reaches visitors who have not picked a name",
         anonPage.includes("Source · AGPL-3.0"),
         "AGPL section 13 wants it in front of anyone using the app over a network");
-  check("and signed-in ones",
+  check("and ones who have",
         (await (await ruben.go(`${APP}/board`)).text()).includes("Source · AGPL-3.0"));
 
   const iconRes = await new Browser().raw(`${APP}/icon.svg`);
-  check("the favicon is served, not redirected to sign-in",
+  check("the favicon is served, not redirected to the name picker",
         iconRes.status === 200 &&
         (iconRes.headers.get("content-type") ?? "").includes("svg"),
         `status ${iconRes.status} type ${iconRes.headers.get("content-type")}`);
@@ -734,7 +734,7 @@ async function main() {
   check("and paints the cherry mark, not the old teal disc",
         fills.includes("#e4322f") && !fills.includes("#12645f"), fills.join(","));
 
-  await db.user.deleteMany({ where: { email: "goner@office.example" } });
+  await db.user.deleteMany({ where: { name: "Gwen Oner", role: "client" } });
 
   // ------------------------------------------------------------------
   section("History Prints — old work, scoped, filterable, re-queueable");

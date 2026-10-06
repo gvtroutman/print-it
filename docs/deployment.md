@@ -4,7 +4,7 @@
 
 ## Running it in containers
 
-The dev stack (`docker-compose.yml`) runs Postgres and Mailpit while the app runs
+The dev stack (`docker-compose.yml`) runs Postgres while the app runs
 on the host under `npm run dev`. That is the loop for building. Model files go to
 `./data/uploads`; there is no storage service to run.
 
@@ -15,11 +15,12 @@ the basis for deployment:
 cp .env.docker.example .env.docker      # then fill in the secrets
 docker compose --env-file .env.docker \
   -f docker-compose.prod.yml -f docker-compose.build.yml \
-  -f docker-compose.test.yml --profile mailcatcher up -d --build
+  -f docker-compose.test.yml up -d --build
 ```
 
-App on :3000, Mailpit on :8025 — every invitation and sign-in link lands there,
-so the whole flow is clickable without a mail server.
+App on :3000. Open `/hello` and pick a name; `/owner` takes the
+`ADMIN_PASSWORD` from `.env.docker`. The app sends no mail, so there is no mail
+catcher to run.
 
 Six compose files, each with one job:
 
@@ -47,8 +48,8 @@ unmigrated schema. The **runner** is the slim runtime — standalone Next output
 non-root, with a healthcheck.
 
 To run the verification suites against the containerised app, add
-`-f docker-compose.test.yml`, which publishes Postgres and Mailpit's SMTP port so
-the host-side scripts can reach them. **Never apply that overlay on a deployed
+`-f docker-compose.test.yml`, which publishes Postgres's port so
+the host-side scripts can reach it. **Never apply that overlay on a deployed
 host** — those are internal services.
 
 ## Deploying to TrueNAS SCALE, behind Nginx Proxy Manager
@@ -64,6 +65,13 @@ docker network create npm-proxy
 docker network connect npm-proxy <your-nginx-proxy-manager-container>
 ```
 
+**Before you start: this app has no sign-in.** Anyone who can reach it can
+pick anybody's name — see
+[Do not put this on the internet](authentication.md#do-not-put-this-on-the-internet).
+A reverse proxy with a public DNS name makes it reachable from anywhere, so
+either keep that hostname on the office network (internal DNS, or a proxy
+access list limited to the LAN) or put an authenticating layer in front.
+
 **No registry credential is needed.** The images are public, so the host pulls
 them anonymously — nothing to create, store or rotate. Forks that keep their
 packages private need a one-off login instead:
@@ -77,11 +85,10 @@ docker login ghcr.io -u <your-github-user> -p <classic PAT with read:packages>
 ```bash
 DATA_ROOT=/mnt/tank/ppp
 APP_URL=https://print.example.org
-PASSKEY_RP_ID=print.example.org        # permanent — see below
 TRUST_PROXY_HEADERS=true
-SMTP_URL=smtp://user:pass@mail.example.org:587
+ADMIN_PASSWORD=...                     # unlocks the owner pages — long and random
 
-PPP_REGISTRY=ghcr.io/danileau
+PPP_REGISTRY=ghcr.io/gvtroutman
 PPP_TAG=a1b2c3d                        # a commit SHA, not `latest`
 ```
 
@@ -89,8 +96,8 @@ Pin `PPP_TAG` to a SHA rather than `latest`. It is what makes a deploy
 reproducible, and **it is also how you roll back** — set the previous SHA and
 bring the stack up again.
 
-**Bring it up** — without `--profile mailcatcher`, which exists to catch mail
-in development and has no business on a deployed host:
+**Bring it up** — without `docker-compose.test.yml`, which publishes ports a
+deployed host has no business exposing:
 
 ```bash
 docker compose --env-file .env.docker \
@@ -131,9 +138,9 @@ Verify by hand if you want to see it work:
 
 ```bash
 ./bin/cosign verify \
-  --certificate-identity-regexp '^https://github\.com/danileau/(prettypleaseprint|ppp)/\.github/workflows/release-images\.yml@refs/(heads/main|tags/v[0-9][0-9A-Za-z.\-]*)$' \
+  --certificate-identity-regexp '^https://github\.com/gvtroutman/print-it/\.github/workflows/release-images\.yml@refs/(heads/main|tags/v[0-9][0-9A-Za-z.\-]*)$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/danileau/ppp-app:v0.3.0
+  ghcr.io/gvtroutman/ppp-app:v0.3.0
 ```
 
 Two things that alternation is carrying, both found by verifying a real
@@ -159,7 +166,7 @@ the NAS is a consumer of images and should stay one.
 
 The wizard is not part of any image and does not update itself. The copy on
 the host is whatever you put there, so take the new one when you upgrade:
-`https://raw.githubusercontent.com/danileau/prettypleaseprint/<tag>/scripts/deploy-wizard.sh`.
+`https://raw.githubusercontent.com/gvtroutman/print-it/<tag>/scripts/deploy-wizard.sh`.
 A copy from before v0.3.0 still deploys, but shows no upgrade notes.
 
 It answers what a bare `sed PPP_TAG && docker compose up -d` does not:
@@ -322,44 +329,35 @@ directly and send whatever header `TRUST_PROXY_HEADERS` is set to believe.
 Binding to the Docker bridge (`172.17.0.1:30222:3000`) keeps containers able to
 reach it while the LAN cannot.
 
-### HTTPS is not optional, and here is why
+### HTTPS is not optional
 
-Two independent reasons:
+There are no passwords for the office any more, but one is still typed into
+the app — `ADMIN_PASSWORD`, on `/owner` — and the two identity cookies are what
+say who everyone is. A production build refuses to start when `APP_URL` is
+not `https://`; only a loopback address (`http://localhost:3000`) is let
+through, for a local smoke test.
 
-1. **WebAuthn requires a secure context.** Browsers refuse to create or use a
-   passkey over plain HTTP, with the single exception of `localhost`. On
-   `http://nas.local:3000`, passkeys simply do not work — everyone falls back
-   to a username and a password, which still function.
-2. **The app refuses to start.** `src/lib/auth.ts` throws in production when
-   `BETTER_AUTH_URL` is not `https://`, unless it is loopback. Session cookies
-   carry `Secure`, and a cookie the browser discards is an app nobody can sign
-   in to — failing at boot is better than failing mysteriously at sign-in.
+So put it behind whatever already terminates TLS for you, set `APP_URL` to the
+`https://` address people use, and make sure the proxy forwards the original
+`Host` and sets `X-Forwarded-For` — the audit trail records that address, and
+the owner password's guess limit counts per address.
 
-Put it behind whatever already terminates TLS for you, and make sure the proxy
-forwards the original `Host` and sets `X-Forwarded-For` — the audit trail
-records that address.
-
-### `PASSKEY_RP_ID` is permanent
-
-It is the registrable domain with no scheme and no port
-(`print.example.org`, not `https://print.example.org:443`). Passkeys are bound
-to it cryptographically. **Change it later and every passkey already
-registered stops working**, with no migration path — everyone signs in with
-their password and re-enrols. Pick the hostname you intend to keep.
+`APP_URL` must match what the browser sees: it decides the `Secure` flag, and
+the API refuses a write whose `Origin` names anywhere else.
 
 ### First run
 
-`migrate` seeds exactly one admin from `ADMIN_EMAIL` / `ADMIN_NAME` and prints
-a one-use link for setting a username and a password:
+`migrate` seeds exactly one admin — the printer owner — from `ADMIN_NAME`
+(`ADMIN_EMAIL` is optional). There is no link to collect and nothing to read in
+its logs unless it failed.
 
-```bash
-docker compose --env-file .env.docker -f docker-compose.prod.yml logs migrate
-```
+Then open the app: people pick their names at `/hello`, and the owner unlocks
+the owner pages at `/owner` with `ADMIN_PASSWORD`. If `ADMIN_PASSWORD` is
+unset, the owner pages stay switched off and `/owner` says so.
 
-Open it within thirty minutes, then invite the office from `/admin/invites`.
-The seed is an upsert, so it is safe on every start and keeps the admin's name
+The seed is an upsert, so it is safe on every start and keeps the owner's name
 in step with the environment — but it will refuse to create a *second* admin,
-and so will the database, and it never resets a password that already exists.
+and so will the database.
 
 ### There is no object store
 
@@ -515,15 +513,15 @@ Four things to know before switching it on:
   Printables rather than up through Cloudflare or Nginx, so the 100 MB edge cap
   described below does not apply; the app's own 250 MB limit does.
 - **A misspelt value stops the app, on purpose.** `IMPORT_SOURCES="printable"`
-  makes sign-in and the API answer 500 with a log line naming the variable,
+  makes the pages and the API answer 500 with a log line naming the variable,
   rather than quietly meaning "off". `/api/health` only checks the database and keeps
-  answering 200, so the deploy wizard will not roll this back for you — sign
-  in once after changing it.
+  answering 200, so the deploy wizard will not roll this back for you — open
+  the app once after changing it.
 
 Only Printables. MakerWorld and Thingiverse are not supported, and
 [the architecture notes](architecture.md#importing-from-a-link) say why.
 
-What a signed-in person can make the server do with this is narrow by
+What anybody who has picked a name can make the server do with this is narrow by
 construction — they choose a model, never an address — and the
 [security notes](security-audit.md#importing-from-a-link) set out what was
 checked and what is accepted.
@@ -533,8 +531,8 @@ checked and what is accepted.
 Everything is under `DATA_ROOT`: `db/` (Postgres) and `uploads/` (the uploaded
 files). A ZFS snapshot of the dataset captures both. `.env.docker` holds the
 secrets and is not in the repo — keep it somewhere you will still have it after
-a rebuild, because losing `BETTER_AUTH_SECRET` invalidates every session and
-losing `DB_PASSWORD` locks you out of the database.
+a rebuild. Losing `APP_SECRET` only means everyone picks their name again and
+the owner unlocks again; losing `DB_PASSWORD` locks you out of the database.
 
 ## Deploying behind a Cloudflare Tunnel
 
@@ -556,6 +554,18 @@ the host — three things that must all stay true. A tunnel deployment connects
 outward: `cloudflared` opens the connection to Cloudflare and requests arrive
 back down it. Nothing needs to be reachable from the internet.
 
+**It does make the app reachable *from* the internet**, to anyone with the
+URL — and this app has no sign-in. Anyone who finds the hostname can submit
+prints, pick a colleague's name and read their tickets, and comment as them.
+Before you route a public hostname to it, put
+[Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/applications/)
+(or another authenticating layer) in front of that hostname, so only your
+office gets as far as `/hello`. The PrusaSlicer helper fetches models with
+`curl`, which Access will challenge like any other client, so that path needs
+a rule or a service token of its own — or accept that the helper only works
+from inside the office. See
+[Do not put this on the internet](authentication.md#do-not-put-this-on-the-internet).
+
 That removes a whole class of outage. The deployment this file was written for
 was migrated by its ISP from DSL to cable; the old address was handed back, the
 `A` record went on pointing at an IP that no longer routed, and Cloudflare
@@ -569,10 +579,7 @@ at the edge and the tunnel itself is encrypted, so the app needs no Let's
 Encrypt certificate at all — one fewer thing with an expiry date. (Only *its*
 certificate: a wildcard that other hostnames still use stays; see below.)
 
-`APP_URL` and `PASSKEY_RP_ID` do not change, because the hostname does not.
-That matters more than it looks: passkeys are bound to the RP ID permanently,
-so a migration that altered it would silently invalidate every passkey already
-registered.
+`APP_URL` does not change, because the hostname does not.
 
 ### Setting it up
 
@@ -614,7 +621,7 @@ makes the cause harder to see. The forwards and the certificate can only go
 once the *last* hostname behind them has moved to a tunnel too; adding each one
 as another Public Hostname on a tunnel is how they get there.
 
-### Turn Rocket Loader off, or nobody can sign in
+### Turn Rocket Loader off, or nothing on the page works
 
 Reported by NelsonFx on the pull request that added this overlay, and it is the
 first thing an orange-clouded deployment is likely to hit.
@@ -634,11 +641,10 @@ nonce**, so the browser refuses them, hydration never happens, and no client-sid
 code runs at all.
 
 What you see is worse than an error. Every page renders correctly, because the
-server sent the HTML — the board, the ticket, the sign-in form all look right.
-They simply do nothing. Sign-in is where it bites first, because `/signin` is a
-client component and the passkey and password paths both go through the auth
-client, but it takes the upload progress bar, the 3D viewer and the Activity menu
-with it. The console shows CSP violations; nothing in the app's own logs does,
+server sent the HTML — the board, the ticket, the request form all look right.
+They simply do nothing: the upload progress bar, the 3D viewer and the Activity
+menu are all client code. (`/hello` and `/owner` are plain forms and keep
+working, which makes the rest failing more confusing, not less.) The console shows CSP violations; nothing in the app's own logs does,
 because the requests never arrive.
 
 **Fix:** turn Rocket Loader off, either globally or with a Configuration Rule
@@ -648,7 +654,7 @@ There is no way to keep both. The alternative is adding `unsafe-inline` to
 `script-src`, which discards what the nonce is there for — see
 [the security audit](security-audit.md), where the nonce-and-`strict-dynamic`
 policy is the whole answer to "no Content-Security-Policy". A page-speed feature
-is not worth that trade on an invite-only app used by five people.
+is not worth that trade on an app used by five people.
 
 Auto Minify and Brotli are fine; they do not move script tags.
 

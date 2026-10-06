@@ -117,30 +117,34 @@ Click **Open in PrusaSlicer** on any ticket and it works. The link is
 ticket is rendered — for **you**, for **that model**, for **half an hour**.
 
 It is deliberately not much of a secret, because it cannot do much: it names
-who you are, and the server decides the rest. Your account is loaded and
-refused if it has been suspended, and the same `storyScope` rule the pages use
-is re-applied — so a link cannot reach a model you have lost access to, and
-cannot be edited to fetch a different one. If it expires, open the ticket again
+who you are, and the server decides the rest. The person it names is loaded
+again, and the same `storyScope` rule the pages use is re-applied — so a link
+cannot be edited to fetch a different model. It is an HMAC signed with the
+app's `APP_SECRET`, so changing that secret kills every outstanding link. If it expires, open the ticket again
 and click; there is nothing to rotate.
 
 Two consequences worth stating plainly:
 
 - **Nothing secret is on your disk.** `slicer.conf` holds an address. It is
   still created `600`, but there is nothing in it to steal.
-- **Signing out does not kill an outstanding link.** Nothing is stored, so
-  there is nothing to revoke — the half hour has to elapse. Suspending the
-  account *does* stop it. For read access to one model you could already open,
-  that is the right side of the trade.
+- **Switching names does not kill an outstanding link.** Nothing is stored, so
+  there is nothing to revoke — the half hour has to elapse. For read access to
+  one model you could already open, that is the right side of the trade.
+- **Behind an authenticating proxy, the helper is a client like any other.**
+  It fetches with `curl` and holds no browser cookies, so Cloudflare Access, a
+  VPN-only hostname or a proxy password will stop it unless that path is let
+  through or the helper runs from inside the office network.
 
 #### If you set this up before
 
-Earlier versions put a `PPP_TOKEN` in that file — a bearer token, which is the
+Earlier versions put a `PPP_TOKEN` in that file — a bearer token, which was the
 session token. When sessions came down from thirty days to twenty idle minutes
 it stopped working, and every click began answering `HTTP 401`. That is the bug
 this replaced.
 
-The helper still honours `PPP_TOKEN` when a link carries no `t`, so an old
-bookmark keeps working, but there is no reason to keep one:
+Since sign-in was removed there are no sessions and no bearer tokens at all,
+so a `PPP_TOKEN` can never work again. The helper still sends one when a link
+carries no `t`, and the app ignores it and answers 401. Delete the line:
 
 ```bash
 sed -i '/^PPP_TOKEN=/d' ~/.config/ppp/slicer.conf
@@ -171,10 +175,10 @@ indistinguishable from one that was never wired up. Common lines:
 | `no config at …` | The installer has not run, or `$PPP_SLICER_CONF` points elsewhere. |
 | nothing at all happens, no log line | The handler is not where the `.desktop` says. If you set this up before the copy landed, it still points into the checkout — re-run the installer. |
 | `that link has expired (HTTP 401)` | Links last half an hour. Open the ticket again and click the button. |
-| `the PPP_TOKEN in … is expired` | You are on the old config-token path. Delete the line and click the button in the app — see *If you set this up before*. |
+| `the PPP_TOKEN in … is expired` | You are on the old config-token path, which no longer works at all. Delete the line and click the button in the app — see *If you set this up before*. |
 | `that link carries no credential and … sets no PPP_TOKEN` | An old bookmark, on a config with no token. Open the ticket in the app and click there. |
 | `the credential in that link is malformed` | The URL was edited or truncated in transit. Re-click from the ticket. |
-| `story N … not one this account may see (HTTP 404)` | That ticket is not yours, or does not exist. |
+| `story N … not one this account may see (HTTP 404)` | That ticket is not the name the link was minted for, or does not exist. |
 | `could not find PrusaSlicer` | Auto-detect missed it. Set `PPP_SLICER` — see *Finding the slicer* above. |
 | `slicer '…' is not runnable` | `PPP_SLICER` points at something that is not a command or an executable file. |
 | loads then says *empty file* / *loading failed* | The bytes did arrive; the slicer could not read them (a truncated or non-model file). Check the ticket's file. |

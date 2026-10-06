@@ -5,7 +5,7 @@
 # so the NAS never needs the source tree or a toolchain, and what runs there
 # is byte-for-byte what the pipeline tested.
 #
-#   PPP_REGISTRY  default ghcr.io/danileau
+#   PPP_REGISTRY  default ghcr.io/gvtroutman
 #   PPP_TAG       default latest; pin to a commit SHA for a real deployment,
 #                 because that is also how you roll back.
 #
@@ -14,11 +14,11 @@
 # This file alone publishes NO host ports: on its own the stack is running but
 # unreachable. That is deliberate — every context adds only the ports it needs.
 #
-#   Local, built from source and reachable (Mailpit catches the mail):
+#   Local, built from source and reachable:
 #     cp .env.docker.example .env.docker
 #     docker compose --env-file .env.docker \
 #       -f docker-compose.prod.yml -f docker-compose.build.yml \
-#       -f docker-compose.test.yml --profile mailcatcher up -d --build
+#       -f docker-compose.test.yml up -d --build
 #
 #   TrueNAS behind Nginx Proxy Manager:
 #     docker compose --env-file .env.docker \
@@ -29,8 +29,8 @@
 # with the wrong database password, or refuses to start.
 #
 #   TrueNAS SCALE: set DATA_ROOT to a dataset, point APP_URL at your real
-#   https:// hostname, give SMTP_URL a real server, and leave the mailcatcher
-#   profile off. See the deployment section of README.md.
+#   https:// hostname, and set ADMIN_PASSWORD. See the deployment section of
+#   README.md.
 #
 # Storage is bind-mounted rather than named-volumed so TrueNAS snapshots and
 # replication see the data as ordinary files on a dataset.
@@ -41,19 +41,12 @@ x-restart: &restart
 services:
   # Applies migrations and upserts the admin, then exits. The app waits for it
   # to finish, so a deploy can never serve against an unmigrated schema.
-  #
-  # On a first deploy it also prints a one-use link for the admin to set a
-  # username and a password — that link is the whole bootstrap, so read the
-  # logs:  docker compose --env-file .env.docker -f docker-compose.prod.yml logs migrate
   migrate:
-    image: ${PPP_REGISTRY:-ghcr.io/danileau}/ppp-migrate:${PPP_TAG:-latest}
+    image: ${PPP_REGISTRY:-ghcr.io/gvtroutman}/ppp-migrate:${PPP_TAG:-latest}
     container_name: ppp-migrate
     env_file: [.env.docker]
     environment:
       DATABASE_URL: postgresql://ppp:${DB_PASSWORD:?set DB_PASSWORD}@db:5432/ppp?schema=public
-      # The set-password link it prints has to point at the hostname the
-      # browser uses, not at the container's idea of localhost.
-      BETTER_AUTH_URL: ${APP_URL:-http://localhost:3000}
     # Mounted so the migrator can create it and hand it to the app's uid. The
     # app runs as 1001 and Docker creates a missing bind-mount source as root,
     # so without this a fresh deployment starts with an unwritable store and
@@ -66,7 +59,7 @@ services:
     restart: "no"
 
   app:
-    image: ${PPP_REGISTRY:-ghcr.io/danileau}/ppp-app:${PPP_TAG:-latest}
+    image: ${PPP_REGISTRY:-ghcr.io/gvtroutman}/ppp-app:${PPP_TAG:-latest}
     container_name: ppp-app
     <<: *restart
     env_file: [.env.docker]
@@ -76,10 +69,10 @@ services:
       # this directory and hands it to uid 1001 before the app ever starts —
       # see its command below.
       MODELS_ROOT: /uploads
-      # Better Auth derives cookie scope, invitation and set-password link
-      # URLs, and the WebAuthn relying party from this. It must match what the browser actually sees,
-      # including scheme and port.
-      BETTER_AUTH_URL: ${APP_URL:-http://localhost:3000}
+      # Cookies are marked Secure when this is https://, and API writes are
+      # refused unless their Origin matches it. It must match what the browser
+      # actually sees, including scheme and port.
+      APP_URL: ${APP_URL:-http://localhost:3000}
       # Forwarded client addresses are only believed when a proxy is genuinely
       # the only way in — see docker-compose.proxy.yml and src/lib/client-ip.ts.
       TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
@@ -115,8 +108,3 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-  mailpit:
-    image: axllent/mailpit:latest
-    container_name: ppp-mailpit
-    <<: *restart
-    profiles: ["mailcatcher"]

@@ -1,10 +1,9 @@
 import "server-only";
 import { cache } from "react";
-import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { ownerUnlocked, whoId } from "@/lib/identity";
 import { storyScope, type Actor } from "@/lib/scope";
 
 // The pure rules live in `scope.ts` so they can be imported without pulling in
@@ -30,62 +29,52 @@ export {
   type Actor,
 } from "@/lib/scope";
 
+const toActor = (u: { id: string; name: string; initials: string; role: string }): Actor => ({
+  id: u.id,
+  name: u.name,
+  initials: u.initials || "??",
+  role: u.role === "admin" ? "admin" : "client",
+});
+
 /**
- * The signed-in user, or null. Never throws.
+ * Whoever is at the keyboard, or null. Throws only when `APP_SECRET` is
+ * missing, which is a deployment that cannot work at all.
  *
- * Suspension is checked here as well as at sign-in, and the redundancy is the
- * point. The admin plugin refuses to *create* a session for a suspended
- * account, which stops them getting back in but does nothing about the
- * session they already hold — that one keeps working until it expires.
- * Revoking access deletes those sessions, and this is the belt to that
- * braces: a session that somehow survives still resolves to nobody.
+ * There is no sign-in. An unlocked owner cookie makes you the printer owner;
+ * otherwise the name picked on `/hello` says who you are. A `ppp.who` cookie
+ * can only ever resolve to a *client* row — the owner's row is reachable
+ * through `ADMIN_PASSWORD` and nothing else.
  */
 export async function currentUser(): Promise<Actor | null> {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) return null;
+  if (await ownerUnlocked()) {
+    const owner = await printerOwner();
+    if (owner) return toActor(owner);
+  }
 
-  const u = session.user as typeof session.user & {
-    initials?: string | null;
-    role?: string | null;
-    banned?: boolean | null;
-  };
-
-  if (u.banned) return null;
-
-  return {
-    id: u.id,
-    name: u.name,
-    email: u.email,
-    initials: u.initials ?? "??",
-    role: u.role === "admin" ? "admin" : "client",
-  };
+  const id = await whoId();
+  if (!id) return null;
+  const user = await db.user.findFirst({ where: { id, role: "client" } });
+  return user ? toActor(user) : null;
 }
 
-/**
- * Gate for any page or action that needs an account. Sends people to sign-in
- * with a return path so the invite/e-mail round trip lands where they meant
- * to go.
- */
+/** Gate for any page or action that needs a name. Sends people to pick one. */
 export async function requireUser(returnTo?: string): Promise<Actor> {
   const user = await currentUser();
   if (user) return user;
 
-  const target = returnTo
-    ? `/signin?next=${encodeURIComponent(returnTo)}`
-    : "/signin";
-  redirect(target);
+  redirect(returnTo ? `/hello?next=${encodeURIComponent(returnTo)}` : "/hello");
 }
 
 /**
- * Gate for admin-only surfaces (the queue, invite management).
+ * Gate for owner-only surfaces (the queue, the catalog, the audit trail).
  *
- * Answers 404 rather than 403 on purpose: a client poking at /admin/invites
- * learns nothing about whether that route exists.
+ * Somebody who has not unlocked the owner pages is sent to the password
+ * prompt, which returns them to `returnTo` once they have.
  */
-export async function requireAdmin(): Promise<Actor> {
-  const user = await requireUser();
-  if (user.role !== "admin") notFound();
-  return user;
+export async function requireAdmin(returnTo?: string): Promise<Actor> {
+  const user = await currentUser();
+  if (user?.role === "admin") return user;
+  redirect(returnTo ? `/owner?next=${encodeURIComponent(returnTo)}` : "/owner");
 }
 
 /**
@@ -124,8 +113,8 @@ export const printerOwner = cache(() =>
  * this way on purpose: you are asking a colleague a favour, not filing a
  * ticket against a role.
  *
- * Only ever rendered behind a session. Unauthenticated pages stay generic
- * rather than telling a stranger who runs the printer.
+ * Only ever rendered once somebody has picked a name. `/hello` and `/owner`
+ * stay generic rather than telling a stranger who runs the printer.
  */
 export const printerName = cache(async (): Promise<string> => {
   const admin = await printerOwner();

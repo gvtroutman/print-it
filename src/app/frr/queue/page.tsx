@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
  * The owner's triage for feature requests — the print `/queue`'s sibling.
  * "Waiting on you" (still `Requested`) comes first and loudest and vanishes
  * when empty; everything already accepted is a list to scan with one control
- * each. Admin-only: `requireAdmin` answers 404 to a client.
+ * each. Owner-only: `requireAdmin` sends anyone else to `/owner`.
  */
 export default async function FeatureQueuePage({
   searchParams,
@@ -29,7 +29,7 @@ export default async function FeatureQueuePage({
     category?: string;
   }>;
 }) {
-  const [params, admin] = await Promise.all([searchParams, requireAdmin()]);
+  const [params, admin] = await Promise.all([searchParams, requireAdmin("/frr/queue")]);
   const { toast, error } = params;
 
   // The owner sees everyone's, so scope is `{}` — the filter is all the query

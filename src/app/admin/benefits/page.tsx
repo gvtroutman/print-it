@@ -13,8 +13,8 @@ import {
 export const dynamic = "force-dynamic";
 
 /**
- * Manage the benefits catalogue — the tips a requester can offer. Admin-only:
- * `requireAdmin` answers 404, so a client learns nothing about this route.
+ * Manage the benefits catalogue — the tips a requester can offer. Owner-only:
+ * `requireAdmin` sends anyone else to the `/owner` password prompt.
  *
  * Plain server-rendered forms, so the whole screen works with JavaScript off,
  * like the rest of the admin surfaces. A retired benefit is kept (not deleted)
@@ -25,7 +25,7 @@ export default async function BenefitsPage({
 }: {
   searchParams: Promise<{ toast?: string; error?: string }>;
 }) {
-  const [{ toast, error }, admin] = await Promise.all([searchParams, requireAdmin()]);
+  const [{ toast, error }, admin] = await Promise.all([searchParams, requireAdmin("/admin/benefits")]);
   const benefits = await listAllBenefits();
 
   const live = benefits.filter((b) => b.active);

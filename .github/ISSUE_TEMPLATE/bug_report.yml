@@ -47,5 +47,5 @@ body:
     id: logs
     attributes:
       label: Anything in the logs?
-      description: "`docker compose logs app --tail=50`. Redact tokens and passwords."
+      description: "`docker compose logs app --tail=50`. Redact tokens, passwords and cookie values."
       render: text

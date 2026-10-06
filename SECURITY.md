@@ -41,8 +41,8 @@ The daily scan covers `main` and the images published from it.
 
 ## Scope
 
-**In scope:** this application's code, its container images, its authentication
-and authorisation model, and its default configuration.
+**In scope:** this application's code, its container images, its identity and
+authorisation model, and its default configuration.
 
 **Out of scope:** vulnerabilities in upstream dependencies with no
 project-specific exploit path (report those upstream — Dependabot and Trivy
@@ -52,13 +52,25 @@ anything that depends on a deployment ignoring the documented requirements —
 notably serving the app over plain HTTP, or setting `TRUST_PROXY_HEADERS=true`
 where the app is reachable without passing through the proxy.
 
+**Not a vulnerability: picking somebody else's name.** There is intentionally
+no user authentication. Anyone who can reach the app can choose any client's
+name on `/hello` and act as them — read their tickets, comment, withdraw a
+request. That is the documented design, suitable only for a trusted network;
+see [How identity works](docs/authentication.md). Exposing the app to the
+internet without an authenticating layer in front is a deployment that ignores
+the documented requirements. What *is* in scope: reaching the printer owner's
+pages or powers without `ADMIN_PASSWORD`, a `ppp.who` cookie that resolves to
+the owner, forging either cookie without `APP_SECRET`, or one client reaching
+another's data *without* picking their name.
+
 ## What has already been assessed
 
 The app has been through SAST, SCA and DAST against the OWASP Top 10 (2021),
 including an app-specific probe suite covering things a generic scanner cannot
-reason about — whether a client can call the admin API, whether an invitation
-is single-use, whether a role can be set from outside, whether a captured
-cookie survives sign-out.
+reason about — whether a client can call the admin API, whether a role can be
+set from outside, whether a name cookie can be made to name the printer owner.
+Most of that assessment predates the removal of sign-in in this fork; the
+report says which parts no longer apply.
 
 That report, including the findings that were real and the residual risk that
 was accepted, is in **[docs/security-audit.md](docs/security-audit.md)**.

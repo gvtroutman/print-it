@@ -11,9 +11,9 @@ import "./_env";
  * DESTRUCTIVE: wipes stories and catalogue rows. Development database only.
  */
 import { db } from "../src/lib/db";
-import { ensureCredentials, signInWithPassword, usernameFor } from "./_accounts";
+import { actAs, createClient } from "./_accounts";
 
-const APP = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+const APP = process.env.APP_URL ?? "http://localhost:3000";
 const RAINBOW = "linear-gradient(135deg, #e4322f 0%, #f6c945 20%, #43aa8b 40%, #2787c9 60%, #7557c7 80%, #e4328c 100%)";
 
 let passed = 0;
@@ -101,13 +101,13 @@ function stlBox(): Uint8Array {
   return bytes;
 }
 
-async function signIn(user: { id: string; email: string }): Promise<Browser> {
-  const browser = new Browser();
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  await ensureCredentials(APP, user.id, usernameFor(user.email));
-  await signInWithPassword(browser, APP, usernameFor(user.email));
-  return browser;
-}
+/** A browser carrying the cookie `/hello` (or `/owner`, for the owner) would set. */
+const as = (user: { id: string; role: string }) => actAs(new Browser(), user);
+
+/** Where an owner-only page or action sends anybody else: the password prompt. */
+const toOwnerPrompt = (response: Response) =>
+  response.status >= 300 && response.status < 400 &&
+  (response.headers.get("location") ?? "").includes("/owner");
 
 async function upload(browser: Browser, material: string, colorName: string, tip: string) {
   const form = new FormData();
@@ -146,46 +146,38 @@ async function restoreDefaults() {
 
 async function main() {
   section("setup");
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
   await db.auditEvent.deleteMany();
   await db.notification.deleteMany();
   await db.story.deleteMany();
   await db.catalogColor.deleteMany();
   await db.catalogMaterial.deleteMany();
-  await db.verification.deleteMany();
-  await db.session.deleteMany();
-  await db.invite.deleteMany();
   await db.user.deleteMany({ where: { role: "client" } });
 
   const admin = await db.user.findFirst({ where: { role: "admin" } });
   if (!admin) throw new Error("No admin — run npm run db:seed");
-  const clientUser = await db.user.create({
-    data: {
-      email: "catalog-client@office.example",
-      name: "Catalog Client",
-      initials: "CC",
-      role: "client",
-      emailVerified: true,
-      invitedById: admin.id,
-    },
+  const clientUser = await createClient("Catalog Client", {
+    email: "catalog-client@office.example",
+    initials: "CC",
   });
   const benefit = await db.benefit.findFirst({ where: { active: true } }) ??
     await db.benefit.create({ data: { label: "A coffee", sortOrder: 0 } });
-  const owner = await signIn(admin);
-  const client = await signIn(clientUser);
+  const owner = as(admin);
+  const client = as(clientUser);
 
   section("the catalogue is owner-only");
-  const denied = await client.go(`${APP}/admin/catalog`);
-  check("a client gets 404, not 403", denied.status === 404, `status ${denied.status}`);
+  const denied = await client.raw(`${APP}/admin/catalog`);
+  check("a client is sent to the owner password prompt", toOwnerPrompt(denied),
+        `status ${denied.status} ${denied.headers.get("location") ?? ""}`);
 
   section("the owner creates materials and every swatch type");
   let page = await (await owner.go(`${APP}/admin/catalog`)).text();
 
-  // The owner's own form, action id and all, posted with the client's session.
+  // The owner's own form, action id and all, posted with the client's cookie.
   // A bare POST would prove nothing: without the action id Next never routes
   // it, and the row would be absent whether or not anything guarded it.
   const forged = await client.submit(`${APP}/admin/catalog`, page, findForm(page, ['placeholder="ASA"']), { name: "Forged" });
-  check("a client cannot drive the owner's form", forged.status === 404, `status ${forged.status}`);
+  check("a client cannot drive the owner's form", toOwnerPrompt(forged),
+        `status ${forged.status} ${forged.headers.get("location") ?? ""}`);
   check("and nothing was added", await db.catalogMaterial.count({ where: { name: "Forged" } }) === 0);
   await owner.submit(`${APP}/admin/catalog`, page, findForm(page, ['placeholder="ASA"']), { name: "ASA" });
   const asa = await db.catalogMaterial.findUnique({ where: { name: "ASA" } });
@@ -239,7 +231,7 @@ async function main() {
   check("the ticket snapshots the swatch mode", story?.colorMode === "gradient");
   section("the catalogue over the API");
   const anonymous = await fetch(`${APP}/api/catalog`);
-  check("it needs a session", anonymous.status === 401, `status ${anonymous.status}`);
+  check("it needs a name", anonymous.status === 401, `status ${anonymous.status}`);
   const listed = await (await client.raw(`${APP}/api/catalog`)).json() as {
     materials?: { name: string; colors: { name: string; mode: string; id?: string }[] }[];
   };

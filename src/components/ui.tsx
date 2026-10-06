@@ -6,7 +6,7 @@ import { PRIORITY_CHIP } from "@/lib/catalog";
  * The neon logotype. A script wordmark on a lit disc — the sign over the door.
  *
  * `lit` runs the warm-up flicker once on load. Off by default so it fires on
- * the sign-in and claim screens only, where it is the first thing you see;
+ * the name picker and owner screens only, where it is the first thing you see;
  * anywhere else it would be a tic.
  */
 export function Brand({ size = 34, lit = false }: { size?: number; lit?: boolean }) {
@@ -44,7 +44,7 @@ export function Kicker({ children }: { children: ReactNode }) {
 }
 
 /**
- * The frame for every screen you reach before signing in. A menu board: dark
+ * The frame for the screens you reach before picking a name. A menu board: dark
  * ground, one lit card, checkerboard along the bottom edge.
  */
 export function AuthShell({ children }: { children: ReactNode }) {

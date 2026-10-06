@@ -28,7 +28,8 @@ notifications and audit trail a print goes through. It lives at **`/frr`**.
   *Waiting on you* (still `Requested`) comes first, ordered high-priority
   first; everything in flight is a list with one control each. The same
   **filter bar** (priority / status / category) narrows the view. Owner-only —
-  a client gets a 404, exactly like the print queue.
+  anyone who has not unlocked the owner pages is sent to the `/owner` password
+  prompt, exactly like the print queue.
 
   The nav points at the board rather than here, for both roles: the board is
   the shared view of everything asked for, and triage is a step off it. That

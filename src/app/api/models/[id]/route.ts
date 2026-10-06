@@ -27,15 +27,14 @@ import { openModel } from "@/lib/storage";
  * client asking for someone else's model gets 404 — not 403, which would
  * confirm it exists.
  *
- * Two ways to be somebody here. The ordinary one is a session, cookie or
- * bearer. The other is `?t=`, the link credential minted into an
+ * Two ways to be somebody here. The ordinary one is the name cookie. The
+ * other is `?t=`, the link credential minted into an
  * "Open in PrusaSlicer" link — see `src/lib/slicer-token.ts` for why a desktop
  * helper needs one and why it is not simply a long-lived token in a file.
  *
  * The token only ever answers *who*. Everything that decides *whether* runs
- * afterwards and identically for both doors: the account is loaded and refused
- * if suspended, and `storyScope` is re-applied against the database. A link
- * therefore cannot reach a model its holder has lost access to, and cannot
+ * afterwards and identically for both doors: the person is loaded, and
+ * `storyScope` is re-applied against the database. A link therefore cannot
  * reach a different model than the one it names.
  */
 export const runtime = "nodejs";
@@ -49,7 +48,7 @@ export async function GET(
   const storyId = Number(id);
   if (!Number.isInteger(storyId)) return new NextResponse(null, { status: 404 });
 
-  // A session first — a browser opening the viewer is the common case and
+  // The name cookie first — a browser opening the viewer is the common case and
   // costs nothing extra. The link credential is only consulted when there is
   // no session to prefer, which is exactly the helper's situation.
   let user = await currentUser();
@@ -61,15 +60,12 @@ export async function GET(
     if (subject) {
       const row = await db.user.findUnique({
         where: { id: subject },
-        select: { id: true, name: true, email: true, initials: true, role: true, banned: true },
+        select: { id: true, name: true, initials: true, role: true },
       });
-      // Suspension is checked here for the same reason `currentUser()` checks
-      // it: a credential minted before access was revoked must not outlive it.
-      if (row && !row.banned) {
+      if (row) {
         user = {
           id: row.id,
           name: row.name,
-          email: row.email,
           initials: row.initials ?? "??",
           role: row.role === "admin" ? "admin" : "client",
         } satisfies Actor;

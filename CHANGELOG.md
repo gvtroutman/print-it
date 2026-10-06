@@ -5,6 +5,55 @@ Notable changes. Every entry names a released version; deployments pin
 
 ## Unreleased
 
+### Upgrading from v0.3.0
+
+- **Sign-in is gone, and the environment changes with it.** Before starting
+  the new image, edit `.env.docker` (and `.env` for a host-side run):
+  - `BETTER_AUTH_SECRET` → **`APP_SECRET`**. Keep the value or generate a new
+    one; either way everyone picks their name once more.
+  - `BETTER_AUTH_URL` → **`APP_URL`** in `.env`. (`.env.docker` already used
+    `APP_URL`.)
+  - **`ADMIN_PASSWORD`** is new and needed: it unlocks the owner pages at
+    `/owner`. Without it they are switched off. Make it long and random.
+  - Delete `PASSKEY_RP_ID`, `PASSKEY_RP_NAME`, `HIBP_DISABLED`, `MAIL_FROM`,
+    `SMTP_URL` and `RESEND_API_KEY`; nothing reads them. `ADMIN_EMAIL` is now
+    optional.
+- **Mailpit is gone.** The `mailcatcher` compose profile and the dev stack's
+  Mailpit service were removed; drop `--profile mailcatcher` from any command
+  you keep around.
+- **One migration, and it is one-way.** `20261007090000_remove_sign_in` drops
+  the `session`, `account`, `verification`, `passkey`, `rateLimit` and `invite`
+  tables and the sign-in columns on `user`, makes `user.email` optional, and
+  renames `auditEvent.actorEmail` to `actorName`, filling it from the person's
+  name. **There is no rolling back to v0.3.0 or any earlier image afterwards,
+  except from a snapshot** — those images expect the tables this drops. Take a
+  snapshot first; the deploy wizard's automatic rollback cannot save you here.
+- **Everyone keeps their name and their tickets.** Existing people simply
+  appear on the `/hello` list. Anyone you had suspended is no longer blocked —
+  there is no such thing any more.
+- **Read [Do not put this on the internet](docs/authentication.md#do-not-put-this-on-the-internet)
+  before deploying.** With no sign-in, a deployment reachable from the
+  internet — a Cloudflare Tunnel, a public reverse-proxy hostname — lets anyone
+  with the URL pick any name. Put a VPN or Cloudflare Access in front, or keep
+  it on the office network.
+- **The images come from `ghcr.io/gvtroutman`.** Upstream's images still have
+  sign-in; `PPP_REGISTRY` now defaults to this fork's.
+- **The PrusaSlicer helper:** a `PPP_TOKEN` in `~/.config/ppp/slicer.conf` can
+  no longer work. Delete the line; links carry their own credential.
+
+### Removed
+
+- **Sign-in, all of it.** No accounts, invitations, usernames, passwords,
+  passkeys, password resets, sessions, re-authentication, bearer tokens or
+  email. For five people sharing an office and a printer, every one of those
+  was something a colleague could get stuck on, and the question they answered
+  — *is this really Ayla?* — is one the office already answers. Gone with them:
+  `/signin`, `/invite/[token]`, `/reauth`, `/set-password`, `/welcome`,
+  `/api/auth/*` and the guest list at `/admin/invites`; the `better-auth`,
+  `@better-auth/passkey`, `nodemailer` and `resend` dependencies; the
+  `auth:generate`, `verify:auth` and `verify:passkey` scripts; the breach check
+  and its outbound call; and the Mailpit service. Nine suites remain.
+
 ### Added
 
 - **A request can start from a Printables link instead of an upload** (#91).
@@ -35,10 +84,52 @@ Notable changes. Every entry names a released version; deployments pin
   Over the API it is `POST /api/import/files` to list and `POST /api/import` to
   open the request, `GET /api/catalog` says whether an instance imports at all,
   and every ticket carries `source` — the model's page, or `null` for an
-  upload. `npm run verify:import` is the eleventh suite, and runs against a
+  upload. `npm run verify:import` is a new suite, and runs against a
   stand-in for Printables so that the far end can be made to misbehave.
 
 ### Changed
+
+- **You pick your name instead of signing in.** `/hello` lists everyone who has
+  used the app; click yours, or type it the first time (typing an existing name
+  in any case picks that person). The choice is a signed `ppp.who` cookie that
+  lasts a year, and *Not Ayla? Switch* in the account menu forgets it. A
+  `ppp.who` can only ever name a client — the printer owner's row is not on the
+  list and cannot be reached through it.
+
+  **Names are not proof of identity.** Anyone who can reach the app can pick
+  anyone's name and see and do what that person can. That is deliberate and
+  suits a trusted office network only; [How identity works](docs/authentication.md)
+  sets out exactly what it costs.
+- **The printer owner unlocks their pages with `ADMIN_PASSWORD`.** `/owner`
+  takes the password from the server's environment and sets `ppp.owner`, a
+  browser-session cookie that also expires after twelve hours; changing the
+  password locks every browser at once, and *Lock owner pages* in the menu
+  locks this one. Wrong guesses are limited to ten a minute per address. The
+  queue, catalogue, benefits, prints by person, audit trail and feature triage
+  sit behind it; visiting one without it leads to `/owner` and back.
+- **The API uses the same cookies.** No bearer tokens: send `ppp.who` (and
+  `ppp.owner` for owner endpoints) with `curl -b`. Without a name the answer is
+  `401 {"error":"Pick your name first."}`. The OpenAPI document declares the
+  two cookies as its security schemes and no longer carries an auth library's
+  paths. The "Open in PrusaSlicer" link keeps its own short-lived credential,
+  now signed with `APP_SECRET`.
+- **The audit trail names people.** `actorEmail` became `actorName`, and the
+  new events are `name.picked`, `name.added`, `owner.unlocked`,
+  `owner.unlock_refused` and `owner.locked`.
+- **The suites mint the identity cookies directly**, with
+  `src/lib/identity-token.ts`, rather than signing in through the UI.
+- **`SOURCE_URL` defaults to this fork,** `https://github.com/gvtroutman/print-it`,
+  so the AGPL source offer in the footer points at the code that is running.
+- **The documentation describes the app without sign-in.** The authentication
+  guide is rewritten as [How identity works](docs/authentication.md); the README,
+  the deployment, API, architecture and development guides, `SECURITY.md` and
+  `CONTRIBUTING.md` follow it, and the deployment guide warns before both the
+  reverse-proxy and the Cloudflare Tunnel setups. The
+  [security audit](docs/security-audit.md) keeps its history and gains a dated
+  note at the top: the findings that no longer apply are marked, and the OWASP
+  verdicts describe the current behaviour — A07 now says plainly that there is
+  no user authentication, and A01 that separation between people rests on
+  names being honest.
 
 - **Opening a ticket from a model's bytes lives in one place.** It was the body
   of the upload route while that was the only way a model arrived;

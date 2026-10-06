@@ -6,7 +6,6 @@ import { relativeTime } from "@/lib/catalog";
 import { Brand } from "@/components/ui";
 import { ActivityMenu, type FeedItem } from "@/components/activity-menu";
 import { UserMenu } from "@/components/user-menu";
-import { PasskeyNudge } from "@/components/passkey-nudge";
 
 /**
  * The sign over the counter, on every screen.
@@ -35,7 +34,6 @@ const NAV: Record<Actor["role"], Array<{ label: string; href: string }>> = {
     // has been asked for, and triage is one button away on that page.
     { label: "Feature requests", href: "/frr" },
     { label: "Benefits", href: "/admin/benefits" },
-    { label: "Guest list", href: "/admin/invites" },
     { label: "Audit", href: "/admin/audit" },
   ],
 };
@@ -47,14 +45,11 @@ export async function AppHeader({
   user: Actor;
   active: string;
 }) {
-  const [notifications, passkeyCount] = await Promise.all([
-    db.notification.findMany({
-      where: { recipientId: user.id },
-      orderBy: { createdAt: "desc" },
-      take: 30,
-    }),
-    db.passkey.count({ where: { userId: user.id } }),
-  ]);
+  const notifications = await db.notification.findMany({
+    where: { recipientId: user.id },
+    orderBy: { createdAt: "desc" },
+    take: 30,
+  });
 
   const items: FeedItem[] = notifications.map((n) => ({
     id: n.id,
@@ -90,9 +85,7 @@ export async function AppHeader({
               <UserMenu
                 name={user.name}
                 initials={user.initials}
-                email={user.email}
                 role={user.role}
-                passkeyCount={passkeyCount}
               />
             </div>
           </div>
@@ -122,8 +115,6 @@ export async function AppHeader({
       {/* Chrome trim, then the checkerboard floor line. */}
       <div className="h-[5px] bg-chrome" aria-hidden />
       <div className="checker h-[8px] border-b-[3px] border-ink" aria-hidden />
-
-      {passkeyCount === 0 && <PasskeyNudge />}
     </header>
   );
 }

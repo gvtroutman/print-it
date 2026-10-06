@@ -53,7 +53,7 @@ export default async function CatalogPage({
   searchParams: Promise<{ toast?: string; error?: string }>;
 }) {
   const [admin, params, materials] = await Promise.all([
-    requireAdmin(),
+    requireAdmin("/admin/catalog"),
     searchParams,
     db.catalogMaterial.findMany({
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],

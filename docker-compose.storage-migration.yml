@@ -69,7 +69,7 @@ services:
     # only machine that needs it. Pinned to the same PPP_TAG as the rest of the
     # stack, so the migration is the one that shipped with the release you are
     # moving to.
-    image: ${PPP_REGISTRY:-ghcr.io/danileau}/ppp-storage-migrate:${PPP_TAG:-latest}
+    image: ${PPP_REGISTRY:-ghcr.io/gvtroutman}/ppp-storage-migrate:${PPP_TAG:-latest}
     container_name: ppp-storage-migration
     # Deliberately not in the default set: `run` reaches it by name, and no
     # `up` can start it by accident.

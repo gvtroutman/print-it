@@ -3,12 +3,11 @@
  *
  * Open redirects are how a phishing page borrows your domain's credibility,
  * and this app hands a `?next=` or a form's `from` straight to the browser
- * right after a successful sign-in or re-auth — the two moments a person is
- * most willing to believe whatever they land on.
+ * right after somebody picks their name or unlocks the owner pages — the
+ * moments a person is most willing to believe whatever they land on.
  *
- * There used to be four copies of this rule, in the sign-in page, the re-auth
- * page and the two server-action helpers, and all four were wrong the same
- * way:
+ * There used to be four copies of this rule, in the old sign-in and re-auth
+ * pages and two server-action helpers, and all four were wrong the same way:
  *
  *     raw.startsWith("/") && !raw.startsWith("//")
  *

@@ -23,12 +23,5 @@ services:
   # ./data/uploads by `npm run dev`, which needs no container at all — see
   # MODELS_ROOT in .env.example and src/lib/storage.ts.
 
-  # Catches every outbound email in dev. Web UI on http://localhost:8025
-  mailpit:
-    image: axllent/mailpit:latest
-    container_name: ppp-mailpit
-    restart: unless-stopped
-    ports: ["8025:8025", "1025:1025"]
-
 volumes:
   pgdata:

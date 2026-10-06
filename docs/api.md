@@ -5,58 +5,63 @@
 Everything the app does over HTTP, and how to drive it yourself.
 
 There is a console at **`/docs`** — Swagger UI, served from this origin, with
-your session already attached. It is linked from the account menu. This page is
+your name cookie already attached. It is linked from the account menu. This page is
 the reading version: what the endpoints are for, and the handful of decisions
 that will otherwise surprise you.
 
 ## The short version
 
 ```bash
-# 1. Sign in. The token comes back in a response header.
-TOKEN=$(curl -si https://print.example/api/auth/sign-in/username \
-  -H 'content-type: application/json' \
-  -d '{"username":"ayla","password":"…"}' \
-  | grep -i '^set-auth-token:' | cut -d' ' -f2 | tr -d '\r')
+# 1. Pick your name in a browser, then copy the ppp.who cookie's value out of
+#    its developer tools (Application → Cookies).
+WHO='ppp.who=clx…'
 
 # 2. Use it.
 curl -s https://print.example/api/stories \
-  -H "authorization: Bearer $TOKEN" | jq '.stories[] | {ref, title, status}'
+  -b "$WHO" | jq '.stories[] | {ref, title, status}'
 ```
 
-## Authentication
+## Who you are
 
-There is **no public sign-up and no separate API key**. An account exists only
-where an invitation was accepted, and the API uses the same session as the
-browser. Two ways to carry it:
+There is **no sign-in, no API key and no bearer token**. The API uses the same
+two cookies as the browser — see [How identity works](authentication.md):
 
 | | |
 | --- | --- |
-| **Session cookie** | What a browser already holds. `Try it out` at `/docs` works with no setup at all. |
-| **Bearer token** | Any sign-in response carries `set-auth-token`. Send it back as `Authorization: Bearer <token>`. |
+| **`ppp.who`** | The name you picked on `/hello`. Enough for everything a client can do. `Try it out` at `/docs` works with no setup at all. |
+| **`ppp.owner`** | Set by unlocking `/owner` with `ADMIN_PASSWORD`. Needed for the endpoints marked *Printer owner* below, and makes you the owner whatever `ppp.who` says. |
 
-The bearer token **is** the session token. That has consequences worth knowing
-before you paste one into a script:
+From a script, copy the cookie out of a browser and send it with `curl -b`:
 
-- Signing out revokes it, at the same instant it revokes the cookie. So does an
-  admin revoking access, and so does a password reset.
-- It carries exactly the authority of the account it came from — no more, and
-  no less. There is no scope, no read-only variant and no long-lived key.
-- It lasts as long as a session does: **twenty minutes of inactivity**. A
-  script that runs longer than that between calls has to sign in again — which
-  is the intended answer for anything unattended.
-- Unlike the cookie it is not `HttpOnly` and not `SameSite`-protected. It lands
-  in shell history, in CI logs and in `ps` output. For anything that runs
-  unattended, sign in fresh rather than reusing the token from the browser you
-  are sitting in, and sign out when the job is done.
+```bash
+curl -s https://print.example/api/stories -b 'ppp.who=…'
+curl -s -X POST https://print.example/api/stories/4/advance -b 'ppp.owner=…'
+```
+
+Without a name the answer is `401 {"error":"Pick your name first."}`.
+
+What that means in practice:
+
+- **`ppp.who` lasts a year** and names a client, not a secret anyone had to
+  know: anybody can get one for any name by clicking it on `/hello`. Treat a
+  script holding one as acting in that person's name, because the audit trail
+  will.
+- **`ppp.owner` lasts at most twelve hours**, and every one stops working when
+  `ADMIN_PASSWORD` changes. It is the one cookie worth keeping out of shell
+  history and CI logs.
+- **Changing `APP_SECRET` invalidates both**; pick your name again and copy
+  the new value.
 
 Nothing else is a way in. There is no `?token=` parameter, no basic auth, and
-no header that names a user.
+no `Authorization` header. (The one exception is the model download, which
+also accepts the short-lived `?t=` credential an "Open in PrusaSlicer" link
+carries — see [Open in PrusaSlicer](prusaslicer.md).)
 
 ## What you can reach
 
 | | | |
 | --- | --- | --- |
-| `GET` | `/api/health` | Can the app serve? The only endpoint with no session. |
+| `GET` | `/api/health` | Can the app serve? The only endpoint that needs no name. |
 | `GET` | `/api/stories` | Your tickets. The printer owner's is everyone's, and `?uploader=<id>,<id>` narrows it to particular people. |
 | `GET` | `/api/stories/{id}` | One ticket. |
 | `DELETE` | `/api/stories/{id}` | Withdraw your own request. |
@@ -75,7 +80,6 @@ no header that names a user.
 | `POST` | `/api/import` | Open a request from one of those files instead of an upload. |
 | `GET` | `/api/models/{id}` | The model's bytes. |
 | `GET` | `/api/openapi.json` | This surface, machine-readable. |
-| | `/api/auth/*` | Every Better Auth endpoint — sign-in, passkeys, admin, reset. |
 
 `{id}` is the numeric id — `4`, not `PPP-104`. The display ref comes back on
 every ticket as `ref`.
@@ -102,8 +106,8 @@ deleting somebody's request. And it only works while nobody has acted on it —
 `Requested` or `Declined`. Past that you get `409` and the name of the person
 to ask.
 
-**4. Writes refuse a foreign `Origin`.** CSRF here rests on `SameSite=Lax` plus
-an Origin check, which is Better Auth's model and the app keeps to it. A
+**4. Writes refuse a foreign `Origin`.** CSRF here rests on `SameSite=Lax` on
+the identity cookies plus an Origin check. A
 request with *no* `Origin` header is fine — that is `curl`, and it is not a
 browser being driven by somebody else's page. A request with the wrong one is
 `403`.
@@ -112,7 +116,7 @@ browser being driven by somebody else's page. A request with the wrong one is
 most 250 MB, validated against the file's actual content rather than its name —
 an STL renamed `.3mf` is refused. Nothing reaches storage until the file has
 been inspected and no ticket exists until the object is in place, so a rejected
-upload leaves nothing behind. The uploader comes from the session: an
+upload leaves nothing behind. The uploader is whoever the name cookie says: an
 `uploaderId` or a `status` in the body is ignored.
 
 Material and colour values come from the owner's live catalogue, not a fixed
@@ -123,7 +127,7 @@ retired or removed choice is refused even if an older client still posts it.
 
 ```bash
 curl -s https://print.example/api/upload \
-  -H "authorization: Bearer $TOKEN" \
+  -b "$WHO" \
   -F file=@clip.stl \
   -F title='Cable clip' -F material=PETG -F colorName=Slate \
   -F quantity=2 -F tip='A beer' -F note='Teal if you have it'
@@ -140,8 +144,8 @@ One shape, everywhere, and the message is written for a person:
 | | |
 | --- | --- |
 | `400` | The request did not parse, or a field failed validation. |
-| `401` | No session, or the account has been suspended. |
-| `403` | Authenticated, but not allowed — or a foreign `Origin` on a write. |
+| `401` | No name: no `ppp.who` (or `ppp.owner`) cookie, or one this app did not sign. |
+| `403` | You have a name, but that is not yours to do — usually an owner-only endpoint without `ppp.owner` — or a foreign `Origin` on a write. |
 | `404` | No such thing, **or** not one you may see. |
 | `409` | Real, yours, and not in a state where that makes sense. |
 | `413` `422` | Upload too large, or not an acceptable model. |
@@ -157,7 +161,7 @@ where it belongs.
 
 ```bash
 curl -s "https://print.example/api/stories?status=Printing&limit=50" \
-  -H "authorization: Bearer $TOKEN"
+  -b "$WHO"
 ```
 
 A cursor rather than an offset, because a ticket created mid-page makes
@@ -180,15 +184,14 @@ column tomorrow cannot leak it.
 
 ## The document, and the console
 
-`/api/openapi.json` is OpenAPI 3.1, assembled per request from two halves: the
-app's own paths, and Better Auth's, generated by the library so they cannot
-drift when a plugin is added. Request bodies are converted from the same Zod
-schemas the handlers validate with, so the document cannot promise a rule the
-server does not enforce.
+`/api/openapi.json` is OpenAPI 3.1, assembled per request from the app's own
+paths. Request bodies are converted from the same Zod schemas the handlers
+validate with, so the document cannot promise a rule the server does not
+enforce. The two cookies are declared as its security schemes.
 
-Both it and `/docs` need a session. They describe an invite-only tool to the
-people already inside it, and an unauthenticated endpoint is not the place to
-publish a map of your authority model.
+Both it and `/docs` need a name. That is a much lower bar than it used to be —
+anyone on the network can pick one — but it still keeps the map of the API off
+the front page.
 
 Swagger UI is **vendored, not loaded from a CDN** —
 `npm run vendor:swagger` copies it out of `node_modules` into `public/docs/`,
@@ -200,7 +203,7 @@ that is otherwise entirely first-party.
 Generating a client is the usual thing:
 
 ```bash
-curl -s https://print.example/api/openapi.json -H "authorization: Bearer $TOKEN" > openapi.json
+curl -s https://print.example/api/openapi.json -b "$WHO" > openapi.json
 npx @openapitools/openapi-generator-cli generate -i openapi.json -g typescript-fetch -o ./client
 ```
 
@@ -210,7 +213,6 @@ npx @openapitools/openapi-generator-cli generate -i openapi.json -g typescript-f
   poll `/api/notifications`.
 - **No bulk endpoints.** Five people and one printer; a loop is fine.
 - **No API keys, scopes or service accounts.** Every call is made *as* a
-  person, and the audit trail names them. That is the property worth keeping.
-- **No CORS headers.** The API is same-origin, and a bearer token from another
-  origin cannot get past the preflight. Fetching it from a page you host
+  name, and the audit trail records it.
+- **No CORS headers.** The API is same-origin. Fetching it from a page you host
   elsewhere is not a supported thing to do.

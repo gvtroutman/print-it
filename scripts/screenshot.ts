@@ -14,9 +14,9 @@ import "./_env";
 import { existsSync, mkdirSync } from "node:fs";
 import puppeteer, { type Page } from "puppeteer-core";
 import { db } from "../src/lib/db";
-import { TEST_PASSWORD, ensureCredentials, usernameFor } from "./_accounts";
+import { createClient, whoCookie } from "./_accounts";
 
-const APP = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+const APP = process.env.APP_URL ?? "http://localhost:3000";
 const OUT = process.env.SHOT_DIR ?? "shots";
 
 const CHROME =
@@ -28,38 +28,23 @@ const CHROME =
   ].find((p) => existsSync(p));
 
 /**
- * Sign a page in through the real form. The screenshots are of the app a
+ * Pick a name on `/hello` by clicking it. The screenshots are of the app a
  * person uses, so the way into it should be too.
  */
-async function signIn(page: Page, user: { id: string; email: string }): Promise<void> {
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  await ensureCredentials(APP, user.id, usernameFor(user.email));
-  await page.goto(`${APP}/signin`, { waitUntil: "networkidle2" });
-  await page.type("#username", usernameFor(user.email));
-  await page.type("#password", TEST_PASSWORD);
-  await page.click('button[type="submit"]');
-  await page.waitForFunction(() => location.pathname !== "/signin", { timeout: 15_000 });
+async function pickName(page: Page, user: { id: string }): Promise<void> {
+  await page.goto(`${APP}/hello`, { waitUntil: "networkidle2" });
+  await page.click(`button[name="userId"][value="${user.id}"]`);
+  await page.waitForFunction(() => location.pathname !== "/hello", { timeout: 15_000 });
 }
 
-/** A cookie jar for the one thing that is not driven through the browser. */
-async function sessionCookie(user: { id: string; email: string }): Promise<string> {
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  await ensureCredentials(APP, user.id, usernameFor(user.email));
-  const res = await fetch(`${APP}/api/auth/sign-in/username`, {
-    method: "POST",
-    headers: { "content-type": "application/json", origin: APP },
-    body: JSON.stringify({
-      username: usernameFor(user.email),
-      password: TEST_PASSWORD,
-    }),
-  });
-  const jar = new Map<string, string>();
-  for (const line of res.headers.getSetCookie()) {
-    const [pair] = line.split(";");
-    const eq = pair!.indexOf("=");
-    jar.set(pair!.slice(0, eq), pair!.slice(eq + 1));
-  }
-  return [...jar].map(([k, v]) => `${k}=${v}`).join("; ");
+/** Unlock the owner pages by typing the password, as the owner would. */
+async function unlockOwner(page: Page): Promise<void> {
+  const password = process.env.ADMIN_PASSWORD;
+  if (!password) throw new Error("ADMIN_PASSWORD is not set; the owner pages cannot be unlocked.");
+  await page.goto(`${APP}/owner`, { waitUntil: "networkidle2" });
+  await page.type("#password", password);
+  await page.click('button[type="submit"]');
+  await page.waitForFunction(() => location.pathname !== "/owner", { timeout: 15_000 });
 }
 
 /**
@@ -101,12 +86,7 @@ async function main() {
 
   await db.story.deleteMany();
   await db.user.deleteMany({ where: { email: "ayla@office.example" } });
-  const ayla = await db.user.create({
-    data: {
-      email: "ayla@office.example", name: "Ayla Berg", initials: "AY",
-      role: "client", emailVerified: true, invitedById: admin.id,
-    },
-  });
+  const ayla = await createClient("Ayla Berg", { email: "ayla@office.example" });
 
   for (const [title, status, material, colorName, colorHex, tip, qty, flagged] of SEED) {
     await db.story.create({
@@ -139,7 +119,9 @@ async function main() {
   // through the same validation and storage every real file does.
   const printingForUpload = await db.story.findFirst({ where: { status: "Printing" } });
   if (printingForUpload) {
-    const cookie = await sessionCookie(ayla);
+    // The one thing not driven through the browser, so its cookie is minted.
+    const who = whoCookie(ayla.id);
+    const cookie = `${who.name}=${who.value}`;
     const form = new FormData();
     form.set("file", new File([stlBox(78, 40, 22) as BlobPart], "monitor-hook-v3.stl"));
     form.set("title", "Replacement knob, grinder");
@@ -181,11 +163,13 @@ async function main() {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 980, deviceScaleFactor: 1 });
 
-  // Signed out first, while there is no session.
-  await page.goto(`${APP}/signin`, { waitUntil: "networkidle2" });
-  await page.screenshot({ path: `${OUT}/signin.png` });
+  // The two front doors first, while this browser is nobody.
+  await page.goto(`${APP}/hello`, { waitUntil: "networkidle2" });
+  await page.screenshot({ path: `${OUT}/hello.png` });
+  await page.goto(`${APP}/owner`, { waitUntil: "networkidle2" });
+  await page.screenshot({ path: `${OUT}/owner.png` });
 
-  await signIn(page, ayla);
+  await pickName(page, ayla);
 
   const printing = await db.story.findFirst({ where: { status: "Printing" } });
   const pages: Array<[string, string]> = [
@@ -199,12 +183,12 @@ async function main() {
     await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
   }
 
-  // The printer owner's side. A separate browser context rather than signing
-  // out: /api/auth/sign-out is POST-only, so navigating to it just hangs.
+  // The printer owner's side, in a separate browser context so Ayla's name
+  // cookie does not ride along.
   const adminCtx = await browser.createBrowserContext();
   const adminPage = await adminCtx.newPage();
   await adminPage.setViewport({ width: 1280, height: 980, deviceScaleFactor: 1 });
-  await signIn(adminPage, admin);
+  await unlockOwner(adminPage);
   {
     for (const [name, url] of [
       ["queue", `${APP}/queue`],
@@ -223,7 +207,7 @@ async function main() {
   await page.screenshot({ path: `${OUT}/board-mobile.png`, fullPage: true });
 
   await browser.close();
-  console.info(`wrote ${pages.length + 4} screenshots to ${OUT}/`);
+  console.info(`wrote ${pages.length + 5} screenshots to ${OUT}/`);
 }
 
 main()

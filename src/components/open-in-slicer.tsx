@@ -24,16 +24,12 @@ import { mintSlicerToken } from "@/lib/slicer-token";
  * links to the one-time setup.
  *
  * The link carries the ticket id **and a short-lived credential minted for the
- * person reading this page**. It used to carry only the id, with a bearer token
- * pasted once into the helper's config — but that token was the session token,
- * so shortening sessions to twenty idle minutes stopped it working and the
- * helper started answering `HTTP 401`. Putting the credential in the link
- * rather than on disk fixes that and retires a thirty-day, full-authority
- * secret in a file at the same time. See `src/lib/slicer-token.ts`.
+ * person reading this page**, so nothing secret has to sit in the helper's
+ * config on disk. See `src/lib/slicer-token.ts`.
  *
  * Minted per render, so it is as fresh as the page. It is good for half an
  * hour, for this model only, and it authorises nothing on its own — the route
- * re-checks the account and re-applies `storyScope`.
+ * re-loads the person and re-applies `storyScope`.
  *
  * `DownloadModel` sits beside this rather than inside it: the same bytes with
  * no helper at all, for the printer owner who is not at the machine with the

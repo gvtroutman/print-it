@@ -12,9 +12,9 @@ import "./_env";
  * DESTRUCTIVE: wipes users, stories and benefits. Development database only.
  */
 import { db } from "../src/lib/db";
-import { ensureCredentials, signInWithPassword, usernameFor } from "./_accounts";
+import { actAs, createClient } from "./_accounts";
 
-const APP = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+const APP = process.env.APP_URL ?? "http://localhost:3000";
 
 let passed = 0;
 const failures: string[] = [];
@@ -100,13 +100,8 @@ function stlBox(x: number, y: number, z: number): Uint8Array {
   return buf;
 }
 
-async function signIn(user: { id: string; email: string }): Promise<Browser> {
-  const b = new Browser();
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  await ensureCredentials(APP, user.id, usernameFor(user.email));
-  await signInWithPassword(b, APP, usernameFor(user.email));
-  return b;
-}
+/** A browser carrying the cookie `/hello` (or `/owner`, for the owner) would set. */
+const as = (user: { id: string; role: string }) => actAs(new Browser(), user);
 
 async function uploadWith(client: Browser, tip: string) {
   const form = new FormData();
@@ -122,21 +117,15 @@ async function uploadWith(client: Browser, tip: string) {
 
 async function main() {
   section("setup");
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
   await db.auditEvent.deleteMany();
   await db.notification.deleteMany();
   await db.story.deleteMany();
   await db.benefit.deleteMany();
-  await db.verification.deleteMany();
-  await db.session.deleteMany();
-  await db.invite.deleteMany();
   await db.user.deleteMany({ where: { role: "client" } });
 
   const admin = await db.user.findFirst({ where: { role: "admin" } });
   if (!admin) throw new Error("No admin — run npm run db:seed");
-  const ayla = await db.user.create({
-    data: { email: "ayla@office.example", name: "Ayla Berg", initials: "AY", role: "client", emailVerified: true, invitedById: admin.id },
-  });
+  const ayla = await createClient("Ayla Berg", { email: "ayla@office.example" });
 
   // A known starting catalogue.
   await db.benefit.createMany({
@@ -147,16 +136,28 @@ async function main() {
     ],
   });
 
-  const ruben = await signIn(admin);
-  const client = await signIn(ayla);
-  console.info(`  admin=${admin.email}  client=${ayla.email}`);
+  const ruben = as(admin);
+  const client = as(ayla);
+  console.info(`  admin=${admin.name}  client=${ayla.name}`);
 
   // ------------------------------------------------------------------
   section("the benefits screen is owner-only");
-  const denied = await client.go(`${APP}/admin/benefits`);
-  check("a client gets 404, not 403", denied.status === 404, `status ${denied.status}`);
+  const denied = await client.raw(`${APP}/admin/benefits`);
+  check("a client is sent to the owner password prompt",
+        denied.status >= 300 && denied.status < 400 &&
+        (denied.headers.get("location") ?? "").includes("/owner"),
+        `status ${denied.status} ${denied.headers.get("location") ?? ""}`);
   const adminPage = await (await ruben.go(`${APP}/admin/benefits`)).text();
   check("the owner sees the catalogue", adminPage.includes("A beer") && adminPage.includes("A coffee"));
+
+  // The page being out of reach says nothing about the action behind its
+  // form. Replay the owner's real one, action id and all, as the client.
+  const replayed = await client.submit(`${APP}/admin/benefits`, adminPage,
+    findForm(adminPage, ['name="label"', 'Add']), { label: "Free filament forever" });
+  check("a client replaying the owner's add form creates nothing",
+        (await db.benefit.count({ where: { label: "Free filament forever" } })) === 0 &&
+        (replayed.headers.get("location") ?? "").includes("/owner"),
+        `status ${replayed.status} ${replayed.headers.get("location") ?? ""}`);
 
   // ------------------------------------------------------------------
   section("the owner manages the list");

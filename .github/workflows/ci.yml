@@ -9,8 +9,7 @@
 #   models   — the upload validator against hostile fixtures. Needs no
 #              server and no database, so it stays a fast gate of its own.
 #   verify   — raises the REAL compose stack from source and runs every
-#              suite against the built image, including the WebAuthn
-#              ceremonies in a headless Chrome. This is the one that
+#              suite against the built image. This is the one that
 #              matters: it exercises the artifact the release workflow
 #              publishes, not a `next dev` approximation.
 #   trivy    — filesystem scan; HIGH/CRITICAL fail the run.
@@ -108,17 +107,17 @@ jobs:
         run: |
           cp .env.docker.example .env.docker
           {
-            echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)"
+            echo "APP_SECRET=$(openssl rand -base64 32)"
             echo "DB_PASSWORD=$(openssl rand -hex 24)"
-            echo "ADMIN_EMAIL=ci-admin@example.test"
             echo "ADMIN_NAME=Ruben Haas"
+            echo "ADMIN_PASSWORD=$(openssl rand -hex 24)"
           } >> .env.docker
 
       - name: Raise the stack
         run: |
           docker compose --env-file .env.docker \
             -f docker-compose.prod.yml -f docker-compose.build.yml \
-            -f docker-compose.test.yml --profile mailcatcher up -d --build
+            -f docker-compose.test.yml up -d --build
 
       - name: Wait for health
         run: |
@@ -137,8 +136,6 @@ jobs:
       - name: Point the suites at the stack
         run: npm run env:container
 
-      - name: Invite and sign-in flow
-        run: npm run verify:auth
       - name: Upload, board and story
         run: npm run verify:upload
       # The other way a model arrives. The test overlay switches importing on
@@ -168,15 +165,6 @@ jobs:
       - name: The JSON API, the OpenAPI document and the console
         run: npm run verify:api
 
-      # Registering and using a passkey is a browser ceremony — it cannot be
-      # tested with fetch. The runner ships Chrome; a CDP virtual authenticator
-      # supplies the hardware. Without this, nothing in CI covers the primary
-      # way people are meant to sign in.
-      - name: WebAuthn ceremonies (real browser)
-        env:
-          CHROME_PATH: /usr/bin/google-chrome
-        run: npm run verify:passkey
-
       - name: OWASP-mapped security probes
         run: npm run probe:security
 
@@ -188,7 +176,7 @@ jobs:
       - name: Runtime images ship no npm
         run: |
           for img in ppp-app ppp-migrate; do
-            if docker run --rm --entrypoint sh "ghcr.io/danileau/$img:latest"                  -c 'command -v npm' >/dev/null 2>&1; then
+            if docker run --rm --entrypoint sh "ghcr.io/gvtroutman/$img:latest"                  -c 'command -v npm' >/dev/null 2>&1; then
               echo "::error file=Dockerfile::npm is back in $img — it re-adds the vulnerable bundled sigstore"
               exit 1
             fi
@@ -199,7 +187,7 @@ jobs:
       # the half a presence check cannot tell you.
       - name: Migrator still runs without npm
         run: |
-          docker run --rm --entrypoint sh ghcr.io/danileau/ppp-migrate:latest             -c './node_modules/.bin/prisma --version >/dev/null && ./node_modules/.bin/tsx --version >/dev/null'             && echo "prisma and tsx resolve via node_modules/.bin"
+          docker run --rm --entrypoint sh ghcr.io/gvtroutman/ppp-migrate:latest             -c './node_modules/.bin/prisma --version >/dev/null && ./node_modules/.bin/tsx --version >/dev/null'             && echo "prisma and tsx resolve via node_modules/.bin"
 
       - name: Container logs on failure
         if: failure()

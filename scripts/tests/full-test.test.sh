@@ -93,7 +93,7 @@ S="$STUB/state"
 if [ "${1:-} ${2:-}" = "run -s" ]; then
   script="${3:-}"
   case "$script" in
-    typecheck|check:links|verify:models|verify:auth|verify:upload|verify:import|verify:queue|verify:frr|verify:benefits|verify:catalog|verify:api|verify:passkey|probe:security) ;;
+    typecheck|check:links|verify:models|verify:upload|verify:import|verify:queue|verify:frr|verify:benefits|verify:catalog|verify:api|probe:security) ;;
     check:secrets)
       # The secret scanner has to see the developer's own env files.
       printf 'SCANNED %s\n' "$(tail -1 .env 2>/dev/null)" >>"$STUB/log" ;;
@@ -224,7 +224,7 @@ nok() { local what=$1; shift; if "$@" >/dev/null 2>&1; then no "$what"; fi; }
 restored() { eq "the three env files" "$(envsum)" "$ENV0"; nok "the saved copies are still there" test -e "$SAVED"; }
 suites_run() { grep -E '^npm run -s (verify|probe):' "$T/stub/log" | grep -v 'verify:models' | awk '{print $4}' | tr '\n' ' '; }
 
-ALL_SUITES="verify:auth verify:upload verify:import verify:queue verify:frr verify:benefits verify:catalog verify:api verify:passkey probe:security "
+ALL_SUITES="verify:upload verify:import verify:queue verify:frr verify:benefits verify:catalog verify:api probe:security "
 
 # ============================================================================
 # 31, F3, F4, R8. refusing
@@ -274,11 +274,11 @@ ft
 t "32 the whole run passes and puts all three env files back, content and mode"
 rc 0; restored; out "DONE failed=0"; no_out "PARTIAL RUN"
 out "restored .env, .env.backup, .env.docker; stack down; logs in $LOGS"
-eq "steps that passed" "$(grep -c PASS "$LOGS/summary.txt")" "21"
+eq "steps that passed" "$(grep -c PASS "$LOGS/summary.txt")" "19"
 eq "the suites, in order" "$(suites_run)" "$ALL_SUITES"
 
-t "39 up and down are both aimed at the project ppp-fulltest with the three files and the profile"
-want='^docker compose -p ppp-fulltest --env-file \.env\.docker -f docker-compose\.prod\.yml -f docker-compose\.build\.yml -f docker-compose\.test\.yml --profile mailcatcher'
+t "39 up and down are both aimed at the project ppp-fulltest with the three files"
+want='^docker compose -p ppp-fulltest --env-file \.env\.docker -f docker-compose\.prod\.yml -f docker-compose\.build\.yml -f docker-compose\.test\.yml'
 logged "$want up -d --build\$"; logged "$want down -v --remove-orphans\$"; logged "$want logs --tail=300\$"
 not_logged '^docker compose -p ppp '
 
@@ -442,7 +442,7 @@ t "38 SIGTERM during a suite: the stack comes down and the env files go back"
 new_sandbox; echo "verify:upload" >"$T/stub/state/term-during"
 ft
 rc 130; restored; logged '^docker compose .* down -v --remove-orphans$'
-eq "the suites" "$(suites_run)" "verify:auth verify:upload "
+eq "the suites" "$(suites_run)" "verify:upload "
 
 t "F1 a second signal during the teardown cannot skip the restore"
 new_sandbox; echo "verify:upload" >"$T/stub/state/term-during"; touch "$T/stub/state/term-on-down"
@@ -459,12 +459,12 @@ rc 0; out "SKIP trivy-fs (trivy not installed; CI's trivy job still gates it)"; 
 
 t "42 --only runs just that suite and says PARTIAL RUN"
 new_sandbox
-ft --only verify:auth
-rc 0; eq "the suites" "$(suites_run)" "verify:auth "; out "PARTIAL RUN — not a release gate"; restored
+ft --only verify:queue
+rc 0; eq "the suites" "$(suites_run)" "verify:queue "; out "PARTIAL RUN — not a release gate"; restored
 
 t "42 --only with a name that is not a suite is refused before anything starts"
 new_sandbox
-ft --only "verify:auth verify:nothing"
+ft --only "verify:queue verify:nothing"
 rc 1; out "verify:nothing is not one of"; not_logged '^npm '; eq "the three env files" "$(envsum)" "$ENV0"
 
 t "F5 --no-build raises without building and says PARTIAL RUN"
@@ -487,7 +487,7 @@ new_sandbox
 ft --fast
 rc 1; out "unknown arg: --fast"; not_logged '.'
 ft --help
-rc 0; out "ppp full local test"; out "CHROME_PATH"; no_out "set -euo pipefail"; not_logged '.'
+rc 0; out "ppp full local test"; out "PPP_FULLTEST_HEALTH_TIMEOUT"; no_out "set -euo pipefail"; not_logged '.'
 
 new_sandbox
 t "across every case: no stub was asked for something it did not expect"

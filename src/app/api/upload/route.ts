@@ -31,7 +31,7 @@ const bad = (status: number, error: string) =>
 
 export async function POST(request: Request) {
   const user = await currentUser();
-  if (!user) return bad(401, "Sign in first.");
+  if (!user) return bad(401, "Pick your name first.");
 
   // Cheap rejection before reading a single byte of the body. The allowance
   // over the file cap is multipart's own overhead, and it matches the

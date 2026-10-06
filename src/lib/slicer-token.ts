@@ -5,12 +5,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  * The credential the "Open in PrusaSlicer" link carries.
  *
  * The helper on somebody's own machine has to fetch model bytes from the app,
- * and it is not a browser: it holds no cookie. It used to hold a **bearer
- * token pasted into `~/.config/ppp/slicer.conf`** — which was the session
- * token, and therefore a thirty-day, full-authority credential sitting in a
- * file. Shortening sessions to twenty idle minutes broke that outright (the
- * helper started answering `HTTP 401`), and the fix is not a longer-lived
- * credential in the same place. It is not needing one.
+ * and it is not a browser: it holds no cookie. Rather than putting a
+ * long-lived credential in a file on that machine, the link carries its own.
  *
  * So the link carries its own authority instead. `ppp://slice/<id>?t=…` is
  * minted when the ticket is rendered, for the person looking at it and for
@@ -18,19 +14,15 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  * to disk at all: the config keeps only the address of the instance.
  *
  * **What this token is, precisely.** It asserts an *identity* and a *subject*,
- * and nothing else. It is not an authorisation: the route still loads the user,
- * refuses a suspended one, and re-applies `storyScope` against the database, so
- * a token cannot outlive the access it was minted under except within its own
- * half hour. Compared with what it replaces — the whole account, for thirty
- * days, revocable only by signing out — the exchange is a good one in every
- * direction.
+ * and nothing else. It is not an authorisation: the route still loads the
+ * person and re-applies `storyScope` against the database.
  *
  * **Stateless on purpose.** An HMAC over the claim rather than a stored row:
  * the alternative writes a `verification` row on every render of every ticket,
  * to be read at most once and otherwise left to accumulate. The cost of that
  * choice is honest and worth stating: an outstanding link is **not** revoked by
- * signing out, because nothing is consulted to revoke. It IS revoked by
- * suspending the account, and by the scope check, and by half an hour passing.
+ * switching names, because nothing is consulted to revoke. It IS bounded by the
+ * scope check, and by half an hour passing.
  * For read access to one model the holder could already open, that is the right
  * side of the trade; it would not be for anything that writes.
  */
@@ -42,13 +34,13 @@ export const SLICER_TOKEN_TTL_SECONDS = 60 * 30;
 const VERSION = "v1";
 
 function signingKey(): string {
-  const secret = process.env.BETTER_AUTH_SECRET;
+  const secret = process.env.APP_SECRET;
   if (!secret) {
     // Loud rather than a guessable fallback. A constant default here would
     // mean anybody who read the source could mint links against a deployment.
     throw new Error(
-      "BETTER_AUTH_SECRET is required to sign slicer links. " +
-        "It is the same secret Better Auth uses; set it in the environment.",
+      "APP_SECRET is required to sign slicer links. " +
+        "It is the same secret that signs the name cookie; set it in the environment.",
     );
   }
   return secret;

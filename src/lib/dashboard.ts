@@ -35,7 +35,7 @@ const DAY_MS = 86_400_000;
  * noticed.
  */
 export const REFUSAL_ACTIONS = [
-  "invite.rejected",
+  "owner.unlock_refused",
   "upload.rejected",
   "file.refused",
 ] as const;
@@ -44,7 +44,7 @@ export type RefusalRow = {
   at: Date;
   action: string;
   subject: string | null;
-  actorEmail: string | null;
+  actorName: string | null;
   /** `upload.rejected` and `file.refused` both say why in `detail.reason`. */
   reason: string | null;
 };
@@ -63,7 +63,7 @@ export async function refusals(days = 14): Promise<Refusals> {
   const rows = await db.auditEvent.findMany({
     where: { action: { in: [...REFUSAL_ACTIONS] }, at: { gte: since } },
     orderBy: { at: "desc" },
-    select: { at: true, action: true, subject: true, actorEmail: true, detail: true },
+    select: { at: true, action: true, subject: true, actorName: true, detail: true },
   });
 
   const counts = new Map<string, number>();
@@ -91,7 +91,7 @@ export async function refusals(days = 14): Promise<Refusals> {
       at: r.at,
       action: r.action,
       subject: r.subject,
-      actorEmail: r.actorEmail,
+      actorName: r.actorName,
       reason:
         r.detail && typeof r.detail === "object" && "reason" in r.detail
           ? String((r.detail as { reason?: unknown }).reason ?? "")

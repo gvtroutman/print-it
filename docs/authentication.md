@@ -1,210 +1,183 @@
-# How authentication works
+# How identity works
 
 [← back to the README](../README.md)
 
-**An invitation link registers you; after that you sign in with a username and
-a password.** No inbox round trip, and nothing in the running system depends on
-a mail server.
+**There is no sign-in.** Nobody has an account, a password, a passkey or an
+invitation. You open the app, pick your name from a list — or type it if this
+is your first time — and that is who you are on this device until you say
+otherwise. The printer owner has one extra step: a password, from the server's
+environment, that unlocks the owner pages.
 
-Two ways in:
+That is a deliberate trade, and the rest of this page is honest about what it
+costs. The short version: **names are not proof of identity.** Anyone who can
+reach the app can pick any name. That is fine on an office network where the
+people who can reach it are the people who work there, and it is not fine
+anywhere else — see [Do not put this on the internet](#do-not-put-this-on-the-internet).
 
-- **Username and password** — the way in, and the one that always works. At
-  least 10 characters, capped at 128, and refused outright if the password
-  already appears in a known breach corpus.
-- **Passkey** (WebAuthn) — optional, stronger, and faster. Offered through
-  browser conditional UI, so it can sign someone in from the username field
-  with no click at all.
+### Why there is no sign-in
 
-The passkey is an accelerator, not the way in. That is the correction this
-model makes over the one before it: an emailed link was doing the job of a
-password while being harder to use and impossible to use at all when mail was
-down.
+This fork used to have the full set: invitation links, usernames and
+passwords, passkeys, a breach check, admin-minted password resets, a
+twenty-minute session and a "confirm it is still you" prompt before handing out
+access. Each piece was reasonable on its own, and every one of them was
+something a colleague could get stuck on, for an app whose whole job is "please
+print this for me".
 
-### Why ten characters, and why a breach check
+For five people sharing one printer and one office, the question a sign-in
+answers — *is this really Ayla?* — is one the office already answers. The
+question the app actually needs answered is *whose ticket is this?*, and a name
+does that. So the machinery went, and with it the mail server, the outbound
+breach check, the session table and three dependencies.
 
-Length is the control that does the work. Composition rules — a digit, a
-symbol, a capital — mostly move people to `Password1!`, which is in every
-corpus there is. So the rules here are: ten characters minimum, and
-[Have I Been Pwned](https://haveibeenpwned.com) says no.
+What was kept is the part that protects the printer owner's controls, because
+those are the ones a curious colleague could do real damage with.
 
-The breach lookup is k-anonymity: five characters of a SHA-1 prefix go to
-`api.pwnedpasswords.com`, and the password itself never leaves the machine. It
-**fails closed** — if that service cannot be reached, setting a password fails
-rather than quietly skipping the check. Only registration and reset set a
-password, so an outage cannot lock out anybody who already has one.
+### Picking a name
 
-`HIBP_DISABLED=true` turns it off, and exists for exactly one case: a
-deployment with no outbound internet at all, where failing closed would mean
-nobody could ever register.
+`/hello` lists everybody who has used the app, alphabetically. Click yours, or
+type a new one:
 
-### Getting people onto passkeys
+- Typing a name that already exists, in any case, **picks that person** rather
+  than making a twin. `ayla` and `Ayla` are the same person.
+- A new name creates a `client` user row with nothing in it but the name and
+  its initials. Names are 1–40 characters.
+- The printer owner's name is refused. Their row never appears on the list and
+  cannot be picked — see [the owner](#the-printer-owner) below.
 
-The thing that decides whether people get there is not the technology, it is
-whether anyone ever asks them twice. Registration offers a passkey once; the
-first version let people tap "Skip for now" and then never mentioned it again,
-which left them typing a password every time without having chosen that.
+The choice is remembered in a cookie, `ppp.who`, and nothing else: no server
+session, no row to expire.
 
-So there are three prompts, and two tests holding them in place:
+**"Not Ayla? Switch"** in the account menu forgets it (and locks the owner
+pages too, if they were unlocked) and goes back to `/hello`. That is the whole
+of "signing out".
 
-- A banner for anyone with zero passkeys, dismissible **for the session only** —
-  closing it means "not right now", not "never".
-- A line in the account menu saying how you currently sign in, with a way to
-  change it.
-- Honest copy on the skip: "Not now — keep typing my password", rather than
-  implying it is a postponement.
+### The `ppp.who` cookie
 
-All three disappear the moment a passkey exists.
-
-### Mail is optional — genuinely
-
-**Nothing in the running system needs a mail server.** People sign in with a
-password, and notifications are in-app, written by `notify()` and read by the
-Activity panel. Mail is called in exactly three places, and every one of them
-is delivering a *link*: sending an invitation, resending one, and sending a
-password reset.
-
-With `SMTP_URL` or `RESEND_API_KEY` set, those links are emailed. With neither,
-the admin gets the link on screen to hand over directly, and the app boots
-normally rather than refusing to start. Same token, same single use, same
-expiry either way.
-
-For a group that shares an office, handing a link over is arguably the safer
-channel: a token in an inbox sits there indefinitely and can be forwarded,
-where one passed over in person cannot. When mail *is* configured the raw
-token is still withheld from the admin — it exists only inside the message —
-because that property is worth keeping wherever it can be kept.
-
-### Forgotten passwords
-
-**"Forgotten password?"** sits against each member on the guest list. The admin
-presses it; a single-use, thirty-minute token is minted, emailed if there is a
-transport and shown to the admin to hand over if there is not.
-
-The link opens a set-password form. It does **not** sign anyone in — that is
-the whole difference from the sign-in link it replaces, which signed whoever
-held it in *as* that person. Here they choose a password and then have to use
-it, and setting it revokes every session the old password opened. Both halves
-are audited: `password.reset_requested` names the admin, `password.reset_completed`
-names the member.
-
-There is no self-service "forgot password" form. With no `sendResetPassword`
-configured, Better Auth's `/request-password-reset` refuses outright — resets
-are admin-minted so the flow cannot depend on a mail server that may not exist.
-
-One detail worth knowing, because it is a deliberate deviation: Better Auth
-consumes the reset token *before* it hashes the new password, so a password
-refused by the breach check would burn the link on its way out and send someone
-back to the admin over a password they were about to correct. `setPassword`
-puts the row back — with its original expiry — when the failure happened after
-consumption. The link is spent when a password is actually set, which is what
-"single use" was ever meant to mean.
-
-### Bootstrapping the admin
-
-The printer owner is the one account nobody invites, so `prisma/seed.ts` writes
-the row directly. A row cannot sign in on its own, so when the admin has no
-password the seed mints a set-password link and **prints it**:
-
-```bash
-docker compose --env-file .env.docker -f docker-compose.prod.yml logs migrate
+```
+ppp.who = <userId>.<HMAC-SHA256(APP_SECRET, "who:" + userId)>
 ```
 
-Open it within thirty minutes to choose a username and a password. Lost it?
-Re-run the migrator and it prints a fresh one — but only while no password has
-been set. Re-seeding never resets an existing one.
+`HttpOnly`, `SameSite=Lax`, `Path=/`, `Secure` when `APP_URL` is `https://`,
+and it lasts a year — picking your name once per device is enough.
 
-There is deliberately no `ADMIN_PASSWORD`. It would sit in `.env.docker`, in
-`docker inspect`, in the shell history that wrote the file and in every backup
-of the host, still valid months later. A link that expires in half an hour is a
-smaller thing to leak.
+The signature does **not** make the name a credential; anyone can get a
+validly signed cookie for any client by clicking that name on `/hello`. What it
+does is keep the cookie to values this app wrote. A hand-edited `ppp.who`
+naming some other row id — the printer owner's, say — fails the check and is
+treated as no name at all. And even a correctly signed value can only ever
+resolve to a **client** row: `currentUser()` looks it up with `role: "client"`,
+so the owner's row is unreachable through this cookie by construction, not by
+convention.
 
-### Invite-only, enforced in one place
+The code is short and worth reading: [`src/lib/identity-token.ts`](../src/lib/identity-token.ts)
+signs and reads both cookies, [`src/lib/identity.ts`](../src/lib/identity.ts)
+writes them, and [`src/app/actions/identity.ts`](../src/app/actions/identity.ts)
+is every action that changes who you are.
 
-A `User` row can only come into existence when a pending invite matches the
-address. That decision lives in a single hook, `user.validateUserInfo` in
-[`src/lib/auth.ts`](../src/lib/auth.ts):
+### What anyone on the network can do
 
-```ts
-async validateUserInfo({ user, source }) {
-  if (source.action !== "create-user") return;
-  const invited = Boolean(await pendingInviteFor(user.email));
-  if (!invited || !isClaimingInvite(user.email))
-    return { error: "invite_required", ... };
-}
+Be specific about it, because this is the trade. Anyone who can load the app
+can pick any client's name, and then do everything that person can:
+
+- read all of their tickets, conversations and uploaded models;
+- comment on those tickets as them;
+- withdraw their requests, change their priorities and re-queue their prints;
+- submit new print requests and feature requests in their name;
+- read their Activity feed.
+
+They cannot do anything the printer owner does — advance, decline or flag a
+ticket, edit the catalogue or the benefits, read the audit trail — without
+`ADMIN_PASSWORD`.
+
+The audit trail still records who did what, but read it for what it is: the
+name somebody *picked*, not the person who was at the keyboard. Every name
+picked and added is in it (`name.picked`, `name.added`) with the client
+address where [`TRUST_PROXY_HEADERS`](deployment.md#why-trust_proxy_headers-is-a-separate-switch)
+allows one, which is enough to notice something odd and not enough to prove
+anything.
+
+There is also no way to keep somebody out. Suspending an account was a
+sign-in feature, and it went with sign-in. If someone should no longer be
+ordering prints, that has to be enforced by who can reach the app at all.
+
+### Do not put this on the internet
+
+**If the app is reachable from the public internet, anyone with the URL can
+submit prints, read anybody's tickets and models by picking their name, and
+comment as them.** There is no sign-in standing in the way, by design.
+
+That includes the deployments this repository ships overlays for:
+`docker-compose.tunnel.yml` (a Cloudflare Tunnel) and `docker-compose.proxy.yml`
+behind a reverse proxy with a public DNS name both make the app reachable from
+anywhere unless you add something in front.
+
+Keep it on the office network. If people must reach it from elsewhere, put a
+layer that *does* authenticate in front of the whole hostname — a VPN
+(WireGuard, Tailscale), or an authenticating proxy such as Cloudflare Access
+on the tunnel. One thing to know before choosing the proxy: the "Open in
+PrusaSlicer" helper fetches models with `curl`, not a browser, so a proxy that
+demands its own login will refuse it unless that path is let through — see
+[Open in PrusaSlicer](prusaslicer.md).
+
+`ADMIN_PASSWORD` protects the owner pages on the internet as well as anywhere
+else, but it protects nothing else.
+
+### The printer owner
+
+There is exactly one `admin` user row, the printer owner. Nobody picks it;
+`prisma/seed.ts` writes it from `ADMIN_NAME` (and `ADMIN_EMAIL`, which is
+optional and stored but not used for anything — the app sends no email). The
+seed is an upsert, so changing `ADMIN_NAME` and re-running it renames the owner.
+
+The owner pages — `/queue`, `/admin/catalog`, `/admin/benefits`,
+`/admin/prints`, `/admin/audit` and `/frr/queue` — are unlocked at `/owner` with
+`ADMIN_PASSWORD`, set in the environment. Visiting any of them without it sends
+you there and back again afterwards. If `ADMIN_PASSWORD` is not set, the owner
+pages are switched off and `/owner` says so.
+
+Unlocking sets a second cookie:
+
+```
+ppp.owner = <expiresAt>.<HMAC-SHA256(APP_SECRET, "owner:" + expiresAt + ":" + sha256(ADMIN_PASSWORD))>
 ```
 
-Two conditions. A pending invitation for the address is necessary, and for a
-while it was treated as sufficient — which, because Better Auth's
-`/sign-up/email` answers anybody, made the *address* the credential: whoever
-knew an invited address could post it with their own password and be given the
-account. So the request must also be the redemption of that invitation's link.
-`acceptInvite` checks the token and runs the sign-up inside `claimingInvite`
-(`src/lib/invites.ts`), an `AsyncLocalStorage` scope the gate reads back. It
-cannot be set from a request body, and a request that arrives at the endpoint
-by itself is refused exactly as an address with no invitation is — same status,
-same words, so the endpoint cannot be used to ask who has been invited. The
-audit trail tells the two apart (`reason: "no_link"` / `"no_invitation"`).
+- **A browser-session cookie** (no `Max-Age`), so closing the browser locks the
+  owner pages — and it carries its own expiry, **twelve hours**, so a browser
+  that is never closed does not stay unlocked forever.
+- **Changing `ADMIN_PASSWORD` locks every browser at once.** The password's
+  digest is inside the MAC, so every owner cookie already handed out stops
+  validating the moment the app restarts with a new one. That is the revocation
+  story, and it is the only one: there is no list of unlocked browsers to clear.
+- **"Lock owner pages"** in the account menu clears it immediately. On a shared
+  machine, use it.
+- With `ppp.owner` valid, you are the printer owner regardless of what
+  `ppp.who` says.
 
-Better Auth calls it before provisioning an identity **by any method**, from
-`internalAdapter.createUser`. Password sign-up goes through that path with
-`{ method: "email-password" }` exactly as passkey enrolment does, so adding
-passwords neither moved this rule nor added a second copy of it in a route
-handler to drift out of sync. `verify:auth` asserts both halves directly:
-registering an address with no pending invite is answered 403 and leaves no
-row, and so is registering an invited address without its link.
+The typed password is compared in constant time against `ADMIN_PASSWORD`.
+Wrong guesses are limited to **ten a minute per client address**, counted in
+memory: enough to make guessing slow, and it resets when the container
+restarts. The address is the one `TRUST_PROXY_HEADERS` allows the app to
+believe; with that unset, every client shares a single counter, which means
+somebody guessing can also keep the real owner waiting for a minute. Set it
+correctly behind a proxy.
 
-### The invitation link
+Unlocking, refusing and locking are all audited — `owner.unlocked`,
+`owner.unlock_refused`, `owner.locked` — so a run of refusals shows up on
+`/admin/audit` where the owner will see it.
 
-1. The admin submits an address at `/admin/invites`.
-2. `createInvite` mints 32 bytes of CSPRNG output, stores **only its SHA-256
-   digest**, and emails the raw token inside the link. The raw token is never
-   returned to the admin either — it exists in the email and nowhere else.
-3. The invitee opens `/invite/<token>`, sees who invited them and which
-   address the invite is bound to, and picks a display name, a **username** and
-   a **password**.
-4. Submitting checks the token again and calls Better Auth's sign-up as the
-   redemption of that invite, which runs the invite gate and the stamping
-   hook, creates the account and returns a session. They land on
-   `/welcome`, which offers a passkey.
-5. `databaseHooks.user.create.after` burns every open invite for that address,
-   so the link cannot mint a second account.
+#### Why there is now an `ADMIN_PASSWORD`
 
-Invites expire after 7 days, can be withdrawn, and can be re-sent — re-sending
-**rotates the token**, so a previously leaked email stops working.
+Earlier versions refused to have one, on the grounds that a password in an env
+file is also in `docker inspect`, in the shell history that wrote the file and
+in every backup of the host, still valid months later. That is all still true.
+What changed is the alternative: the old answer was a one-use set-password link
+printed by the migrator, which only made sense with accounts to set passwords
+on. With no accounts, a single owner secret in the environment is the smallest
+thing that works.
 
-#### Why registering does not send a second email
-
-The invite token was delivered to that mailbox and nowhere else, so following
-the link already proves control of it. Making someone read a *second* email to
-finish registering adds a hop without adding assurance — and it would put a
-mail server back on the critical path for getting in, which is precisely what
-this model exists to remove.
-
-So registration creates the session directly. There is no in-process link to
-redeem and no `AsyncLocalStorage` machinery holding one; the previous version
-had both, and they existed only to work around the absence of a password.
-
-#### Usernames
-
-3–32 characters of letters, digits, `-` and `_`. Case is accepted but not kept:
-the value is folded to lower case on write and looked up folded, so `Ayla_B` is
-stored as `ayla_b`, signs in as either, and cannot be registered twice in
-different clothes. `displayUsername` keeps whatever was typed.
-
-Matching case-insensitively rather than refusing capitals is the friendlier
-half of that: somebody whose phone capitalises the first letter should be told
-the username is taken, not that it is malformed.
-
-### Privileged fields cannot be set over the wire
-
-`role`, `initials` and `invitedById` are declared `input: false`. Better Auth
-does not quietly strip them — it **refuses the whole request** with
-`FIELD_NOT_ALLOWED`, which is the better failure: a sign-up that half-worked
-would be harder to notice than one that did not. They are written server-side
-in `databaseHooks.user.create.before`, read out of the invite row.
-
-Fields that are not declared at all — a chosen `id`, a posted `emailVerified` —
-reach the endpoint and are simply overruled. There are tests for both halves.
+So treat it like the other secrets in `.env.docker`: long, random, not reused
+anywhere else, and rotated — by editing the file and restarting the app — if
+it may have leaked. Rotating also locks every browser that had it.
 
 ### Exactly one admin
 
@@ -220,8 +193,10 @@ exactly one admin.
 
 ### Authorisation
 
-[`src/lib/authz.ts`](../src/lib/authz.ts) holds the handoff's core rule as one
-exported fragment that every query composes:
+[`src/lib/authz.ts`](../src/lib/authz.ts) works out who is at the keyboard —
+an unlocked owner cookie makes you the printer owner, otherwise `ppp.who` names
+a client, otherwise nobody — and holds the handoff's core rule as one exported
+fragment that every query composes:
 
 ```ts
 export function storyScope(actor: Actor): Prisma.StoryWhereInput {
@@ -230,82 +205,56 @@ export function storyScope(actor: Actor): Prisma.StoryWhereInput {
 ```
 
 `getStoryOr404` answers **404, not 403**, for a client asking after somebody
-else's story — a 403 would confirm the story exists. `requireAdmin` does the
-same for admin-only routes.
+else's story — a 403 would confirm the story exists. That still matters even
+without sign-in: it stops one person stumbling into another's ticket by
+editing a URL, without picking their name on purpose.
 
-`src/middleware.ts` only checks that a session cookie is *present*, to redirect
-early instead of flashing a shell. It is deliberately not the boundary: a
-forged cookie gets past it and no further. The real checks run in every page
-and every server action.
+`requireUser` sends somebody with no name to `/hello`; `requireAdmin` sends
+somebody who has not unlocked the owner pages to `/owner`. Both return the
+visitor to where they were going afterwards, through
+[`src/lib/safe-redirect.ts`](../src/lib/safe-redirect.ts).
 
-### Confirming it is still you
+`src/middleware.ts` only checks that one of the two cookies is *present*, to
+send a visitor with no name to `/hello` instead of flashing a page and then
+bouncing. It is deliberately not the boundary: a forged cookie gets past it and
+no further. The real checks — including the signatures — run in every page,
+every server action and every route handler.
 
-Four things an admin can do outlive any session: inviting somebody (a whole new
-account), re-sending an invitation (a fresh working link), minting a
-password-reset link (the ability to become that person) and revoking or
-restoring access. All four ask for the passkey or the password again if the
-current sign-in is more than five minutes old, and send you to `/reauth` if it
-is.
+### The API
 
-This is the sudo gate, and it exists because shortening the session window does
-not help against a cookie captured *now*. It is the one control a thief holding
-a copied cookie cannot satisfy.
+The JSON API at `/api/*` uses the same two cookies, and nothing else: there are
+no bearer tokens, no API keys and no `Authorization` header. A call with no
+name gets `401 {"error":"Pick your name first."}`; a client calling an
+owner-only endpoint gets 403. From a script, copy the cookie out of a browser
+where you have picked your name — and `ppp.owner` as well for owner endpoints.
+The details are in [the API guide](api.md).
 
-Withdrawing an unaccepted invitation is not gated — it only ever removes reach
-— and nor are `/admin/benefits` and `/admin/catalog`, which decide what the
-request form offers and grant nobody anything.
-
-`/reauth` offers both the passkey and the password on purpose. Every account
-has a password by construction and only some have a passkey, so requiring a
-passkey would leave an admin without one unable to revoke access.
-
-One thing worth knowing, because it explains a spare row in `session`: Better
-Auth has no way to assert an identity without creating a session, so
-re-authenticating signs you in again and the gate reads the age of the session
-that comes back. The session it replaces is left to expire, which at twenty
-minutes is not long.
+The one other credential is the short-lived token inside an "Open in
+PrusaSlicer" link, an HMAC signed with `APP_SECRET` that names one person and
+one model for half an hour. [Open in PrusaSlicer](prusaslicer.md) explains why
+it exists.
 
 ### Other decisions worth knowing
 
-- **Cookies** are `HttpOnly`, `SameSite=Lax`, `__Secure-` prefixed, and keyed
-  on the *URL scheme* rather than `NODE_ENV` — a production boot over plain
-  HTTP throws unless it is loopback, and an HTTPS deployment always gets the
-  flag regardless of how the env is set.
-- **A session is worth twenty idle minutes**, sliding every minute
-  (`SESSION_IDLE_SECONDS`). It used to be thirty days with a daily slide, which
-  in practice meant *forever*: `expiresIn` is an idle window that renews, so a
-  session used once a month never expired at all. Twenty minutes is only
-  humane because passkeys are here — which does make the passkey nudge
-  load-bearing rather than decorative. The full reasoning, including why not a
-  JWT and why the token stays in a cookie, is in
-  [the security audit](security-audit.md#the-session-window).
-- **Middleware re-stamps the session cookie on page navigations.** Better Auth
-  slides the database row and the cookie together, but Next forbids writing a
-  cookie during a React Server Component render, so browsing pages would keep
-  the row alive while the browser's copy quietly expired. Harmless at thirty
-  days; at twenty minutes it signs people out mid-task. The cookie is never the
-  authority — the row is — so extending the browser's copy cannot extend a
-  session, it only stops the cookie dying first.
-- **Session cookie caching is off.** It would trust a signed snapshot without
-  a database lookup, which makes sign-out lag by the cache lifetime. A DAST
-  probe caught exactly that; see [the security audit](security-audit.md).
+- **`APP_SECRET` signs everything** — `ppp.who`, `ppp.owner` and slicer links.
+  The app refuses to sign anything without it rather than falling back to a
+  default somebody could read in the source. Lose it, or change it, and every
+  cookie stops validating: everyone picks their name again, the owner unlocks
+  again, and nothing else is lost. Tickets, names and history are rows, not
+  cookies.
+- **CSRF** rests on `SameSite=Lax` plus an `Origin` check on every write that
+  goes through the API boundary: a write whose `Origin` names somewhere other
+  than `APP_URL` is refused. Server-action forms get Next's own origin check.
+- **`Secure` follows the URL scheme**, not `NODE_ENV`: the cookies are marked
+  `Secure` when `APP_URL` is `https://`, and a production build refuses to
+  start on any other scheme unless `APP_URL` is a loopback address — see
+  [deployment](deployment.md#https-is-not-optional).
 - **CSP carries a per-request nonce** minted in `src/middleware.ts`, so
-  `script-src` needs no `'unsafe-inline'`. Every script tag on a rendered page
-  carries it.
-- **Rate limiting** is on, in Postgres, with the password paths capped well
-  below the blanket rule: `/sign-in/username`, `/sign-up/email` and
-  `/reset-password` get 10 a minute per IP. Ten rather than three *because an
-  office sits behind one NAT address* — a tighter limit would lock out the
-  colleague at the next desk. Ten a minute still puts online guessing several
-  thousand years away from a ten-character password, which is the number that
-  matters.
-- **No user enumeration**: a wrong password and an invented username get
-  byte-identical responses, and an unknown username still pays for a password
-  hash so the wall clock does not answer either. Both are probed.
-- `SameSite=Lax`, not `Strict`, because `Strict` would drop the cookie on the
-  hop from a set-password link and the sign-in would appear to silently fail.
-- **Reset tokens are hashed at rest.** `verification.storeIdentifier: "hashed"`
-  means the table holds a digest, not a link anyone could paste into a URL.
-  `prisma/reset-token.ts` reproduces that digest for the two places that mint a
-  row directly — the admin control and the seed — and is the single definition
-  of the format, because the migrator image ships `prisma/` and nothing else.
+  `script-src` needs no `'unsafe-inline'`.
+- **`/hello` and `/owner` work without JavaScript.** Both are plain forms whose
+  actions finish in a redirect, so a broken script — Cloudflare's Rocket
+  Loader, say — cannot stop anyone getting in.
+- **`/hello` does not name the printer owner.** Pages that address the owner by
+  first name ("Send it to Ruben") only render once somebody has picked a name.
+  The list of clients' names is visible to anyone who loads `/hello`, which is
+  the price of a list to pick from.

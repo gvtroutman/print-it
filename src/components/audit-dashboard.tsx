@@ -163,7 +163,7 @@ export function AuditDashboard({
               {refusals.recent.map((r, i) => (
                 <li key={i} className="py-[3px] font-mono text-[11px] leading-[1.4] text-ink-3">
                   <span className="text-ink-2">{relativeTime(r.at)}</span>{" "}
-                  {r.actorEmail ?? "someone"} · {r.subject ?? "—"}
+                  {r.actorName ?? "someone"} · {r.subject ?? "—"}
                   {r.reason ? ` · ${r.reason}` : ""}
                 </li>
               ))}

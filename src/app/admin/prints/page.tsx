@@ -44,7 +44,7 @@ export default async function PrintsByPersonPage({
 }: {
   searchParams: Promise<Search>;
 }) {
-  const [params, admin] = await Promise.all([searchParams, requireAdmin()]);
+  const [params, admin] = await Promise.all([searchParams, requireAdmin("/admin/prints")]);
   const people = await listPeopleWithPrints(admin);
 
   // Only ids that name somebody real, in roster order, each once. Whatever
@@ -90,7 +90,7 @@ export default async function PrintsByPersonPage({
                 aria-current={on ? "true" : undefined}
                 className={`stamp inline-flex items-center gap-[8px] rounded-chip border-[3px] border-ink px-[13.2px] py-[6px] text-[14px] font-bold transition-colors ${
                   on ? "bg-cherry-dk text-cream" : "bg-porcelain text-ink hover:bg-sun"
-                } ${p.suspended ? "opacity-70" : ""}`}
+                }`}
               >
                 <span
                   aria-hidden
@@ -103,9 +103,6 @@ export default async function PrintsByPersonPage({
                   {p.prints}
                 </span>
                 {p.isOwner && <span className="font-mono text-[10.5px] uppercase tracking-[0.06em]">you</span>}
-                {p.suspended && (
-                  <span className="font-mono text-[10.5px] uppercase tracking-[0.06em]">suspended</span>
-                )}
               </Link>
             );
           })}

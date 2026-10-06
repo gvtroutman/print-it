@@ -26,9 +26,7 @@
 #     certificate once nothing ELSE on the host is served through them: every
 #     hostname still proxied the old way goes down with a 522 the moment they
 #     go, while this one stays up on its tunnel. See docs/deployment.md.
-#   - PASSKEY_RP_ID and APP_URL do not change, because the hostname does not.
-#     Passkeys are bound to the RP ID permanently, so a migration that altered
-#     it would silently invalidate every one already registered.
+#   - APP_URL does not change, because the hostname does not.
 #
 # WHERE THE ROUTING LIVES. This runs a *remotely-managed* tunnel: the token
 # identifies the tunnel and the ingress rules live in the Cloudflare dashboard,

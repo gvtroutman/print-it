@@ -4,17 +4,19 @@
  *   docker compose up -d && npm run build && npm start
  *   npm run verify:upload
  *
- * Drives the real HTTP surface with real sessions and real files, and checks
- * what landed in Postgres and on disk afterwards.
+ * Drives the real HTTP surface with real identity cookies and real files, and
+ * checks what landed in Postgres and on disk afterwards.
  *
- * DESTRUCTIVE: wipes users, stories and invites. Development database only.
+ * DESTRUCTIVE: wipes client users and stories. Development database only.
  */
 import "./_env";
 import { stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import { db } from "../src/lib/db";
-import { ensureCredentials, signInWithPassword, usernameFor } from "./_accounts";
+import { WHO_COOKIE } from "../src/lib/identity-rules";
+import { signWho } from "../src/lib/identity-token";
+import { actAs, createClient } from "./_accounts";
 
 /**
  * The storage directory, read directly rather than through the app.
@@ -32,7 +34,7 @@ import { ensureCredentials, signInWithPassword, usernameFor } from "./_accounts"
 const MODELS_ROOT = resolve(process.env.MODELS_ROOT ?? "./data/uploads");
 const pathForKey = (key: string) => join(MODELS_ROOT, key);
 
-const APP = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+const APP = process.env.APP_URL ?? "http://localhost:3000";
 
 let passed = 0;
 const failures: string[] = [];
@@ -81,21 +83,13 @@ class Browser {
 }
 
 /**
- * A signed-in browser for an existing user row.
+ * A browser that has already said who it is.
  *
- * Takes the id as well as the address because a password is set against the
- * account, not the mailbox: `ensureCredentials` gives the row a username and
- * a password through the app's own reset endpoint, and the sign-in below is
- * the same request the sign-in form makes. `verify:auth` owns the real
- * registration path; this is the short way to a session.
+ * `actAs` writes the cookie that picking a name on `/hello` (or, for the
+ * owner, unlocking `/owner`) would have left behind. Everything after that is
+ * the real HTTP surface.
  */
-async function signIn(user: { id: string; email: string }): Promise<Browser> {
-  const b = new Browser();
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  await ensureCredentials(APP, user.id, usernameFor(user.email));
-  await signInWithPassword(b, APP, usernameFor(user.email));
-  return b;
-}
+const as = (user: { id: string; role: string }) => actAs(new Browser(), user);
 
 /** A real binary STL: an axis-aligned box, 12 triangles. */
 function binaryStl(x: number, y: number, z: number): Uint8Array {
@@ -168,33 +162,30 @@ const unescapeHtml = (s: string) =>
 
 async function main() {
   section("setup");
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
   await db.auditEvent.deleteMany();
   await db.notification.deleteMany();
   await db.story.deleteMany();
-  await db.verification.deleteMany();
-  await db.session.deleteMany();
-  await db.invite.deleteMany();
   await db.user.deleteMany({ where: { role: "client" } });
 
   const admin = await db.user.findFirst({ where: { role: "admin" } });
   if (!admin) throw new Error("No admin — run npm run db:seed");
 
-  const ayla = await db.user.create({
-    data: { email: "ayla@office.example", name: "Ayla Berg", initials: "AY",
-            role: "client", emailVerified: true, invitedById: admin.id },
-  });
-  const jonas = await db.user.create({
-    data: { email: "jonas@office.example", name: "Jonas Weiss", initials: "JO",
-            role: "client", emailVerified: true, invitedById: admin.id },
-  });
+  const ayla = await createClient("Ayla Berg", { email: "ayla@office.example" });
+  const jonas = await createClient("Jonas Weiss", { email: "jonas@office.example" });
 
-  const aylaB = await signIn(ayla);
-  const jonasB = await signIn(jonas);
-  const rubenB = await signIn(admin);
+  const aylaB = as(ayla);
+  const jonasB = as(jonas);
+  const rubenB = as(admin);
   const anon = new Browser();
-  check("three sessions established",
-        [aylaB, jonasB, rubenB].every((b) => [...b.jar.keys()].some((k) => k.includes("session_token"))));
+
+  // The cookies are minted here, so prove the app agrees with them before
+  // three hundred checks fail for a reason that is really APP_SECRET.
+  const whoami = await aylaB.raw(`${APP}/api/stories`);
+  check("the app accepts the suite's identity cookies", whoami.status === 200,
+        `status ${whoami.status} — does APP_SECRET match the app's?`);
+  const ownerHome = await rubenB.raw(`${APP}/queue`);
+  check("and the owner cookie unlocks the owner pages", ownerHome.status === 200,
+        `status ${ownerHome.status} ${ownerHome.headers.get("location") ?? ""} — does ADMIN_PASSWORD match the app's?`);
 
   section("a good file becomes a story");
 
@@ -318,7 +309,23 @@ async function main() {
         (await db.auditEvent.count({ where: { action: "upload.rejected" } })) === cases.length);
 
   const anonUpload = await upload(anon, "sneaky.stl", binaryStl(10, 10, 10));
-  check("an unauthenticated upload is refused", anonUpload.status === 401, `got ${anonUpload.status}`);
+  check("an upload from nobody is refused", anonUpload.status === 401, `got ${anonUpload.status}`);
+
+  // A name is not a credential, but the cookie still has to be one this app
+  // wrote. A hand-made `ppp.who` naming a real person is nobody.
+  const forged = new Browser();
+  forged.jar.set(WHO_COOKIE, `${ayla.id}.not-the-mac`);
+  const forgedUpload = await upload(forged, "forged.stl", binaryStl(10, 10, 10));
+  check("an upload under a forged name cookie is refused", forgedUpload.status === 401,
+        `got ${forgedUpload.status}`);
+
+  // And a correctly signed one that names the owner's row resolves to no one:
+  // only ADMIN_PASSWORD makes you the owner.
+  const posing = new Browser();
+  posing.jar.set(WHO_COOKIE, signWho(admin.id));
+  const posingUpload = await upload(posing, "posing.stl", binaryStl(10, 10, 10));
+  check("a name cookie for the owner's row is nobody, not the owner",
+        posingUpload.status === 401, `got ${posingUpload.status}`);
 
   section("the board is scoped");
 
@@ -438,9 +445,9 @@ async function main() {
   check("with the uploader named", books.includes("Jonas Weiss"));
 
   const anonProfile = await anon.raw(`${APP}/me`);
-  check("signed out, the profile redirects to sign-in",
+  check("with no name picked, the profile sends you to pick one",
         anonProfile.status === 307 &&
-        (anonProfile.headers.get("location") ?? "").includes("/signin"),
+        (anonProfile.headers.get("location") ?? "").includes("/hello"),
         `status ${anonProfile.status}`);
 
   await db.story.deleteMany({ where: { id: { in: [jonasStory.id, declined.id] } } });
@@ -601,9 +608,10 @@ async function main() {
 
     section("the audit trail reads correctly");
 
-  const actions = await db.auditEvent.groupBy({ by: ["action"], _count: true });
-  const byAction = Object.fromEntries(actions.map((a) => [a.action, a._count]));
-  check("sign-ins were recorded", (byAction["auth.signed_in"] ?? 0) >= 3, JSON.stringify(byAction));
+  check("every row the uploads wrote names who did it",
+        (await db.auditEvent.findMany({ where: { action: "story.created" } }))
+          .every((e) => e.actorName === "Ayla Berg"),
+        "actorName should carry the person's name, now that there is no address");
   check("no token or secret leaked into the trail",
         (await db.auditEvent.findMany()).every((e) => {
           const blob = JSON.stringify(e.detail ?? {}).toLowerCase();
@@ -621,7 +629,7 @@ async function main() {
   await db.auditEvent.create({
     data: {
       action: "file.refused",
-      actorEmail: "mallory@office.example",
+      actorName: "Mallory Quint",
       subject: "story:999",
       detail: { reason: "not visible to this account" },
     },

@@ -6,7 +6,7 @@
 #
 #   docker compose --env-file .env.docker \
 #     -f docker-compose.prod.yml -f docker-compose.build.yml \
-#     -f docker-compose.test.yml --profile mailcatcher up -d --build
+#     -f docker-compose.test.yml up -d --build
 #
 # CI uses exactly this combination, so the thing under test is the same
 # artifact the release workflow publishes.
@@ -15,10 +15,10 @@ services:
     build:
       context: .
       target: runner
-    image: ${PPP_REGISTRY:-ghcr.io/danileau}/ppp-app:${PPP_TAG:-latest}
+    image: ${PPP_REGISTRY:-ghcr.io/gvtroutman}/ppp-app:${PPP_TAG:-latest}
 
   migrate:
     build:
       context: .
       target: migrator
-    image: ${PPP_REGISTRY:-ghcr.io/danileau}/ppp-migrate:${PPP_TAG:-latest}
+    image: ${PPP_REGISTRY:-ghcr.io/gvtroutman}/ppp-migrate:${PPP_TAG:-latest}

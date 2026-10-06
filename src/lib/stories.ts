@@ -284,10 +284,6 @@ export async function listStories(actor: Actor, query: StoryQuery = {}) {
  * would be a window into everyone else's. Refused here rather than only on
  * the page, because the page is one caller and the rule should not depend on
  * which caller remembered it.
- *
- * Suspended people are included and marked. Their tickets did not go away
- * with their access, and the owner looking for "what did they send me" is the
- * case this exists for.
  */
 export async function listPeopleWithPrints(actor: Actor) {
   if (actor.role !== "admin") {
@@ -296,7 +292,7 @@ export async function listPeopleWithPrints(actor: Actor) {
   const people = await db.user.findMany({
     orderBy: { name: "asc" },
     select: {
-      id: true, name: true, initials: true, role: true, banned: true,
+      id: true, name: true, initials: true, role: true,
       _count: { select: { stories: true } },
     },
   });
@@ -305,7 +301,6 @@ export async function listPeopleWithPrints(actor: Actor) {
     name: p.name,
     initials: p.initials,
     isOwner: p.role === "admin",
-    suspended: p.banned === true,
     prints: p._count.stories,
   }));
 }

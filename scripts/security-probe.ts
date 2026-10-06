@@ -1,26 +1,36 @@
 /**
  * Targeted DAST probes, grouped by OWASP Top 10 (2021).
  *
- *   docker compose up -d db mailpit
+ *   docker compose up -d db
  *   npm run build && npm start
  *   npm run probe:security
  *
  * A generic scanner (ZAP, Nuclei) cannot reason about *this* app's authority
- * model — who may call which endpoint, whether an invite is single-use,
- * whether a role can be set from outside. These probes do, by driving the real
- * HTTP surface with real sessions.
+ * model — who may call which endpoint, whether a name cookie can be pointed
+ * at the printer owner, whether a role can be set from outside. These probes
+ * do, by driving the real HTTP surface with real cookies.
  *
- * DESTRUCTIVE: wipes users, invites and tokens. Development database only.
+ * There is no sign-in left. A person is whoever a correctly signed `ppp.who`
+ * names, and only ever a client; the printer owner is whoever holds a valid
+ * `ppp.owner`, which nothing but `ADMIN_PASSWORD` produces. So most of what
+ * used to live under A07 is now one question asked several ways: does a
+ * cookie this app did not write, or wrote for something else, buy anything?
+ *
+ * Needs the same APP_SECRET and ADMIN_PASSWORD as the running app, or every
+ * positive control below fails first — which is the hint.
+ *
+ * DESTRUCTIVE: wipes client users, stories and the audit trail. Development
+ * database only.
  */
 import "./_env";
+import { createHash, createHmac } from "node:crypto";
 import { db } from "../src/lib/db";
-import { issuePasswordSetupUrl } from "../src/lib/password-reset";
-import { TEST_PASSWORD, ensureCredentials, signInWithPassword, usernameFor } from "./_accounts";
-import { SESSION_IDLE_SECONDS } from "../src/lib/auth-rules";
+import { actAs, createClient, pickName } from "./_accounts";
+import { OWNER_COOKIE, OWNER_TTL_SECONDS, WHO_COOKIE } from "../src/lib/identity-rules";
+import { signOwner, signWho } from "../src/lib/identity-token";
 import { safeRedirect } from "../src/lib/safe-redirect";
 
-const APP = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
-const MAILPIT = process.env.MAILPIT_URL ?? "http://localhost:8025";
+const APP = process.env.APP_URL ?? "http://localhost:3000";
 
 type Finding = { id: string; title: string; detail: string };
 const findings: Finding[] = [];
@@ -65,6 +75,8 @@ function stlBox(x: number, y: number, z: number): Uint8Array {
   return buf;
 }
 
+const unescapeHtml = (s: string) => s.replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+
 class Browser {
   jar = new Map<string, string>();
   private store(res: Response) {
@@ -95,21 +107,27 @@ class Browser {
   /**
    * Post a server-action form the way a browser with no JavaScript does:
    * carry every hidden input (Next's action id among them) and override the
-   * visible fields. Mirrors the helper in `verify-auth.ts`.
+   * visible fields. Mirrors the helper in `verify-queue.ts`.
+   *
+   * `pick` chooses the form, because `/hello` has two and an app page has the
+   * header's "Not you?" form ahead of whatever the probe is after. Throws
+   * rather than posting nothing: a probe that submitted the wrong form would
+   * pass for the wrong reason.
    */
-  async submit(url: string, html: string, values: Record<string, string>) {
-    const form = /<form\b[\s\S]*?<\/form>/.exec(html)?.[0] ?? "";
+  async submit(
+    url: string,
+    html: string,
+    values: Record<string, string>,
+    pick: (form: string) => boolean = () => true,
+  ) {
+    const form = (html.match(/<form\b[\s\S]*?<\/form>/g) ?? []).find(pick);
+    if (!form) throw new Error(`no matching form on ${url}`);
     const body = new FormData();
     for (const tag of form.match(/<input\b[^>]*>/g) ?? []) {
       if (!tag.includes('type="hidden"')) continue;
       const name = /name="([^"]*)"/.exec(tag)?.[1];
       const value = /value="([^"]*)"/.exec(tag)?.[1] ?? "";
-      if (name) {
-        body.append(
-          name.replace(/&amp;/g, "&").replace(/&quot;/g, '"'),
-          value.replace(/&amp;/g, "&").replace(/&quot;/g, '"'),
-        );
-      }
+      if (name) body.append(unescapeHtml(name), unescapeHtml(value));
     }
     for (const [k, v] of Object.entries(values)) body.set(k, v);
     return this.raw(url, { method: "POST", body });
@@ -133,158 +151,131 @@ class Browser {
   }
 }
 
-async function mailLink(to: string, re: RegExp) {
-  const list = await (await fetch(`${MAILPIT}/api/v1/messages?limit=100`)).json();
-  for (const m of list.messages ?? []) {
-    if (!(m.To ?? []).some((a: { Address?: string }) => a.Address?.toLowerCase() === to)) continue;
-    const b = await (await fetch(`${MAILPIT}/api/v1/message/${m.ID}`)).json();
-    const hit = re.exec(`${b.Text ?? ""} ${b.HTML ?? ""}`);
-    if (hit) return hit[0].replace(/[.,]$/, "").replace(/&amp;/g, "&");
-  }
-  return null;
+/**
+ * Where a page visit ends up, after every redirect.
+ *
+ * Middleware only checks that *a* cookie is present, so a forged one gets
+ * past it; the refusal comes a step later, from `requireUser` or
+ * `requireAdmin` inside the page. Asserting on the first hop would therefore
+ * see a 200-bound request and miss the bounce — the final path is the answer.
+ * (`res.url` is the last hop's URL, because `go` issues each hop itself.)
+ */
+async function landing(b: Browser, path: string) {
+  const res = await b.go(APP + path);
+  return { path: new URL(res.url).pathname, status: res.status, html: await res.text() };
 }
-const CLAIM = /http:\/\/[^\s"'<]+\/invite\/[^\s"'<]+/;
 
-/** A signed-in browser for an existing row, the way the sign-in form does it. */
-async function signIn(user: { id: string; email: string }): Promise<Browser> {
+/** Where a single redirect points, resolved, or null if it was not one. */
+function target(res: Response): URL | null {
+  const loc = res.headers.get("location");
+  if (!loc || res.status < 300 || res.status >= 400) return null;
+  return new URL(loc, APP);
+}
+
+/**
+ * An owner cookie for an arbitrary expiry, built by hand.
+ *
+ * `signOwner` always stamps `Date.now() + ttl`, which is the right API for the
+ * app and the wrong one for a probe that wants to say "this one expired an
+ * hour ago" without trusting the code under test to build it. So the MAC is
+ * reproduced here, byte for byte as `identity-token.ts` does it — if the two
+ * ever drift, the positive control at the top of A07 catches it first.
+ */
+function ownerCookieAt(expiresAt: number, password = process.env.ADMIN_PASSWORD ?? "") {
+  const digest = createHash("sha256").update(password).digest("hex");
+  const mac = createHmac("sha256", process.env.APP_SECRET ?? "")
+    .update(`owner:${expiresAt}:${digest}`)
+    .digest("base64url");
+  return `${expiresAt}.${mac}`;
+}
+
+/** A browser holding exactly these cookies and nothing else. */
+function holding(cookies: Record<string, string>): Browser {
   const b = new Browser();
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  await ensureCredentials(APP, user.id, usernameFor(user.email));
-  await signInWithPassword(b, APP, usernameFor(user.email));
+  for (const [k, v] of Object.entries(cookies)) b.jar.set(k, v);
   return b;
 }
 
-/** Post to the sign-in endpoint directly, for the probes that need the reply. */
-function attemptSignIn(b: Browser, username: string, password: string, extra = {}) {
-  return b.json("/api/auth/sign-in/username", { username, password, ...extra });
-}
+const isHelloForm = (f: string) => f.includes('name="userId"');
+const isAddNameForm = (f: string) => f.includes('name="name"');
+
+/** The pages only the printer owner may see. `requireAdmin` guards each. */
+const OWNER_PAGES = [
+  "/queue",
+  "/admin/audit",
+  "/admin/catalog",
+  "/admin/benefits",
+  "/admin/prints",
+  "/frr/queue",
+];
 
 async function main() {
   section("setup");
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  await db.verification.deleteMany();
   await db.auditEvent.deleteMany();
   await db.notification.deleteMany();
   await db.story.deleteMany();
-  await db.invite.deleteMany();
   await db.user.deleteMany({ where: { role: "client" } });
 
   const admin = await db.user.findFirst({ where: { role: "admin" } });
   if (!admin) throw new Error("No admin — run npm run db:seed");
 
-  const ayla = await db.user.create({
-    data: {
-      email: "ayla@office.example", name: "Ayla Berg", initials: "AY",
-      role: "client", emailVerified: true, invitedById: admin.id,
-    },
-  });
-  const mallory = await db.user.create({
-    data: {
-      email: "mallory@office.example", name: "Mallory", initials: "MA",
-      role: "client", emailVerified: true, invitedById: admin.id,
-    },
-  });
-  console.info(`  admin=${admin.email}  client=${ayla.email}  attacker=${mallory.email}`);
+  // E-mail addresses on purpose, although nothing in the app reads them any
+  // more: they are what A02-api-email below searches the wire for.
+  const ayla = await createClient("Ayla Berg", { email: "ayla@office.example", initials: "AY" });
+  const mallory = await createClient("Mallory", { email: "mallory@office.example", initials: "MA" });
+  console.info(`  admin=${admin.name}  client=${ayla.name}  attacker=${mallory.name}`);
 
-  const client = await signIn(ayla);
-  const attacker = await signIn(mallory);
+  const client = actAs(new Browser(), ayla);
+  const attacker = actAs(new Browser(), mallory);
+  const apiAdmin = actAs(new Browser(), admin);
   const anon = new Browser();
-  console.info(`  sessions established: ${client.jar.size > 0 && attacker.jar.size > 0}`);
+  console.info(`  cookies minted: ${client.jar.has(WHO_COOKIE) && apiAdmin.jar.has(OWNER_COOKIE)}`);
 
   // =====================================================================
   section("A01 Broken Access Control");
 
-  // Positive control. Without it, the three "not authenticated" probes below
-  // could all pass simply because the marker was never rendered — which is
-  // exactly how the previous copy-based version quietly went hollow.
+  // Positive control. Without it, the "not authenticated" probes below could
+  // all pass simply because the marker was never rendered — which is exactly
+  // how the previous copy-based version quietly went hollow.
   const realPage = await (await client.go(`${APP}/board`)).text();
-  probe("A01-marker", "a real session does render the authenticated marker",
+  probe("A01-marker", "a real name cookie does render the authenticated marker",
         isAuthenticated(realPage),
-        "marker missing — every negative auth probe below is vacuous");
+        "marker missing — every negative identity probe below is vacuous");
 
-  for (const path of ["/admin/invites", "/admin/audit"]) {
-    const r = await client.go(APP + path);
-    probe(`A01-page ${path}`, `${path} refuses a client with 404`,
-          r.status === 404, `expected 404, got ${r.status}`);
+  // And the owner's, for the same reason: every "bounced to /owner" below is
+  // only evidence if a valid owner cookie is *not* bounced.
+  const ownerQueue = await landing(apiAdmin, "/queue");
+  probe("A01-owner-control", "a valid owner cookie does reach the queue",
+        ownerQueue.path === "/queue" && isAuthenticated(ownerQueue.html),
+        `landed on ${ownerQueue.path} (${ownerQueue.status}) — APP_SECRET or ` +
+        "ADMIN_PASSWORD differs from the app's, so every owner probe below is vacuous");
+
+  // Vertical, pages. A client is not told these do not exist — the owner
+  // prompt is public and names them — it is sent to the password prompt.
+  for (const path of OWNER_PAGES) {
+    const r = await landing(client, path);
+    probe(`A01-page ${path}`, `${path} sends a client to the owner prompt`,
+          r.path === "/owner" && !isAuthenticated(r.html),
+          `expected to land on /owner, landed on ${r.path} (${r.status})`);
   }
 
-  // The audit trail names everyone who has ever signed in. A client reaching
-  // it would be a roster leak on top of a privilege one.
-  const auditLeak = await (await client.go(`${APP}/admin/audit`)).text();
+  // The audit trail names everyone who has ever picked a name. A client
+  // reaching it would be a roster leak on top of a privilege one.
+  const auditLeak = (await landing(client, "/admin/audit")).html;
   probe("A01-audit-leak", "no audit rows leak to a client",
-        !auditLeak.includes("auth.signed_in") && !auditLeak.includes("invite.sent"));
+        !auditLeak.includes("name.picked") && !auditLeak.includes("owner.unlocked"));
 
   /*
-   * The admin plugin ships a dozen privileged endpoints, and this app uses none
-   * of them: every admin screen goes through Prisma directly, and
-   * `authClient.admin` is never called from the browser. They are 404ed as a
-   * prefix in src/middleware.ts.
+   * A `ppp.who` cookie signed by the app's own key, for the owner's row.
    *
-   * Asserted for an admin as well as a client, because the client case was
-   * never the interesting one. The re-auth gate in src/lib/reauth.ts exists
-   * because four actions outlive a session, and its stated value is that "the
-   * thief has the session, not the passkey" — but a copied admin cookie inside
-   * its twenty idle minutes could reach the same ends through these endpoints
-   * without meeting that bar, unaudited, and they are listed at
-   * /api/openapi.json for any signed-in client to read. set-user-password sets
-   * a colleague's password without revoking their sessions; impersonate-user
-   * mints a session as anybody; set-role is persistence that survives the real
-   * admin changing their password.
-   *
-   * 404 rather than 401 or 403 — and note this probe previously accepted those.
-   * It had to change with the fix, which is the honest signal that the behaviour
-   * changed: as far as any caller is concerned these paths do not exist, and a
-   * 403 would confirm that they do.
+   * This is the cookie a curious client would build if `APP_SECRET` ever
+   * leaked, and the one the app itself would write if `pickName` ever stopped
+   * filtering on role. `currentUser` resolves a who cookie against client rows
+   * only, so it names nobody at all: not the owner, and not a client either.
+   * That is why the API answers 401 rather than 403 — there is no actor to
+   * refuse — and why `/board` sends it to /hello rather than letting it in.
    */
-  /*
-   * Its own admin session rather than the `apiAdmin` created later in this file,
-   * only because that one does not exist yet at this point in the suite. An
-   * extra session is harmless — nothing here counts the admin's.
-   */
-  const ownerNow = await signIn(admin);
-
-  for (const [name, path, body] of [
-    ["list-users", "/api/auth/admin/list-users", null],
-    ["set-role", "/api/auth/admin/set-role", { userId: "self", role: "admin" }],
-    ["create-user", "/api/auth/admin/create-user",
-      { email: "backdoor@nowhere.test", password: "x", name: "B", role: "admin" }],
-    ["impersonate-user", "/api/auth/admin/impersonate-user", { userId: "x" }],
-    ["remove-user", "/api/auth/admin/remove-user", { userId: "x" }],
-    ["set-user-password", "/api/auth/admin/set-user-password",
-      { userId: "x", newPassword: "not-the-real-one-1234" }],
-    ["ban-user", "/api/auth/admin/ban-user", { userId: "x" }],
-    ["update-user", "/api/auth/admin/update-user", { userId: "x", data: { role: "admin" } }],
-    ["list-sessions", "/api/auth/admin/list-user-sessions", { userId: "x" }],
-    ["revoke-sessions", "/api/auth/admin/revoke-user-sessions", { userId: "x" }],
-  ] as const) {
-    for (const [who, browser] of [["client", client], ["admin", ownerNow]] as const) {
-      const res = body
-        ? await browser.json(path, { ...body, userId: ayla.id })
-        : await browser.raw(APP + path, { headers: browser.headers() });
-      probe(`A01-${name}-${who}`, `admin API "${name}" does not exist for ${who === "admin" ? "an admin" : "a client"}`,
-            res.status === 404,
-            `expected 404, got ${res.status}: ${(await res.text()).slice(0, 90)}`);
-    }
-  }
-
-  // And the app's own path still works, or the fix traded one problem for
-  // another. Suspension is the closest equivalent to ban-user, and it is
-  // exercised in full by verify:queue; here it is enough that the admin screen
-  // the owner actually uses still renders its controls.
-  const memberScreen = await (await ownerNow.go(`${APP}/admin/invites`)).text();
-  probe("A01-admin-ui-intact", "the owner's own member controls still render",
-        memberScreen.includes("Revoke access") || memberScreen.includes("Restore access") ||
-          memberScreen.includes("Suspend"),
-        memberScreen.slice(0, 160));
-
-  const escalated = await db.user.findUnique({ where: { id: ayla.id } });
-  probe("A01-role", "client role unchanged after escalation attempts",
-        escalated?.role === "client", `role is now ${escalated?.role}`);
-  probe("A01-backdoor", "no back-door account was created",
-        (await db.user.count({ where: { email: "backdoor@nowhere.test" } })) === 0);
-
-  // Horizontal: the story detail scope. No /story route yet, so assert the
-  // data-layer rule the future route will compose.
+  const whoForOwner = pickName(new Browser(), admin.id);
   const aylaStory = await db.story.create({
     data: {
       title: "Ayla's private hook", uploaderId: ayla.id, colorName: "Slate",
@@ -292,6 +283,77 @@ async function main() {
       mimeType: "model/stl", storageKey: "secret-key-a1",
     },
   });
+
+  const ownerQueueByWho = await landing(whoForOwner, "/queue");
+  probe("A01-who-owner-page", "a signed who cookie for the owner's row does not open the queue",
+        ownerQueueByWho.path === "/owner",
+        `landed on ${ownerQueueByWho.path} (${ownerQueueByWho.status})`);
+  const ownerBoardByWho = await landing(whoForOwner, "/board");
+  probe("A01-who-owner-nobody", "and names nobody at all, not even a client",
+        ownerBoardByWho.path === "/hello" && !isAuthenticated(ownerBoardByWho.html),
+        `landed on ${ownerBoardByWho.path} (${ownerBoardByWho.status})`);
+  const listByWho = await whoForOwner.raw(`${APP}/api/stories`);
+  probe("A01-who-owner-api", "and the API treats it as no name (401)",
+        listByWho.status === 401, `expected 401, got ${listByWho.status}`);
+  const advanceByWho = await whoForOwner.raw(`${APP}/api/stories/${aylaStory.id}/advance`, {
+    method: "POST",
+  });
+  probe("A01-who-owner-advance", "and cannot move a ticket",
+        advanceByWho.status === 401 &&
+        (await db.story.findUnique({ where: { id: aylaStory.id } }))?.status === "Requested",
+        `status ${advanceByWho.status}`);
+
+  /*
+   * The same thing through the front door: the /hello picker posts a user id,
+   * and the id is a form field, so it can say anything. `pickName` looks it up
+   * among client rows only; the owner's id is "not on the list".
+   */
+  const picker = new Browser();
+  const helloHtml = await (await picker.raw(`${APP}/hello`)).text();
+  const pickedOwner = await picker.submit(`${APP}/hello`, helloHtml, { userId: admin.id }, isHelloForm);
+  probe("A01-pick-owner", "the name picker cannot be pointed at the owner's row",
+        (target(pickedOwner)?.searchParams.get("error") ?? "") === "unknown" &&
+          !picker.jar.has(WHO_COOKIE),
+        `status ${pickedOwner.status} -> ${pickedOwner.headers.get("location") ?? ""}, ` +
+        `who cookie set: ${picker.jar.has(WHO_COOKIE)}`);
+
+  // Nor can a client add a name that is the owner's, in any case — that is
+  // the one name a colleague would take on trust in a notification.
+  const twin = new Browser();
+  const twinHtml = await (await twin.raw(`${APP}/hello`)).text();
+  const twinRes = await twin.submit(`${APP}/hello`, twinHtml,
+    { name: admin.name.toUpperCase() }, isAddNameForm);
+  probe("A01-add-owner-name", "nobody can add a name that is the owner's",
+        (target(twinRes)?.searchParams.get("error") ?? "") === "owner" &&
+        (await db.user.count({
+          where: { role: "client", name: { equals: admin.name, mode: "insensitive" } },
+        })) === 0,
+        `status ${twinRes.status} -> ${twinRes.headers.get("location") ?? ""}`);
+
+  /*
+   * Owner-only server actions, replayed from a client.
+   *
+   * A form's action id is not a secret — it is in the HTML of every page that
+   * renders the form — so the client here borrows the owner's own "Accept it"
+   * form, hidden inputs and all, and posts it with nothing but a name cookie.
+   * `requireAdmin()` at the top of the action is what has to say no.
+   */
+  const ownerTicket = await (await apiAdmin.raw(`${APP}/story/${aylaStory.id}`)).text();
+  const replayed = await client.submit(`${APP}/story/${aylaStory.id}`, ownerTicket, {},
+    (f) => f.includes("Accept it") && f.includes(`value="${aylaStory.id}"`));
+  probe("A01-action-replay", "a client replaying the owner's own form does not move the ticket",
+        (await db.story.findUnique({ where: { id: aylaStory.id } }))?.status === "Requested",
+        `status ${replayed.status} -> ${replayed.headers.get("location") ?? ""}`);
+  probe("A01-action-replay-owner", "and is sent to the owner prompt instead",
+        target(replayed)?.pathname === "/owner",
+        `expected a redirect to /owner, got ${replayed.status} -> ` +
+        `${replayed.headers.get("location") ?? "none"}`);
+
+  probe("A01-role", "the client is still a client, and there is still one owner",
+        (await db.user.findUnique({ where: { id: ayla.id } }))?.role === "client" &&
+        (await db.user.count({ where: { role: "admin" } })) === 1);
+
+  // Horizontal: the story detail scope, against the data layer.
   // Imported from scope.ts, not authz.ts: the pure rule, no "server-only".
   const { storyScope } = await import("../src/lib/scope");
   const asMallory = await db.story.findFirst({
@@ -311,11 +373,11 @@ async function main() {
       return f;
     })(),
   });
-  probe("A01-anon-api", "an unauthenticated API call is 401, not a redirect",
+  probe("A01-anon-api", "a call with no name is 401, not a redirect",
         anonUpload.status === 401,
         `expected 401, got ${anonUpload.status} -> ${anonUpload.headers.get("location") ?? ""}`);
 
-  // The uploader is taken from the session. A body claiming otherwise must
+  // The uploader is taken from the cookie. A body claiming otherwise must
   // not be able to file a request in someone else's name.
   const spoof = new FormData();
   spoof.set("file", new File([stlBox(15, 15, 15) as BlobPart], "spoof.stl"));
@@ -331,9 +393,9 @@ async function main() {
   const spoofed = await db.story.findFirst({
     where: { title: "Filed as someone else" },
   });
-  probe("A01-upload-owner", "the uploader comes from the session, not the body",
+  probe("A01-upload-owner", "the uploader comes from the cookie, not the body",
         spoofed?.uploaderId === ayla.id,
-        `story is owned by ${spoofed?.uploaderId}, session was ${ayla.id}`);
+        `story is owned by ${spoofed?.uploaderId}, cookie named ${ayla.id}`);
   probe("A01-upload-status", "a posted status is ignored; new stories are Requested",
         spoofed?.status === "Requested", String(spoofed?.status));
   probe("A02-storage-key", "the storage key is generated, not taken from the filename",
@@ -349,11 +411,10 @@ async function main() {
   // stops doing so — a rule that holds only for the caller that remembered it
   // is not a rule.
   //
-  // It also departs from the app's usual 404-not-403 answer, on purpose: these
-  // paths are published in /api/openapi.json, so hiding their existence is
-  // theatre. What is still hidden is whether a *ticket* exists, which is what
-  // the two IDOR probes below are about.
-  const apiAdmin = await signIn(admin);
+  // It also departs from the pages' send-them-elsewhere answer, on purpose:
+  // these paths are published in /api/openapi.json, so a client is told 403
+  // plainly. What is still hidden is whether a *ticket* exists, which is what
+  // the IDOR probes below are about.
   const mallorysStory = await db.story.create({
     data: {
       title: "Mallory's own", uploaderId: mallory.id, colorName: "Slate",
@@ -361,6 +422,11 @@ async function main() {
       mimeType: "model/stl", storageKey: "secret-key-m1",
     },
   });
+
+  const clientList = await client.raw(`${APP}/api/stories`);
+  probe("A01-api-control", "a real name cookie is accepted by the API",
+        clientList.status === 200,
+        `status ${clientList.status} — every 401 probe below is vacuous`);
 
   for (const [method, path] of [
     ["GET", "/api/stories"],
@@ -372,7 +438,7 @@ async function main() {
   ] as const) {
     const r = await anon.raw(APP + path, { method });
     probe(`A01-api-anon ${method} ${path.replace(/\d+/, "{id}")}`,
-          "an unauthenticated API call is 401, not a redirect",
+          "a call with no name is 401, not a redirect",
           r.status === 401,
           `expected 401, got ${r.status} -> ${r.headers.get("location") ?? ""}`);
   }
@@ -415,10 +481,8 @@ async function main() {
   // The "Open in PrusaSlicer" link credential.
   //
   // A second way to be somebody at /api/models/[id], for a desktop helper that
-  // holds no cookie. It replaced a bearer token pasted into a file on the
-  // owner's machine — which was the session token, so it was a thirty-day,
-  // full-authority secret at rest, and it broke outright when sessions came
-  // down to twenty minutes.
+  // holds no cookie. It replaced a long-lived token pasted into a file on the
+  // owner's machine, which was a full-authority secret at rest.
   //
   // The token answers *who* and nothing else, so what matters is that it is
   // unforgeable and that it cannot be pointed somewhere it was not minted for.
@@ -434,7 +498,7 @@ async function main() {
         "no ppp:// link with a ?t= credential on the rendered ticket — the " +
         "helper would fall back to a long-lived token on disk");
 
-  // Anonymous: no cookie, no bearer, exactly the helper's position.
+  // Anonymous: no cookie at all, exactly the helper's position.
   const bare = (url: string) => fetch(url, { redirect: "manual" });
 
   probe("A01-slicer-anon", "the model route still refuses a caller with nothing",
@@ -449,7 +513,7 @@ async function main() {
     // The binding that matters: one link, one model. Without it, a link to your
     // own ticket would be a key to every ticket its holder can see — and the
     // holder here is the printer owner, who can see all of them. Mallory's is
-    // the right target precisely because the admin *may* read it by session.
+    // the right target precisely because the admin *may* read it by cookie.
     const crossed = await bare(APP + `/api/models/${mallorysStory.id}?t=${minted}`);
     probe("A01-slicer-bound", "and cannot be pointed at a different model",
           crossed.status !== 200,
@@ -519,8 +583,11 @@ async function main() {
    */
   probe("A02-api-key", "the object's storage key is not on the wire",
         !own.includes("storageKey") && !own.includes("secret-key-a1"), own.slice(0, 200));
+  // `email` is optional now and the owner's may be null, and "".includes is
+  // always true — so it is only searched for when there is one to find.
   probe("A02-api-email", "and neither is anybody's e-mail address",
-        !own.includes("@office.example") && !own.includes(admin.email), own.slice(0, 200));
+        !own.includes("@office.example") && (!admin.email || !own.includes(admin.email)),
+        own.slice(0, 200));
 
   // CSRF: SameSite=Lax plus an Origin check is the app's model, and the API
   // keeps to it. A browser always sends Origin on a cross-site write.
@@ -543,30 +610,8 @@ async function main() {
         (await db.story.findUnique({ where: { id: aylaStory.id } }))?.status === "Requested",
         `status ${foreign.status}`);
 
-  // A bearer token is the session token. If sign-out did not kill it, it
-  // would be a way back into an account whose owner believes they have left.
-  const bearerBrowser = await signIn(mallory);
-  const signInAgain = await signInWithPassword(bearerBrowser, APP, usernameFor(mallory.email));
-  const bearerToken = signInAgain.headers.get("set-auth-token") ?? "";
-  const withToken = await fetch(`${APP}/api/stories`, {
-    headers: { authorization: `Bearer ${bearerToken}` },
-  });
-  probe("A07-bearer-works", "a bearer token authenticates (or the probe below is vacuous)",
-        withToken.status === 200, `status ${withToken.status}`);
-  const forgedToken = await fetch(`${APP}/api/stories`, {
-    headers: { authorization: "Bearer forged.token" },
-  });
-  probe("A07-bearer-forged", "an invented bearer token grants nothing",
-        forgedToken.status === 401, `status ${forgedToken.status}`);
-  await bearerBrowser.json("/api/auth/sign-out", {});
-  const bearerAfterSignOut = await fetch(`${APP}/api/stories`, {
-    headers: { authorization: `Bearer ${bearerToken}` },
-  });
-  probe("A07-bearer-revoked", "and sign-out revokes the bearer token, not only the cookie",
-        bearerAfterSignOut.status === 401, `status ${bearerAfterSignOut.status}`);
-
-  // The document and the console describe an invite-only app. Handing that
-  // description to a stranger is a free map of the authority model.
+  // The document and the console describe the authority model. Handing that
+  // description to a stranger is a free map of it.
   for (const [id, path] of [
     ["A05-openapi-anon", "/api/openapi.json"],
     ["A05-docs-anon", "/docs"],
@@ -577,18 +622,6 @@ async function main() {
           `status ${r.status}`);
   }
 
-  // Enabling an OpenAPI generator is a classic way to acquire an
-  // unauthenticated metadata endpoint without noticing: Better Auth's plugin
-  // mounts one that answers 200 to anybody. It is called in process here and
-  // never over HTTP, so the route is shut — and shut for signed-in callers
-  // too, because nothing legitimate reaches for it.
-  for (const [who, b] of [["anonymous", anon], ["a client", client]] as const) {
-    const r = await b.raw(`${APP}/api/auth/open-api/generate-schema`);
-    probe(`A05-authschema-${who === "anonymous" ? "anon" : "user"}`,
-          `the auth plugin's schema endpoint is closed to ${who}`,
-          r.status === 404, `status ${r.status}`);
-  }
-
   const docsHtml = await (await client.raw(`${APP}/docs`)).text();
   const docsExternal = [
     ...docsHtml.matchAll(/<(?:script|link|img|iframe)\b[^>]*\b(?:src|href)="([^"]+)"/g),
@@ -597,77 +630,50 @@ async function main() {
         docsExternal.length === 0, docsExternal.join(" "));
 
   const anonHome = await anon.raw(`${APP}/`);
-  probe("A01-anon", "unauthenticated request is redirected",
-        anonHome.status === 307 || anonHome.status === 302,
-        `got ${anonHome.status}`);
-
-  const forged = new Browser();
-  forged.jar.set("ppp.session_token", "not-a-real-token");
-  forged.jar.set("__Secure-ppp.session_token", "not-a-real-token");
-  const forgedRes = await forged.go(`${APP}/`);
-  const forgedBody = await forgedRes.text();
-  probe("A01-forge", "a forged session cookie grants nothing",
-        !isAuthenticated(forgedBody),
-        "forged cookie reached an authenticated page");
+  probe("A01-anon", "a visitor with no name is sent to /hello",
+        (anonHome.status === 307 || anonHome.status === 302) &&
+          target(anonHome)?.pathname === "/hello",
+        `got ${anonHome.status} -> ${anonHome.headers.get("location") ?? ""}`);
 
   // =====================================================================
   section("A02 Cryptographic Failures");
 
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  const cookieProbe = new Browser();
-  const setRes = await attemptSignIn(cookieProbe, usernameFor(ayla.email), TEST_PASSWORD);
-  const cookieLines = setRes.headers.getSetCookie();
-  const sessionCookie = cookieLines.find((c) => c.includes("session_token")) ?? "";
-  probe("A02-httponly", "session cookie is HttpOnly", /HttpOnly/i.test(sessionCookie), sessionCookie.slice(0, 80));
-  probe("A02-samesite", "session cookie is SameSite", /SameSite=(Lax|Strict)/i.test(sessionCookie), sessionCookie.slice(0, 80));
-  probe("A02-secure", "session cookie is Secure (or the app is on loopback http)",
-        /Secure/i.test(sessionCookie) || APP.startsWith("http://localhost"),
-        sessionCookie.slice(0, 80));
-
-  const rawToken = /session_token=([^;]+)/.exec(sessionCookie)?.[1] ?? "";
-  probe("A02-entropy", "session token has meaningful entropy", decodeURIComponent(rawToken).length >= 24,
-        `token length ${rawToken.length}`);
-
-  // Invite tokens must be unusable straight out of the database.
-  const { createInvite } = await import("../src/lib/invites");
-  await createInvite({ email: "crypto@office.example", invitedById: admin.id });
-  const inviteRow = await db.invite.findFirst({ where: { email: "crypto@office.example" } });
-  const inviteLinkUrl = await mailLink("crypto@office.example", CLAIM);
-  const rawInviteToken = inviteLinkUrl?.split("/invite/")[1] ?? "";
-  probe("A02-invite-hash", "invite token is stored hashed, not in the clear",
-        !!inviteRow && inviteRow.tokenHash !== rawInviteToken && /^[a-f0-9]{64}$/.test(inviteRow.tokenHash),
-        `stored=${inviteRow?.tokenHash?.slice(0, 20)}…`);
-
-  // Reset tokens must be unusable straight out of the database too.
-  const resetUrl = await issuePasswordSetupUrl(ayla.id);
-  const rawResetToken = new URL(resetUrl).searchParams.get("token") ?? "";
-  const verifications = await db.verification.findMany();
-  probe("A02-reset-hash", "set-password token is stored hashed, not in the clear",
-        rawResetToken.length > 20 &&
-        verifications.every(
-          (v) => !v.identifier.includes(rawResetToken) && !v.value.includes(rawResetToken),
-        ),
-        "a raw set-password token was found in the verification table");
-
-  const storedPassword = (await db.account.findFirst({
-    where: { userId: ayla.id, providerId: "credential" },
-    select: { password: true },
-  }))?.password ?? "";
-  probe("A02-password-hash", "the account password is stored as a digest, never in the clear",
-        storedPassword.length > 20 && !storedPassword.includes(TEST_PASSWORD),
-        "the password, or something very like it, is readable in the account row");
+  /*
+   * The flags on the cookie the app itself writes, read off a real pick on
+   * /hello rather than off the suite's own minted one. `ppp.owner` has the
+   * same `base()` options in src/lib/identity.ts; it is not unlocked here
+   * because that would mean posting the real owner password, which
+   * verify:queue already does.
+   */
+  const flagsProbe = new Browser();
+  const flagsHtml = await (await flagsProbe.raw(`${APP}/hello`)).text();
+  const picked = await flagsProbe.submit(`${APP}/hello`, flagsHtml, { userId: ayla.id }, isHelloForm);
+  const whoLine = picked.headers.getSetCookie().find((c) => c.startsWith(`${WHO_COOKIE}=`)) ?? "";
+  probe("A02-pick-works", "picking a name on /hello sets the name cookie",
+        whoLine.length > 0,
+        `status ${picked.status}, no ${WHO_COOKIE} Set-Cookie — the flag probes below are vacuous`);
+  probe("A02-httponly", "the name cookie is HttpOnly", /HttpOnly/i.test(whoLine), whoLine.slice(0, 120));
+  probe("A02-samesite", "the name cookie is SameSite", /SameSite=(Lax|Strict)/i.test(whoLine),
+        whoLine.slice(0, 120));
+  probe("A02-secure", "the name cookie is Secure (or the app is on plain http)",
+        /Secure/i.test(whoLine) || APP.startsWith("http://"),
+        whoLine.slice(0, 120));
 
   // =====================================================================
   section("A03 Injection");
 
+  // The one id a stranger can post is the picker's `userId`. It reaches
+  // Prisma as a parameter, so a payload is just a name that is not on the list.
   const sqlPayloads = ["' OR '1'='1", "'; DROP TABLE \"user\"; --", "\\'; SELECT pg_sleep(3); --"];
   let sqlOk = true;
   for (const p of sqlPayloads) {
-    const r = await attemptSignIn(anon, p, "does-not-matter-at-all");
-    if (r.status >= 500) sqlOk = false;
+    const b = new Browser();
+    const html = await (await b.raw(`${APP}/hello`)).text();
+    const r = await b.submit(`${APP}/hello`, html, { userId: p }, isHelloForm);
+    if (r.status >= 500 || b.jar.has(WHO_COOKIE)) sqlOk = false;
   }
-  probe("A03-sqli", "SQL metacharacters in the username field are handled", sqlOk,
-        "a payload produced a 5xx, suggesting it reached the driver");
+  probe("A03-sqli", "SQL metacharacters in the picker's user id are handled", sqlOk,
+        "a payload produced a 5xx or a name cookie, suggesting it reached the driver");
   probe("A03-sqli-intact", "user table still exists after injection attempts",
         (await db.user.count()) > 0);
 
@@ -680,7 +686,7 @@ async function main() {
   // Assert on the dangerous form specifically. The inner attribute text
   // ("onerror=alert(1)") legitimately survives inside an *escaped* string —
   // both in the DOM as "&lt;img … onerror=alert(1)&gt;" and in the RSC flight
-  // payload as "\u003cimg …" — and matching that substring alone reports
+  // payload as "<img …" — and matching that substring alone reports
   // correct escaping as a vulnerability. What must never appear is a raw
   // angle bracket opening a tag.
   const rawTag = /<img\s|<script>alert\(2\)/.test(xssHome);
@@ -692,90 +698,40 @@ async function main() {
           : "the payload was not rendered at all — the probe proved nothing");
   await db.user.update({ where: { id: ayla.id }, data: { name: "Ayla Berg" } });
 
-  const reflected = await (await anon.go(`${APP}/signin?error=%3Cscript%3Ealert(1)%3C%2Fscript%3E`)).text();
-  probe("A03-reflected-xss", "the error query parameter is not reflected as markup",
-        !reflected.includes("<script>alert(1)</script>"));
+  for (const page of ["/hello", "/owner"]) {
+    const reflected = await (await anon.go(`${APP}${page}?error=%3Cscript%3Ealert(1)%3C%2Fscript%3E`)).text();
+    probe(`A03-reflected-xss ${page}`, "the error query parameter is not reflected as markup",
+          !reflected.includes("<script>alert(1)</script>"));
+  }
 
-  const badToken = await (await anon.go(`${APP}/invite/%3Cscript%3Ealert(1)%3C%2Fscript%3E`)).text();
-  probe("A03-path-xss", "a hostile invite token is not reflected as markup",
-        !badToken.includes("<script>alert(1)</script>"));
-
-  // Sign-up is the one public endpoint that takes an address at all, and the
-  // address it takes is the one an invitation would later be matched against.
-  const crlf = await anon.json("/api/auth/sign-up/email", {
-    email: "a@x.test\r\nBcc: victim@evil.test",
-    name: "Header Splitter",
-    username: "splitter",
-    password: TEST_PASSWORD,
-  });
-  probe("A03-crlf", "CRLF in the email field is refused, and never reaches the mailer",
-        crlf.status >= 400 && crlf.status < 500 &&
-        (await db.user.count({ where: { email: { contains: "\n" } } })) === 0,
-        `status ${crlf.status}`);
+  // `next` is echoed into a hidden input on both prompts, after safeRedirect.
+  const nextXss = await (await anon.go(`${APP}/hello?next=%2F%3Cscript%3Ealert(1)%3C%2Fscript%3E`)).text();
+  probe("A03-next-xss", "a hostile ?next is not reflected as markup",
+        !nextXss.includes("<script>alert(1)</script>"));
 
   // =====================================================================
   section("A04 Insecure Design");
 
-  // raw(), not go(): middleware redirects unknown paths to /signin, and
-  // following that redirect would report the sign-in page's 200 as if a
-  // signup route existed.
-  for (const path of ["/signup", "/register"]) {
-    const r = await anon.raw(APP + path);
-    const landsOnSignin = (r.headers.get("location") ?? "").includes("/signin");
-    probe(`A04-nosignup ${path}`, `${path} offers no public registration`,
-          r.status === 404 || r.status === 405 || landsOnSignin || r.status === 307,
-          `status ${r.status} -> ${r.headers.get("location") ?? ""}`);
+  /*
+   * Gone means gone. Each of these was a door the sign-in design needed and
+   * this one does not; a merge that brought one back would bring back a
+   * surface nothing else in the suite looks at any more. Asked with a name
+   * cookie so middleware lets them through to the router — anonymously they
+   * would all be 307s to /hello and prove nothing.
+   */
+  for (const path of [
+    "/signin", "/reauth", "/set-password", "/welcome", "/admin/invites", "/invite/x",
+    "/api/auth/sign-in/username", "/api/auth/get-session", "/api/auth/admin/list-users",
+  ]) {
+    const r = await client.raw(APP + path);
+    probe(`A04-retired ${path}`, `${path} no longer exists`,
+          r.status === 404, `expected 404, got ${r.status} -> ${r.headers.get("location") ?? ""}`);
   }
-
-  // The sign-up endpoint does exist now — it is what an invitation link posts
-  // to. What must hold is that it refuses anybody without a pending invite,
-  // which is the invite-only rule and not a missing route.
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  const gatecrash = await anon.json("/api/auth/sign-up/email", {
-    email: "gatecrasher@nowhere.test",
-    name: "Gate Crasher",
-    username: "gatecrasher",
-    password: TEST_PASSWORD,
-  });
-  probe("A04-invitegate", "registration without a pending invite is refused",
-        gatecrash.status === 403 &&
-        (await db.user.count({ where: { email: "gatecrasher@nowhere.test" } })) === 0,
-        `status ${gatecrash.status}`);
-
-  // And an invitation is redeemed with its link, not with its address. The
-  // endpoint above is open to anyone, so if a pending invitation for the
-  // address were enough, knowing who was invited would be enough.
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  await createInvite({ email: "linkless@office.example", invitedById: admin.id });
-  const linkless = await new Browser().json("/api/auth/sign-up/email", {
-    email: "linkless@office.example",
-    name: "Link Less",
-    username: "linkless",
-    password: TEST_PASSWORD,
-  });
-  probe("A04-invitelink", "an invited address cannot be registered without its invite link",
-        linkless.status === 403 &&
-        (await db.user.count({ where: { email: "linkless@office.example" } })) === 0 &&
-        (await db.invite.findFirst({ where: { email: "linkless@office.example" } }))?.acceptedAt === null,
-        `status ${linkless.status}`);
-  probe("A04-inviteoracle", "the refusal does not reveal whether the address has an invitation",
-        (await linkless.clone().text()) === (await gatecrash.clone().text()),
-        (await linkless.clone().text()).slice(0, 120));
-
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  let limited = false;
-  for (let i = 0; i < 25; i++) {
-    const r = await attemptSignIn(anon, usernameFor(ayla.email), `guess-${i}-nope`);
-    if (r.status === 429) { limited = true; break; }
-  }
-  probe("A04-ratelimit", "password guessing is rate limited", limited,
-        "25 wrong passwords in a row were all answered normally");
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
 
   // =====================================================================
   section("A05 Security Misconfiguration");
 
-  const headRes = await anon.raw(`${APP}/signin`);
+  const headRes = await anon.raw(`${APP}/hello`);
   const H = (n: string) => headRes.headers.get(n) ?? "";
   probe("A05-nosniff", "X-Content-Type-Options is set", H("x-content-type-options") === "nosniff");
   probe("A05-frame", "clickjacking is blocked",
@@ -792,93 +748,157 @@ async function main() {
           `status ${r.status}`);
   }
 
-  const errRes = await anon.raw(`${APP}/api/auth/sign-in/username`, {
+  const errRes = await client.raw(`${APP}/api/stories/${aylaStory.id}/comments`, {
     method: "POST", headers: { "content-type": "application/json" }, body: "{not json",
   });
   const errBody = await errRes.text();
   probe("A05-stacktrace", "malformed input does not return a stack trace",
-        !/at \w+ \(|\.ts:\d+:\d+|node_modules/.test(errBody), errBody.slice(0, 120));
+        errRes.status === 400 && !/at \w+ \(|\.ts:\d+:\d+|node_modules/.test(errBody),
+        `status ${errRes.status} ${errBody.slice(0, 120)}`);
 
   // =====================================================================
   section("A07 Identification and Authentication Failures");
 
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  const known = await attemptSignIn(anon, usernameFor(ayla.email), "wrong-password-entirely");
-  const unknown = await attemptSignIn(anon, "nobody-at-all", "wrong-password-entirely");
-  const knownBody = await known.clone().text();
-  const unknownBody = await unknown.clone().text();
-  probe("A07-enum", "a real username and an invented one are answered identically",
-        known.status === unknown.status && knownBody === unknownBody,
-        `known=${known.status} ${knownBody} unknown=${unknown.status} ${unknownBody}`);
+  /*
+   * Forged name cookies.
+   *
+   * Middleware only asks whether a `ppp.who` is *present*, so each of these
+   * gets past it; what has to refuse them is `readWho` inside `currentUser`.
+   * A page therefore bounces to /hello a hop later than a missing cookie
+   * would, and the API answers 401. Ayla's real id is used on purpose: the
+   * only thing wrong with the first one is the MAC.
+   */
+  for (const [name, value] of [
+    ["bad-mac", `${ayla.id}.AAAA`],
+    ["unsigned", ayla.id],
+    ["empty-mac", `${ayla.id}.`],
+    ["other-mac", `${ayla.id}.${signWho(mallory.id).split(".").pop()}`],
+  ] as const) {
+    const forged = holding({ [WHO_COOKIE]: value });
+    const api = await forged.raw(`${APP}/api/stories`);
+    probe(`A07-who-${name}-api`, `a ${name} name cookie is 401 at the API`,
+          api.status === 401, `expected 401, got ${api.status}`);
+    const page = await landing(forged, "/board");
+    probe(`A07-who-${name}-page`, "and is sent to /hello by the page",
+          page.path === "/hello" && !isAuthenticated(page.html),
+          `landed on ${page.path} (${page.status})`);
+  }
 
-  // The wall clock is the other half of the oracle: an unknown username must
-  // still pay for a password hash, or the timing says who exists.
-  const time = async (fn: () => Promise<unknown>) => {
-    const t0 = performance.now();
-    await fn();
-    return performance.now() - t0;
-  };
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  const knownMs = await time(() => attemptSignIn(anon, usernameFor(ayla.email), "wrong-password-entirely"));
-  const unknownMs = await time(() => attemptSignIn(anon, "nobody-at-all", "wrong-password-entirely"));
-  probe("A07-enum-timing", "an unknown username costs about as much as a wrong password",
-        Math.min(knownMs, unknownMs) / Math.max(knownMs, unknownMs) > 0.25,
-        `known=${knownMs.toFixed(0)}ms unknown=${unknownMs.toFixed(0)}ms`);
+  /*
+   * Forged and stale owner cookies.
+   *
+   * The positive control is A01-owner-control above. Each of these is
+   * refused by `readOwner`, and with no `ppp.who` alongside it names nobody,
+   * so the API answers 401 and the queue bounces to the owner prompt.
+   *
+   * "rotated" is a cookie that was perfectly valid under a previous
+   * ADMIN_PASSWORD. The password's digest is inside the MAC so that changing
+   * it locks every browser out at once — the one lever the owner has if a
+   * laptop walks off unlocked.
+   */
+  const realPassword = process.env.ADMIN_PASSWORD ?? "";
+  for (const [name, value] of [
+    ["bad-mac", `${Date.now() + 3_600_000}.AAAA`],
+    ["unsigned", String(Date.now() + 3_600_000)],
+    ["expired", ownerCookieAt(Date.now() - 60 * 60 * 1000)],
+    ["expired-api", signOwner(-60)],
+    ["rotated", ownerCookieAt(Date.now() + OWNER_TTL_SECONDS * 1000, `${realPassword}-before`)],
+  ] as const) {
+    const forged = holding({ [OWNER_COOKIE]: value });
+    const page = await landing(forged, "/queue");
+    probe(`A07-owner-${name}-page`, `a ${name} owner cookie does not open the queue`,
+          page.path === "/owner",
+          `landed on ${page.path} (${page.status})`);
+    const api = await forged.raw(`${APP}/api/stories/${aylaStory.id}/advance`, { method: "POST" });
+    probe(`A07-owner-${name}-api`, "and cannot move a ticket",
+          api.status === 401 &&
+          (await db.story.findUnique({ where: { id: aylaStory.id } }))?.status === "Requested",
+          `status ${api.status}`);
+  }
 
-  // A set-password link must not sign anybody in, and must not work twice.
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  const linkOnly = new Browser();
-  const setUrl = await issuePasswordSetupUrl(ayla.id);
-  const setToken = new URL(setUrl).searchParams.get("token")!;
-  const opened = await linkOnly.go(setUrl);
-  probe("A07-reset-nosession", "opening a set-password link does not sign anybody in",
-        !isAuthenticated(await opened.text()) && linkOnly.jar.size === 0,
-        "following a reset link established a session");
+  // A forged owner cookie riding along with a real name is still just that
+  // name: the client it names, and no more.
+  const mixed = holding({
+    [WHO_COOKIE]: client.jar.get(WHO_COOKIE)!,
+    [OWNER_COOKIE]: `${Date.now() + 3_600_000}.AAAA`,
+  });
+  const mixedQueue = await landing(mixed, "/queue");
+  probe("A07-owner-mixed", "a forged owner cookie beside a real name adds nothing",
+        mixedQueue.path === "/owner", `landed on ${mixedQueue.path} (${mixedQueue.status})`);
 
-  const RESET_TO = "ppp-probe-new-key-parked-outside";
-  const firstUse = await new Browser().json("/api/auth/reset-password",
-    { token: setToken, newPassword: RESET_TO });
-  const secondUse = await new Browser().json("/api/auth/reset-password",
-    { token: setToken, newPassword: "ppp-probe-third-key-parked-outside" });
-  probe("A07-replay", "a set-password link cannot be redeemed twice",
-        firstUse.status === 200 && secondUse.status >= 400,
-        `first=${firstUse.status} second=${secondUse.status}`);
+  /*
+   * A wrong owner password.
+   *
+   * Once, not ten times: the unlock action allows ten wrong guesses a minute
+   * per address and this probe is not here to test that limiter — tripping it
+   * would leave the next suite's real unlock answered "slow". What it is here
+   * for is that a refusal issues no cookie and leaves a trace the owner can
+   * read, and that the trace does not carry the guess.
+   */
+  const guesser = new Browser();
+  const ownerHtml = await (await guesser.raw(`${APP}/owner`)).text();
+  const GUESS = "definitely-not-the-owner-password";
+  const refusedBefore = await db.auditEvent.count({ where: { action: "owner.unlock_refused" } });
+  const wrong = await guesser.submit(`${APP}/owner`, ownerHtml, { password: GUESS },
+    (f) => f.includes('name="password"'));
+  probe("A07-unlock-wrong", "a wrong owner password is refused",
+        (target(wrong)?.searchParams.get("error") ?? "") === "wrong",
+        `status ${wrong.status} -> ${wrong.headers.get("location") ?? ""}`);
+  probe("A07-unlock-nocookie", "and issues no owner cookie",
+        !guesser.jar.has(OWNER_COOKIE) &&
+          !wrong.headers.getSetCookie().some((c) => c.startsWith(`${OWNER_COOKIE}=`)),
+        wrong.headers.getSetCookie().join(" | ").slice(0, 160));
+  const refusals = await db.auditEvent.findMany({ where: { action: "owner.unlock_refused" } });
+  probe("A07-unlock-audited", "and is written to the audit trail",
+        refusals.length === refusedBefore + 1,
+        `${refusals.length - refusedBefore} owner.unlock_refused rows written`);
+  probe("A07-unlock-noguess", "without the guess in it",
+        !JSON.stringify(refusals).includes(GUESS),
+        "the audit trail recorded the attempted password");
 
-  // Setting a password revokes what the old one opened. `attacker` is left
-  // alone; only Ayla's sessions should be gone.
-  probe("A07-reset-revokes", "setting a new password ends the sessions the old one opened",
-        (await db.session.count({ where: { userId: ayla.id } })) === 0 &&
-        (await db.session.count({ where: { userId: mallory.id } })) > 0,
-        "a session outlived the password that opened it");
-
-  // Put the suite's own password back, so the probes after this still work.
-  await ensureCredentials(APP, ayla.id, usernameFor(ayla.email));
-  const client2 = await signIn(ayla);
-
-  // Open redirect through the API's callbackURL.
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  const evil = await attemptSignIn(
-    new Browser(), usernameFor(ayla.email), TEST_PASSWORD,
-    { callbackURL: "https://evil.example/steal" },
-  );
-  const evilLocation = evil.headers.get("location") ?? "";
-  probe("A07-openredirect", "an off-site callbackURL is refused",
-        evil.status >= 400 && !evilLocation.startsWith("https://evil.example"),
-        `status ${evil.status} -> ${evilLocation}`);
+  // ---------------------------------------------------------------------
+  // Redirect targets.
+  //
+  // `/hello` and `/owner` both take a `?next=` and redirect to it — at once,
+  // if the browser is already somebody. That makes them the app's two open
+  // redirect candidates, and the moment of redirect the one a person is
+  // least suspicious of.
+  // ---------------------------------------------------------------------
 
   // The raw value does appear in the RSC flight payload as a page prop, which
   // is inert. What matters is whether anything *navigable* points off-site,
-  // and whether the value survives safeNext() into the form.
-  const nextHtml = await (await anon.go(`${APP}/signin?next=https://evil.example`)).text();
-  const navigable = /(?:href|action|url|location)\s*[=:]\s*["']?https?:\/\/evil\.example/i.test(nextHtml);
-  probe("A07-nextparam", "no navigable target points off-site", !navigable,
-        "an href/action/redirect referenced the attacker origin");
+  // and whether the value survives safeRedirect() into the form.
+  for (const page of ["/hello", "/owner"]) {
+    const nextHtml = await (await anon.go(`${APP}${page}?next=https://evil.example`)).text();
+    const navigable = /(?:href|action|url|location|value)\s*[=:]\s*["']?https?:\/\/evil\.example/i.test(nextHtml);
+    probe(`A07-nextparam ${page}`, "no navigable target points off-site", !navigable,
+          "an href/action/value referenced the attacker origin");
+  }
 
-  const { default: _ } = { default: null };
-  const protoRel = await anon.raw(`${APP}/signin?next=//evil.example`);
-  probe("A07-protorel", "a protocol-relative ?next is not honoured",
-        !(protoRel.headers.get("location") ?? "").includes("evil.example"),
-        protoRel.headers.get("location") ?? "");
+  /*
+   * And over HTTP, with the cookie that makes each page redirect straight
+   * away. Asserted on the Location of the first hop — `raw`, not `go` — and
+   * resolved, because the question is where a browser would go next.
+   *
+   * Next normalises the Location it emits, so on its own this would not have
+   * caught the old backslash bug (see the safeRedirect probes below); it
+   * catches a page that stops calling safeRedirect at all.
+   */
+  const SPELLINGS = [
+    "//evil.example",
+    String.raw`/\evil.example`,
+    "https://evil.example",
+    "http://169.254.169.254/latest/meta-data/",
+  ];
+  for (const [page, who] of [["/hello", client], ["/owner", apiAdmin]] as const) {
+    for (const t of SPELLINGS) {
+      const r = await who.raw(`${APP}${page}?next=${encodeURIComponent(t)}`);
+      const to = target(r);
+      probe(`A07-redirect ${page} ${t}`, `${page} keeps ?next=${t} on this origin`,
+            to !== null && to.origin === new URL(APP).origin,
+            `status ${r.status} -> ${r.headers.get("location") ?? "no redirect"}`);
+    }
+  }
 
   /*
    * Every spelling a URL parser resolves off-origin, not just the one that
@@ -895,19 +915,16 @@ async function main() {
    * for reasons worth keeping:
    *
    *   - Searching the response body flagged everything, including targets that
-   *     are correctly refused. Middleware builds its sign-in redirect from the
+   *     are correctly refused. Middleware builds its /hello redirect from the
    *     raw `pathname + search`, so a refused target legitimately reappears
    *     inside an encoded same-origin return path, and Next serialises raw
    *     `searchParams` into the RSC flight payload regardless.
    *   - Asserting on the redirect Location proved nothing either, because Next
    *     normalises the Location it emits — the backslash spellings came back
-   *     same-origin even with the broken guard in place. The server redirect
-   *     was never the exploitable path.
+   *     same-origin even with the broken guard in place.
    *
-   * What is exploitable is the client half: `signin-form.tsx` and
-   * `reauth-form.tsx` hand `next` to `window.location.assign` after a
-   * successful sign-in, and the browser resolves the backslash there. No HTTP
-   * probe can see a client-side navigation, so the honest pin is the decision
+   * The pages and actions hand `next` on in more than one way, and no HTTP
+   * probe can see every one of them, so the honest pin is the decision
    * itself. `safe-redirect.ts` is pure for exactly this reason, the same
    * reasoning that keeps `scope.ts` out of `authz.ts`.
    */
@@ -937,203 +954,39 @@ async function main() {
   const KEPT: Array<[string, string]> = [
     ["/board", "/board"],
     ["/history?status=Done", "/history?status=Done"],
-    ["/admin/invites", "/admin/invites"],
+    ["/admin/audit", "/admin/audit"],
   ];
   const mangled = KEPT.filter(([input, want]) => safeRedirect(input, "/") !== want);
   probe("A07-offsite-keeps", "and a same-origin target is preserved, query and all",
         mangled.length === 0, mangled.map(([i]) => `${i} -> ${safeRedirect(i, "/")}`).join("  "));
 
-  // ---------------------------------------------------------------------
-  // How long a session is worth something.
-  //
-  // The window used to be thirty days, and thirty days that *renewed* — any
-  // session used inside the window got the whole window back, so a session
-  // nobody revoked never actually expired. On the shared office desktop this
-  // app runs on, a captured cookie was therefore good more or less forever.
-  //
-  // Three probes rather than one, because the property has three moving parts
-  // and each fails differently: the database row is the authority, the cookie
-  // is what a thief actually carries away, and the re-stamp is what keeps the
-  // short window from logging honest people out.
-  // ---------------------------------------------------------------------
-  const fresh = new Browser();
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  const freshIn = await attemptSignIn(fresh, usernameFor(ayla.email), TEST_PASSWORD);
-  const freshCookie =
-    freshIn.headers.getSetCookie().find((c) => c.includes("ppp.session_token=")) ?? "";
-  const freshToken = decodeURIComponent(
-    (fresh.jar.get("ppp.session_token") ?? fresh.jar.get("__Secure-ppp.session_token") ?? ""),
-  ).split(".")[0];
-
-  const freshRow = await db.session.findFirst({
-    where: { token: freshToken },
-    select: { createdAt: true, expiresAt: true },
-  });
-  const windowSeconds = freshRow
-    ? Math.round((freshRow.expiresAt.getTime() - freshRow.createdAt.getTime()) / 1000)
-    : -1;
-  // A minute of slack: the row is written a moment after the clock is read.
-  probe("A07-session-window", "a new session is worth twenty minutes, not a month",
-        Math.abs(windowSeconds - SESSION_IDLE_SECONDS) <= 60,
-        `session row spans ${windowSeconds}s, expected ~${SESSION_IDLE_SECONDS}s — ` +
-        "session.expiresIn has moved, and it is an idle window that renews, " +
-        "so a large value means a captured cookie effectively never expires");
-
-  const maxAge = Number(/max-age=(\d+)/i.exec(freshCookie)?.[1] ?? -1);
-  probe("A07-session-cookie-maxage", "the session cookie expires with the session",
-        Math.abs(maxAge - SESSION_IDLE_SECONDS) <= 60,
-        `Set-Cookie carried Max-Age=${maxAge}, expected ~${SESSION_IDLE_SECONDS} — ` +
-        "a cookie outliving its row is a credential left on disk for no reason");
-
-  /*
-   * The regression guard for the cookie re-stamp in `src/middleware.ts`.
-   *
-   * Better Auth slides a session in two places, and only one of them survives
-   * a React Server Component render: the database row is pushed out, but Next
-   * forbids writing a cookie during a render, so the browser's copy keeps
-   * counting down from whenever a route handler last wrote it. Measured, not
-   * assumed — before the re-stamp, `GET /board` sent no `Set-Cookie` at all
-   * while `GET /api/stories` sent `Max-Age=1200`.
-   *
-   * At thirty days that was invisible. At twenty minutes it signs people out
-   * mid-task with a perfectly live session behind them, which is the kind of
-   * failure people work around by asking for the window to be made long again.
-   */
-  const nav = await fresh.raw(`${APP}/board`);
-  const navMaxAge = Number(
-    /max-age=(\d+)/i.exec(
-      nav.headers.getSetCookie().find((c) => c.includes("ppp.session_token=")) ?? "",
-    )?.[1] ?? -1,
-  );
-  probe("A07-session-slides", "a page render pushes the cookie out too",
-        Math.abs(navMaxAge - SESSION_IDLE_SECONDS) <= 60,
-        `GET /board returned Max-Age=${navMaxAge}, expected ~${SESSION_IDLE_SECONDS} — ` +
-        "restampSession() in src/middleware.ts is not firing, so the cookie " +
-        "will die under an active user while their session row is still alive");
-
-  // ---------------------------------------------------------------------
-  // Re-authentication for the actions that move access around.
-  //
-  // Shortening the session limits how long a captured cookie is worth
-  // something; it does not stop it being worth something right now. The
-  // actions whose effects outlive the session — an invitation mints an
-  // account, a reset link is the ability to become somebody else, revoking
-  // locks a colleague out — ask for the passkey or the password again, which
-  // is the one control on the list a copied cookie cannot satisfy.
-  //
-  // Freshness is the age of the session, so the stale case is exercised by
-  // backdating the row rather than by waiting five minutes.
-  // ---------------------------------------------------------------------
-  const staleAdmin = await signIn(admin);
-  const invitePage = await (await staleAdmin.go(`${APP}/admin/invites`)).text();
-
-  const staleToken = decodeURIComponent(
-    (staleAdmin.jar.get("ppp.session_token") ??
-      staleAdmin.jar.get("__Secure-ppp.session_token") ?? ""),
-  ).split(".")[0];
-  await db.session.updateMany({
-    where: { token: staleToken },
-    data: { createdAt: new Date(Date.now() - 60 * 60 * 1000) },
-  });
-
-  const staleEmail = "reauth-stale@office.example";
-  await db.invite.deleteMany({ where: { email: staleEmail } });
-  const staleTry = await staleAdmin.submit(`${APP}/admin/invites`, invitePage, {
-    email: staleEmail,
-    name: "Stale Session",
-  });
-  const staleLanded = staleTry.headers.get("location") ?? staleTry.url ?? "";
-  const staleMadeAnInvite =
-    (await db.invite.count({ where: { email: staleEmail } })) > 0;
-  probe("A07-reauth-stale", "an old session cannot hand out access",
-        !staleMadeAnInvite,
-        `an invitation for ${staleEmail} was created from a session an hour old — ` +
-        "requireFreshAuth() is not gating sendInviteAction, so a captured " +
-        `cookie can mint accounts (landed at ${staleLanded || "no redirect"})`);
-
-  probe("A07-reauth-redirect", "and is sent to confirm who it is",
-        staleLanded.includes("/reauth"),
-        `expected a redirect to /reauth, got "${staleLanded || "none"}"`);
-
-  // The other half: the gate must not simply break the feature.
-  const freshAdmin = await signIn(admin);
-  const freshPage = await (await freshAdmin.go(`${APP}/admin/invites`)).text();
-  const freshEmail = "reauth-fresh@office.example";
-  await db.invite.deleteMany({ where: { email: freshEmail } });
-  await freshAdmin.submit(`${APP}/admin/invites`, freshPage, {
-    email: freshEmail,
-    name: "Fresh Session",
-  });
-  probe("A07-reauth-fresh", "a sign-in from moments ago still can",
-        (await db.invite.count({ where: { email: freshEmail } })) > 0,
-        "a freshly signed-in admin was refused — the sudo window is too tight " +
-        "to invite anybody, which would make the control unusable");
-  await db.invite.deleteMany({ where: { email: { in: [staleEmail, freshEmail] } } });
-
-  // Sign-out must kill the session server-side, not just drop the cookie.
-  const leaver = client2;
-  const stolen = new Map(leaver.jar);
-  const signedOut = await leaver.raw(`${APP}/api/auth/sign-out`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: "{}",
-  });
-  probe("A07-signout-ok", "the sign-out endpoint accepts the request",
-        signedOut.status === 200, `status ${signedOut.status}`);
-  const thief = new Browser();
-  for (const [k, v] of stolen) thief.jar.set(k, v);
-  const afterOut = await (await thief.go(`${APP}/`)).text();
-  probe("A07-logout", "every captured cookie is dead after sign-out",
-        !isAuthenticated(afterOut),
-        "a captured cookie still authenticates after sign-out — check that " +
-        "session.cookieCache is off, or revocation lags by its lifetime");
-
-  // The specific token, not every session this user has: earlier probes in
-  // this run opened several, and sign-out only ends the one it was called on.
-  const revokedToken = decodeURIComponent(
-    (stolen.get("ppp.session_token") ?? stolen.get("__Secure-ppp.session_token") ?? ""),
-  ).split(".")[0];
-  probe("A07-session-row", "the signed-out session row is gone from the database",
-        revokedToken.length > 0 &&
-        (await db.session.count({ where: { token: revokedToken } })) === 0,
-        `token ${revokedToken.slice(0, 8)}… still present`);
-
   // =====================================================================
   section("A08 Software and Data Integrity Failures");
 
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  await createInvite({ email: "integrity@office.example", invitedById: admin.id });
-
-  // Declared `input: false`, so the request is refused rather than trimmed.
-  const privileged = await new Browser().json("/api/auth/sign-up/email", {
-    email: "integrity@office.example",
+  /*
+   * Mass assignment through "Not on the list?". `addName` reads `name` and
+   * nothing else, so a body carrying a role, an id or an address is the same
+   * as one that does not: a client row with fields the server chose.
+   */
+  const assigner = new Browser();
+  const assignHtml = await (await assigner.raw(`${APP}/hello`)).text();
+  await assigner.submit(`${APP}/hello`, assignHtml, {
     name: "Ines Tegrity",
-    username: "integrity",
-    password: TEST_PASSWORD,
-    role: "admin", initials: "ZZ", invitedById: null,
-  });
-  probe("A08-massassign-refused", "a sign-up carrying privileged fields is refused",
-        privileged.status === 400 &&
-        (await db.user.count({ where: { email: "integrity@office.example" } })) === 0,
-        `status ${privileged.status} ${(await privileged.clone().text()).slice(0, 90)}`);
-
-  // The undeclared ones are not refused by the schema — they reach the gate,
-  // which turns the request away for having no invite link. Either way the
-  // body cannot write them: the account that a link opens is stamped from the
-  // invite row, which verify:auth asserts on a real registration.
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  const undeclared = await new Browser().json("/api/auth/sign-up/email", {
+    role: "admin",
+    id: "chosen-by-attacker",
+    initials: "ZZ",
     email: "integrity@office.example",
-    name: "Ines Tegrity",
-    username: "integrity",
-    password: TEST_PASSWORD,
-    emailVerified: false, banned: true, id: "chosen-by-attacker",
-  });
+  }, isAddNameForm);
+  const assigned = await db.user.findFirst({ where: { name: "Ines Tegrity" } });
+  probe("A08-massassign-works", "adding a name does add it (or the probe below is vacuous)",
+        assigned !== null, "no row for the added name");
   probe("A08-massassign", "privileged fields cannot be set from the request body",
-        undeclared.status === 403 &&
-        (await db.user.count({ where: { email: "integrity@office.example" } })) === 0 &&
-        (await db.user.count({ where: { id: "chosen-by-attacker" } })) === 0,
-        `status ${undeclared.status}`);
+        assigned?.role === "client" &&
+        assigned.id !== "chosen-by-attacker" &&
+        assigned.email === null &&
+        assigned.initials !== "ZZ" &&
+        (await db.user.count({ where: { role: "admin" } })) === 1,
+        JSON.stringify(assigned));
 
   probe("A08-lockfile", "a dependency lockfile is committed",
         await Bun_exists("package-lock.json"));
@@ -1141,15 +994,16 @@ async function main() {
   // =====================================================================
   section("A10 Server-Side Request Forgery");
 
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  const ssrf = await attemptSignIn(
-    new Browser(), usernameFor(ayla.email), TEST_PASSWORD,
-    { callbackURL: "http://169.254.169.254/latest/meta-data/" },
-  );
-  const hitMetadata =
-    ssrf.status < 400 && (ssrf.headers.get("location") ?? "").includes("169.254.169.254");
-  probe("A10-metadata", "a link-local callbackURL is refused", !hitMetadata,
-        "the app would redirect a browser at the cloud metadata service");
+  // The one place the server fetches an address a caller supplies. Which
+  // addresses it accepts is pinned in detail by verify:import; here it is
+  // enough that the cloud metadata service is not one of them, whether
+  // importing is switched on (422) or off (501).
+  const ssrf = await attacker.json("/api/import/files", {
+    url: "http://169.254.169.254/latest/meta-data/",
+  });
+  probe("A10-metadata", "a link-local import URL is refused before it is fetched",
+        ssrf.status === 422 || ssrf.status === 501,
+        `status ${ssrf.status} ${(await ssrf.text()).slice(0, 90)}`);
 
   // =====================================================================
   console.info(

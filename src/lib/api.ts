@@ -15,8 +15,8 @@ import type { Prisma } from "@prisma/client";
  * fourteen times.
  *
  * **1. Refusals are answers, not redirects.** Middleware deliberately never
- * redirects `/api/*` — a caller with no session needs a 401 with a body it
- * can parse, not a 307 to an HTML sign-in page. That means every handler owes
+ * redirects `/api/*` — a caller with no name needs a 401 with a body it
+ * can parse, not a 307 to the HTML name picker. That means every handler owes
  * its own authorisation check, and `withActor` is how it pays.
  *
  * **2. The API says 403 where a page says 404.** Everywhere else in this app
@@ -29,19 +29,18 @@ import type { Prisma } from "@prisma/client";
  * Existence of a *ticket* is still hidden: an unauthorised read is 404, via
  * `storyScope`, exactly as before.
  *
- * **3. CSRF.** The app's model is Better Auth's — `SameSite=Lax` on the
- * session cookie, plus an Origin check — and this keeps to it. Any request
- * that changes something is refused if it arrives with an `Origin` header
- * naming somewhere other than this deployment. A browser always sends that
- * header on a cross-site write, so a hostile page cannot drive the API even
- * if the cookie somehow rode along; a script that is not a browser sends no
- * Origin at all and is allowed through, which is what makes `curl` and the
- * bearer token useful.
+ * **3. CSRF.** `SameSite=Lax` on the identity cookies, plus an Origin
+ * check. Any request that changes something is refused if it arrives with an
+ * `Origin` header naming somewhere other than this deployment. A browser
+ * always sends that header on a cross-site write, so a hostile page cannot
+ * drive the API even if the cookie somehow rode along; a script that is not a
+ * browser sends no Origin at all and is allowed through, which is what makes
+ * `curl` useful.
  */
 
 const appOrigin = () => {
   try {
-    return new URL(process.env.BETTER_AUTH_URL ?? "http://localhost:3000").origin;
+    return new URL(process.env.APP_URL ?? "http://localhost:3000").origin;
   } catch {
     return "http://localhost:3000";
   }
@@ -90,7 +89,7 @@ type Options = {
 
 /**
  * Wrap a route handler with the four things every one of them needs: the
- * Origin check, a session, the role gate, and turning a `StoryProblem` into
+ * Origin check, a name, the role gate, and turning a `StoryProblem` into
  * the status code it is carrying.
  *
  * Anything that is *not* a `StoryProblem` is a bug. It is logged and answered
@@ -107,7 +106,7 @@ export function withActor<P = Record<string, string>>(
     }
 
     const actor = await currentUser();
-    if (!actor) return fail(401, "Sign in first.");
+    if (!actor) return fail(401, "Pick your name first.");
 
     if (options.admin && actor.role !== "admin") {
       return fail(403, "Only the printer owner can do that.");

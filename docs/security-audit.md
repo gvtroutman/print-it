@@ -1,5 +1,25 @@
 # Security validation
 
+> **2026-10-07 — sign-in removed in this fork.** This fork
+> ([gvtroutman/print-it](https://github.com/gvtroutman/print-it)) no longer has
+> accounts, passwords, passkeys, invitations, password resets, sessions, bearer
+> tokens or email. A visitor picks their name on `/hello`, which sets a signed
+> `ppp.who` cookie; the printer owner unlocks the owner pages at `/owner` with
+> `ADMIN_PASSWORD`, which sets a signed, browser-session `ppp.owner` cookie good
+> for at most twelve hours. [How identity works](authentication.md) describes
+> it in full.
+>
+> **There is intentionally no user authentication.** Anyone who can reach the
+> app can pick any client's name and act as them. Access control between
+> clients now rests on people picking their own name honestly, which is only a
+> reasonable assumption on a trusted office network — not on the internet.
+>
+> The assessment below is the record of the app as it was on 2026-08-23, with
+> sign-in in place, and is kept as history rather than rewritten. Findings that
+> no longer apply are marked so; the OWASP verdict rows have been brought up to
+> date with the current behaviour **by reading the code, not by re-running the
+> tools** — the numbers in the results table are from the earlier runs.
+
 Scope: Pretty Please Print, assessed against the **OWASP Top 10 (2021)** with
 SAST, SCA and DAST. Everything below was run against the production build
 (`npm run build && npm start`) on 2026-08-23.
@@ -36,7 +56,7 @@ npm run probe:security                     # DAST, app-specific (122 probes)
 | OWASP ZAP baseline | passive DAST | **1 medium, 3 low** | 0 fail / 63 pass |
 | `probe:security` | 103 app-specific probes | **2 real, 4 artifacts** | 103 pass |
 | `verify:models` | 29 upload-validator checks | — | 29 pass |
-| `verify:passkey` | WebAuthn in a real browser | *unverified* | 13 pass |
+| `verify:passkey` | WebAuthn in a real browser | *unverified* | 13 pass — suite removed with sign-in |
 
 A generic scanner cannot reason about *this* app's authority model, so the
 probe suite in [`scripts/security-probe.ts`](../scripts/security-probe.ts) covers
@@ -48,6 +68,8 @@ the same authority model holds when the caller is not a browser.
 ## Findings that were real
 
 ### 1. Session revocation lagged sign-out — *moderate, fixed*
+
+*No longer applies (2026-10-07): sign-in was removed — see the note at the top.* There are no sessions to revoke.
 
 `session.cookieCache` was enabled with a 60-second lifetime. It stores a
 signed snapshot of the session in a second cookie and trusts it **without
@@ -133,6 +155,10 @@ back 401.
 Nothing was exposed by this — the request was still blocked — but the wrong
 answer to the wrong audience is how auth bugs hide.
 
+*Still holds (2026-10-07):* pages with no name now redirect to `/hello`, and
+the API still never redirects — a call with no name gets
+`401 {"error":"Pick your name first."}`.
+
 ### 7. `*.tsbuildinfo` was not gitignored — *hygiene, fixed*
 
 A build artifact would have been committed. Found indirectly: Semgrep's only
@@ -170,7 +196,13 @@ only, and the bug sat directly behind the one case a person thinks of.
 `A07-offsite-signin` and `A07-offsite-reauth` now assert the parser's five
 spellings against both pages.
 
+*Still holds (2026-10-07):* the sign-in and re-auth pages are gone, and the
+`?next=` targets on their replacements, `/hello` and `/owner`, go through the
+same `src/lib/safe-redirect.ts`.
+
 ### 9. The admin plugin's HTTP surface was open — *moderate, fixed*
+
+*No longer applies (2026-10-07): sign-in was removed — see the note at the top.* Better Auth and its `/api/auth/*` routes are gone entirely.
 
 `admin()` is enabled in `src/lib/auth.ts` for what it adds to the schema and to
 sign-in — the `role` and `banned` fields, and the refusal to create a session for
@@ -212,6 +244,9 @@ is the honest signal that behaviour changed rather than an assertion being
 widened to fit.
 
 ### 10. An invited address could be registered without its link — *high, fixed*
+
+*No longer applies (2026-10-07): sign-in was removed — see the note at the top.* There are no invitations and no registration; adding a
+name on `/hello` is open to anyone by design.
 
 The invite gate asked one question: is there a pending invitation for this
 address. Better Auth's `POST /api/auth/sign-up/email` is reachable by anyone,
@@ -265,18 +300,23 @@ section 2b.
 
 | | Category | Verdict |
 | --- | --- | --- |
-| **A01** | Broken Access Control | **Pass.** Client refused on the admin page (404, not 403 — a 403 confirms existence) and on all six admin-plugin endpoints (`list-users`, `set-role`, `create-user`, `impersonate-user`, `remove-user`, `list-user-sessions`). Role unchanged after escalation attempts; no back-door account. `storyScope` hides another client's story. A forged session cookie reaches nothing. The JSON API is probed as a second front door onto the same operations: a client is refused `advance`, `decline`, `flag` and `clear-flag` (403, and the ticket does not move); another client's ticket, thread and model are each 404 rather than 403; and the printer owner — the widest scope in the app — still cannot withdraw somebody else's request. The feature-request track ('frr') is the same authorisation model on its own tables: `featureScope` hides another client's request (404, not 403), `/frr/queue` is owner-only, and the owner cannot withdraw a request that is not theirs — all exercised by `verify:frr`. The later filter bars on `/frr` and the `/history` view of finished prints are scoped the same way: the filters are ANDed onto `featureScope`/`storyScope`, so they can only narrow a caller's own set, never widen it. |
-| **A02** | Cryptographic Failures | **Pass.** Session cookie `HttpOnly`, `SameSite=Lax`, `Secure`, `__Secure-` prefixed. Invite tokens stored as SHA-256 only; set-password tokens hashed at rest (`verification.storeIdentifier: "hashed"`) — both verified against the live database. Passwords are stored as Better Auth's scrypt digest, asserted against the live `account` row rather than assumed. |
-| **A03** | Injection | **Pass.** SQL metacharacters in the username field handled (Prisma parameterises); no 5xx, table intact. Stored XSS via display name escaped in both DOM and flight payload. Reflected XSS via `?error=` and via the invite-token path segment both escaped. CRLF in the email field does not reach the mailer. Uploads are validated against their bytes, not their filename — a PDF, an ELF binary and an HTML page renamed `.stl` are all refused, as is an STL that lies about its triangle count. |
-| **A04** | Insecure Design | **Pass.** No public registration route: `/signup` and `/register` do not exist, and the sign-up endpoint that *does* exist — the one an invitation link posts to — answers 403 to anybody without a pending invite, and to anybody with one who is not redeeming its link (finding 10), leaving no row. Invite-only enforced in one hook across every auth method. Invites single-use, expiring, revocable, rotated on resend. Password guessing rate-limited and confirmed firing. |
+| **A01** | Broken Access Control | **Pass, on the assumption that names are honest** (2026-10-07). Separation between clients now rests on each person picking their own name on `/hello`: anyone who picks somebody else's name gets that person's tickets, models and conversations, by design. What is still enforced: the owner pages and owner-only API endpoints need a valid `ppp.owner`, which only `ADMIN_PASSWORD` produces; a `ppp.who` cookie is HMAC-signed with `APP_SECRET` and resolves only to a `client` row, so it cannot name the printer owner even if hand-edited; a forged or unsigned cookie reaches nothing. *As assessed on 2026-08-23:* client refused on the admin page (404, not 403 — a 403 confirms existence) and on all six admin-plugin endpoints (since removed). Role unchanged after escalation attempts; no back-door account. `storyScope` hides another client's story. The JSON API is probed as a second front door onto the same operations: a client is refused `advance`, `decline`, `flag` and `clear-flag` (403, and the ticket does not move); another client's ticket, thread and model are each 404 rather than 403; and the printer owner — the widest scope in the app — still cannot withdraw somebody else's request. The feature-request track ('frr') is the same authorisation model on its own tables: `featureScope` hides another client's request (404, not 403), `/frr/queue` is owner-only, and the owner cannot withdraw a request that is not theirs — all exercised by `verify:frr`. The later filter bars on `/frr` and the `/history` view of finished prints are scoped the same way: the filters are ANDed onto `featureScope`/`storyScope`, so they can only narrow a caller's own set, never widen it. |
+| **A02** | Cryptographic Failures | **Pass** (2026-10-07). No passwords are stored at all: `ADMIN_PASSWORD` lives in the environment and is compared in constant time (SHA-256 of both sides, `timingSafeEqual`). Both identity cookies are HMAC-SHA256 over `APP_SECRET`, `HttpOnly`, `SameSite=Lax`, and `Secure` when `APP_URL` is `https://` — no longer `__Secure-` prefixed. A production build still refuses to boot unless `APP_URL` is `https://` or loopback. `ppp.owner` binds a digest of `ADMIN_PASSWORD`, so rotating it invalidates every owner cookie. *Superseded:* invite, set-password and scrypt password-hash checks. |
+| **A03** | Injection | **Pass.** SQL metacharacters in the username field handled (Prisma parameterises); no 5xx, table intact. Stored XSS via display name escaped in both DOM and flight payload — which matters more now that anyone can add a name on `/hello`, where the list renders every name. Reflected XSS via `?error=` and via the invite-token path segment both escaped (the invite page has since been removed, and there is no mailer). Uploads are validated against their bytes, not their filename — a PDF, an ELF binary and an HTML page renamed `.stl` are all refused, as is an STL that lies about its triangle count. |
+| **A04** | Insecure Design | **Accepted by design** (2026-10-07). There is no registration gate: anybody who can reach `/hello` can add a name or pick an existing one. That is the trade the fork makes — see [Residual risk accepted](#residual-risk-accepted) — and it makes network placement part of the design: the app must only be reachable by people trusted to pick their own name. The owner's name cannot be added or picked. Guessing `ADMIN_PASSWORD` is limited to ten wrong attempts a minute per client address, held in memory. *Superseded:* the invite-only gate and finding 10. |
 | **A05** | Security Misconfiguration | **Pass, after fixes 2 and 3.** Full header set; `X-Powered-By` suppressed; `.env`, `.git/config`, `package.json` and the Prisma schema all unreachable; malformed input returns no stack trace. A write to the API carrying a foreign `Origin` is refused. Neither `/api/openapi.json` nor the console at `/docs` is served to a stranger, and the console loads no subresource from another origin — Swagger UI is vendored into `public/` at build time rather than pulled from a CDN, so the CSP needed no relaxation. |
 | **A06** | Vulnerable Components | **Pass, after fixes 4 and 5.** Zero across three independent scanners. |
-| **A07** | Auth Failures | **Pass, after fix 1.** Passwords: ≥10 characters, breach-checked against HIBP by k-anonymity, guessing capped at 10/min per IP. No user enumeration — a wrong password and an invented username give byte-identical responses, and an unknown username still pays for a hash so the wall clock does not answer either. Set-password links single-use, 30-minute TTL, hashed at rest, and they establish **no session**. Setting a password revokes the sessions the old one opened. Off-site redirect targets refused, both via `?next=` and via the API's `callbackURL` — decided by resolving the target against a sentinel origin rather than by matching its prefix, because `/\evil.example` passes “starts with / and not //” and then resolves off-site. That is fix 8 below. Sign-out kills the session server-side. A bearer token is the session token rather than a separate credential: an invented one grants nothing, and sign-out revokes the token at the same instant it revokes the cookie — probed, because a token that outlived sign-out would be a way back into an account whose owner believes they have left. See the section below. |
-| **A08** | Integrity Failures | **Pass.** `role`, `initials` and `invitedById` cannot be set from the request body: declared `input: false`, and Better Auth refuses the whole sign-up with `FIELD_NOT_ALLOWED` rather than silently trimming it. A chosen `id` and a posted `emailVerified` reach the endpoint undeclared and are overruled server-side from the invite. Both halves probed. On upload, `uploaderId` comes from the session and a posted `status` is ignored, both probed. Storage keys are generated, never derived from the filename. Lockfile committed. |
-| **A09** | Logging & Monitoring | **Pass.** An append-only `AuditEvent` table records invitations sent, resent, revoked, accepted and *rejected*; access revoked and restored; password resets requested and completed; sign-in and sign-out; story creation and refused uploads. The client address is recorded only from a header the deployment has explicitly named as trustworthy (`TRUST_PROXY_HEADERS`), and no address at all otherwise — a blank rather than a fiction. Rows are denormalised (`actorEmail`, `subject`) so the trail still reads correctly after the user or story it refers to is deleted, and a probe asserts no token or secret reaches `detail`. |
-| **A10** | SSRF | **Pass.** A link-local `callbackURL` (`169.254.169.254`) is refused. One feature makes an outbound request because a requester asked — importing a model from a link, off by default — and the requester never chooses its address: see [Importing from a link](#importing-from-a-link). |
+| **A07** | Auth Failures | **Not applicable to users — there is intentionally no user authentication** (2026-10-07). A name is a claim, not a credential. The one authentication left is the owner's: `ADMIN_PASSWORD`, compared in constant time, ten wrong guesses a minute per client address (in memory, per container; with `TRUST_PROXY_HEADERS` unset every client shares one counter), every unlock and refusal audited, and a `ppp.owner` cookie that dies with the browser session or after twelve hours, whichever is first. "Lock owner pages" clears it; rotating `ADMIN_PASSWORD` revokes all of them. Off-site `?next=` targets are still refused by `safe-redirect.ts` (fix 8). There are no bearer tokens. *As assessed on 2026-08-23, when there were accounts:* passwords: ≥10 characters, breach-checked against HIBP by k-anonymity, guessing capped at 10/min per IP. No user enumeration — a wrong password and an invented username give byte-identical responses, and an unknown username still pays for a hash so the wall clock does not answer either. Set-password links single-use, 30-minute TTL, hashed at rest, and they establish **no session**. Setting a password revokes the sessions the old one opened. Off-site redirect targets refused, both via `?next=` and via the API's `callbackURL` — decided by resolving the target against a sentinel origin rather than by matching its prefix, because `/\evil.example` passes “starts with / and not //” and then resolves off-site. That is fix 8 below. Sign-out kills the session server-side. A bearer token is the session token rather than a separate credential: an invented one grants nothing, and sign-out revokes the token at the same instant it revokes the cookie — probed, because a token that outlived sign-out would be a way back into an account whose owner believes they have left. See the section below. |
+| **A08** | Integrity Failures | **Pass.** Adding a name creates a `client` row from the typed name alone — no role, id or other field is read from the request (2026-10-07; the earlier `input: false` / `FIELD_NOT_ALLOWED` checks went with Better Auth). The identity cookies are signed, so their contents cannot be edited without `APP_SECRET`. On upload, `uploaderId` comes from the name cookie and a posted `status` is ignored, both probed. Storage keys are generated, never derived from the filename. Lockfile committed. |
+| **A09** | Logging & Monitoring | **Pass, with a caveat** (2026-10-07). An append-only `AuditEvent` table records names picked and added (`name.picked`, `name.added`); the owner pages unlocked, refused and locked (`owner.unlocked`, `owner.unlock_refused`, `owner.locked`); story creation and refused uploads. The caveat: the actor on a client's row is the name somebody *picked*, not a verified person. Rows from before the change keep their invitation, access and sign-in history. The client address is recorded only from a header the deployment has explicitly named as trustworthy (`TRUST_PROXY_HEADERS`), and no address at all otherwise — a blank rather than a fiction. Rows are denormalised (`actorName` — `actorEmail` until 2026-10-07 — and `subject`) so the trail still reads correctly after the user or story it refers to is deleted, and a probe asserts no token or secret reaches `detail`. |
+| **A10** | SSRF | **Pass.** A link-local `callbackURL` (`169.254.169.254`) was refused (that parameter belonged to the auth library and is gone). One feature makes an outbound request because a requester asked — importing a model from a link, off by default — and the requester never chooses its address: see [Importing from a link](#importing-from-a-link). |
 
 ## A07 with passwords in the picture
+
+*Historical (2026-10-07): this section and its subsections describe the
+password, passkey, session and re-authentication model that has since been
+removed. Kept as the record of why it was built the way it was. What still
+applies is the slicer link credential, updated below.*
 
 The previous version of this report leaned on a sentence that is no longer
 true: *"No passwords exist to mishandle."* That was a real property and it is
@@ -363,7 +403,7 @@ the threat is somebody sitting down after you, and against a captured cookie
 the only thing that helps is how long it stays worth something.
 
 It is now **twenty idle minutes**, sliding every minute
-(`SESSION_IDLE_SECONDS` in [`src/lib/auth-rules.ts`](../src/lib/auth-rules.ts)).
+(`SESSION_IDLE_SECONDS` in `src/lib/auth-rules.ts`, since removed).
 Twenty minutes is only humane because passkeys are here — conditional UI signs
 a returning holder back in with no click — and it does make the passkey nudge
 load-bearing rather than decorative.
@@ -453,6 +493,11 @@ the pair fails if the gate stops discriminating in either direction.
 
 #### The slicer link credential, and the token it replaced
 
+*Still applies (2026-10-07), with two changes: the HMAC is now keyed on
+`APP_SECRET`, and with no suspended accounts the route loads the person the
+token names and re-applies `storyScope`, nothing more. A `PPP_TOKEN` in an old
+helper config can no longer work at all, since there are no bearer tokens.*
+
 Shortening the session broke "Open in PrusaSlicer", and the way it broke is
 worth recording because the feature had been quietly depending on the weakness.
 
@@ -494,6 +539,25 @@ stops being enforced independently of scope.
 
 ### Residual risk accepted
 
+- **Anyone who can reach the app can be anyone** (2026-10-07). There is
+  intentionally no user authentication. Picking a colleague's name gives their
+  tickets, models, conversation and the ability to withdraw or re-queue their
+  requests and to comment as them. Accepted for a trusted office network, and
+  only there: on the internet — including behind the shipped Cloudflare Tunnel
+  or a publicly named reverse proxy — anyone with the URL can do all of that and
+  submit prints. The mitigation is placement: keep it on the LAN, or put a VPN
+  or an authenticating proxy (Cloudflare Access) in front of the whole hostname.
+- **`ADMIN_PASSWORD` is a long-lived secret in the environment** (2026-10-07).
+  It is in `.env.docker`, in `docker inspect` and in host backups — exactly the
+  exposure earlier versions refused to accept. Accepted because there is
+  nothing left to hang a one-use setup link on. Rotation is editing it and
+  restarting, which also revokes every owner cookie. The guess limit is in
+  memory and per container, so a restart resets it.
+- **Loopback is exempt from the HTTPS check** (2026-10-07). The production
+  boot check moved from the auth configuration to `src/lib/identity.ts` and
+  still refuses a non-`https://` `APP_URL`, except `localhost`, `127.0.0.1` and
+  `[::1]` — see [deployment](deployment.md#https-is-not-optional).
+
 - **A trusted-proxy misconfiguration is silent.** `TRUST_PROXY_HEADERS` now
   names which header to believe (`false` / `true` / `cloudflare`) rather than
   being a boolean, because the right answer depends on what is in front of the
@@ -505,20 +569,20 @@ stops being enforced independently of scope.
   Cloudflare's published ranges would close that; the compose overlays close it
   instead by keeping the app off every host port.
 
-- **The breach check is an outbound dependency.** It fails closed, so if
+- *No longer applies (2026-10-07) — no passwords are set, so there is no breach check.* **The breach check is an outbound dependency.** It fails closed, so if
   `api.pwnedpasswords.com` is unreachable, nobody can *set* a password —
   registration and reset stop, sign-in does not. `HIBP_DISABLED=true` exists
   for an air-gapped deployment and is off by default. This is a deliberate
   availability-for-integrity trade at this size; a cached local corpus would be
   the answer if it ever bit.
-- **No second factor.** A password plus an optional passkey is the whole set.
+- *No longer applies (2026-10-07) — there are no user credentials to add a factor to.* **No second factor.** A password plus an optional passkey is the whole set.
   Re-authentication on the access-moving actions (above) covers the case a
   second factor would matter most for here — a captured session being used to
   hand out access — but it is a sudo gate, not a second factor: it asks for the
   same credential again rather than a different kind. TOTP would be the next
   thing to add if this were ever exposed beyond an office, and Better Auth's
   `twoFactor` plugin is the path.
-- **No password-change screen for a signed-in user.** Today changing a password
+- *No longer applies (2026-10-07).* **No password-change screen for a signed-in user.** Today changing a password
   means asking the admin for a reset link. That is a gap in convenience rather
   than in security, and `/api/auth/change-password` is already served by the
   catch-all if it is ever wired to a form.
@@ -532,14 +596,14 @@ stops being enforced independently of scope.
   traffic to tune a threshold against — and an untuned alert is one people
   learn to ignore. Two probes assert a client gets 404 there and that no audit
   rows leak.
-- **The WebAuthn ceremonies are verified.** `npm run verify:passkey` drives a
+- *No longer applies (2026-10-07) — passkeys and `verify:passkey` were removed.* **The WebAuthn ceremonies are verified.** `npm run verify:passkey` drives a
   real Chromium with a CDP virtual authenticator: it signs in with a username
   and a password, registers a passkey, confirms the credential persists with a
   public key and no private material, signs out, and signs back in. Conditional
   UI signs the returning user in with no click at all, which is the intended
   experience. Passwords and passkeys are verified working side by side, which
   is the whole point of keeping both.
-- **Recovery stopped being impersonation.** `access.reissued` — a link that
+- *No longer applies (2026-10-07) — there is nothing to recover.* **Recovery stopped being impersonation.** `access.reissued` — a link that
   signed its holder in as somebody else — is gone, replaced by
   `password.reset_requested` / `password.reset_completed` and a link that sets
   a password and nothing more.
@@ -562,7 +626,9 @@ in between, and the result compared row for row.
   starts so logs nothing, and the only message is `P1000` in the migrator.
 - **`BETTER_AUTH_SECRET` loss** — confirmed to cost exactly one sign-in. A
   held session cookie went from 200 to a 307 at the sign-in page, and signing
-  in again worked immediately.
+  in again worked immediately. *Now `APP_SECRET` (2026-10-07), and by
+  construction it costs one click: every `ppp.who` and `ppp.owner` stops
+  validating, and everyone picks their name again. Not re-exercised.*
 
 One finding worth the exercise on its own: the Postgres data directory is mode
 `700` owned by uid `70`, so a file-level backup taken as an ordinary user
@@ -598,10 +664,11 @@ with the guard removed before the check was believed.
   not a published contract. The response is parsed against a schema and a
   mismatch fails by name. That bounds the damage of a change to "importing
   stops, with a sentence saying why"; it does not make the dependency stable.
-- **No per-person rate limit on listing.** A signed-in colleague could make the
-  server ask Printables about models in a loop. Everyone who can sign in was
-  invited, each request is a few kilobytes, and the slot gate bounds the
-  expensive half. Revisit if the group grows.
+- **No per-person rate limit on listing.** Anyone who has picked a name could
+  make the server ask Printables about models in a loop. Since 2026-10-07 that
+  is anyone who can reach the app, not only invited colleagues — another reason
+  it must stay on a trusted network. Each request is a few kilobytes, and the
+  slot gate bounds the expensive half. Revisit if the group grows.
 - **`IMPORT_PRINTABLES_BASE` moves the allowlist.** It points the importer at a
   stand-in so the suite can run without calling Printables, and with it set the
   stand-in is the *only* host the importer talks to. It is operator
@@ -652,15 +719,15 @@ with the guard removed before the check was believed.
 - ~~Print-time estimates~~ — removed rather than kept. The app now shows only
   what it measured. See the README for the reasoning and the path to a real
   slicer-derived figure.
-- **CSRF rests on Origin checking plus `SameSite=Lax`**, which is Better
-  Auth's model and is sound for this threat profile. There are no
-  per-form tokens; if the app ever needs to accept cross-site POSTs, that
-  changes. The JSON API keeps to the same model: a write arriving with an
-  `Origin` naming somewhere else is refused, while one with no `Origin` at all
-  is allowed — that is `curl`, not a browser being driven by somebody else's
-  page. A bearer token cannot be attached cross-origin at all, because the app
-  serves no CORS headers and the preflight fails.
-- **A bearer token is a credential in a shell history.** It carries the full
+- **CSRF rests on Origin checking plus `SameSite=Lax`** on the identity
+  cookies, which is sound for this threat profile. There are no per-form
+  tokens; if the app ever needs to accept cross-site POSTs, that changes. The
+  JSON API keeps to the same model: a write arriving with an `Origin` naming
+  somewhere else is refused, while one with no `Origin` at all is allowed —
+  that is `curl`, not a browser being driven by somebody else's page. The app
+  serves no CORS headers.
+- *No longer applies (2026-10-07) — there are no bearer tokens; scripts send
+  the `ppp.who` cookie, which proves nothing anyway.* **A bearer token is a credential in a shell history.** It carries the full
   authority of the account and — unlike the cookie — is neither `HttpOnly` nor
   `SameSite`-protected. It is revocable by signing out, by an admin revoking
   access and by a password reset, and since the session window came down to
@@ -670,5 +737,5 @@ with the guard removed before the check was believed.
   [`docs/api.md`](api.md) says to sign in fresh for a script rather than
   reusing the browser's token — which is now the only thing that works for
   anything long-running.
-- **No second factor, and no self-service password change.** Both are in
-  [Residual risk accepted](#residual-risk-accepted) above with the reasoning.
+- ~~No second factor, and no self-service password change~~ — no longer
+  applies (2026-10-07): there are no user credentials.

@@ -59,7 +59,7 @@ const courier = localFont({
 
 export const metadata: Metadata = {
   title: "Pretty Please Print",
-  description: "Invite-only 3D print requests for the office.",
+  description: "3D print requests for the office.",
   robots: { index: false, follow: false },
 };
 

@@ -31,12 +31,23 @@ const KNOWN_DEV_VALUES = new Set([
   "ppp",
   "localhost",
   "build-time-placeholder-never-signs-anything",
+  // .env.example's owner password. A copied .env still holding it would
+  // otherwise flag .env.example itself on every commit.
+  "dev-only-owner-password",
 ]);
 
 /** Env keys whose values are credentials rather than configuration. */
 const SECRET_KEY = /(SECRET|PASSWORD|PRIVATE|TOKEN|_KEY|APIKEY|API_KEY|DSN)$/;
 /** Names that contain those words but are public identifiers. */
-const NOT_SECRET = /^(PASSKEY_RP_NAME|PASSKEY_RP_ID|NEXT_PUBLIC_)/;
+const NOT_SECRET = /^NEXT_PUBLIC_/;
+
+/**
+ * Shortest value worth cross-checking. Generated secrets (APP_SECRET, the
+ * database password) are long, and below twelve characters a match is mostly
+ * noise. A password a person typed — ADMIN_PASSWORD — may well be shorter, and
+ * is exactly the one that ends up pasted into a README, so it gets a lower bar.
+ */
+const minLength = (key: string) => (/PASSWORD$/.test(key) ? 8 : 12);
 
 const PATTERNS: Array<[string, RegExp]> = [
   ["GitHub token", /\bgh[pousr]_[A-Za-z0-9]{36,}\b/],
@@ -64,7 +75,7 @@ function localSecrets(): Map<string, string> {
       const key = m[1]!;
       const value = m[2]!.trim();
       if (NOT_SECRET.test(key) || !SECRET_KEY.test(key)) continue;
-      if (value.length < 12 || KNOWN_DEV_VALUES.has(value)) continue;
+      if (value.length < minLength(key) || KNOWN_DEV_VALUES.has(value)) continue;
       if (/CHANGE-?ME|placeholder|example/i.test(value)) continue;
       found.set(`${name}:${key}`, value);
     }

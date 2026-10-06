@@ -18,7 +18,7 @@
  * asserts not only the status code but that no connection was made, by
  * reading the stand-in's own request counts.
  *
- * DESTRUCTIVE: wipes users, stories and invites. Development database only.
+ * DESTRUCTIVE: wipes client users and stories. Development database only.
  */
 import "./_env";
 import { readdir, stat } from "node:fs/promises";
@@ -31,9 +31,9 @@ import {
   parsePrintablesUrl,
   trustedSourceLink,
 } from "../src/lib/import-source";
-import { ensureCredentials, signInWithPassword, usernameFor } from "./_accounts";
+import { actAs, createClient } from "./_accounts";
 
-const APP = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+const APP = process.env.APP_URL ?? "http://localhost:3000";
 /** The stand-in, as this machine reaches it — for its request counts only. */
 const STUB = process.env.PRINTABLES_STUB_URL ?? "http://localhost:4010";
 const MODELS_ROOT = resolve(process.env.MODELS_ROOT ?? "./data/uploads");
@@ -82,13 +82,8 @@ class Browser {
   }
 }
 
-async function signIn(user: { id: string; email: string }): Promise<Browser> {
-  const b = new Browser();
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  await ensureCredentials(APP, user.id, usernameFor(user.email));
-  await signInWithPassword(b, APP, usernameFor(user.email));
-  return b;
-}
+/** A browser carrying the cookie `/hello` (or `/owner`, for the owner) would set. */
+const as = (user: { id: string; role: string }) => actAs(new Browser(), user);
 
 type Hits = { graphql: number; files: number; elsewhere: number; lastUserAgent: string | null };
 const hits = async (): Promise<Hits> => (await fetch(`${STUB}/_hits`)).json() as Promise<Hits>;
@@ -210,29 +205,19 @@ async function main() {
     );
   }
 
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
   await db.auditEvent.deleteMany();
   await db.notification.deleteMany();
   await db.story.deleteMany();
-  await db.verification.deleteMany();
-  await db.session.deleteMany();
-  await db.invite.deleteMany();
   await db.user.deleteMany({ where: { role: "client" } });
 
   const admin = await db.user.findFirst({ where: { role: "admin" } });
   if (!admin) throw new Error("No admin — run npm run db:seed");
 
-  const ayla = await db.user.create({
-    data: { email: "ayla@office.example", name: "Ayla Berg", initials: "AY",
-            role: "client", emailVerified: true, invitedById: admin.id },
-  });
-  const jonas = await db.user.create({
-    data: { email: "jonas@office.example", name: "Jonas Weiss", initials: "JO",
-            role: "client", emailVerified: true, invitedById: admin.id },
-  });
-  const aylaB = await signIn(ayla);
-  const jonasB = await signIn(jonas);
-  const rubenB = await signIn(admin);
+  const ayla = await createClient("Ayla Berg", { email: "ayla@office.example" });
+  const jonas = await createClient("Jonas Weiss", { email: "jonas@office.example" });
+  const aylaB = as(ayla);
+  const jonasB = as(jonas);
+  const rubenB = as(admin);
   const anon = new Browser();
 
   const catalog = await (await aylaB.raw(`${APP}/api/catalog`)).json();
@@ -276,7 +261,7 @@ async function main() {
   check("listing asks the API once and fetches no file", afterList.graphql === 1 && afterList.files === 0,
         JSON.stringify(afterList));
 
-  check("without a session it is 401, not a listing",
+  check("with no name picked it is 401, not a listing",
         (await anon.post("/api/import/files", { url: link(3161) })).status === 401);
   check("a cross-origin page cannot make the server go and look",
         (await aylaB.post("/api/import/files", { url: link(3161) }, { origin: "https://evil.example" })).status === 403);

@@ -18,19 +18,12 @@ import { clientIpFrom, ipSource } from "@/lib/client-ip";
  *     something that did not happen.
  */
 export type AuditAction =
-  // access
-  | "invite.sent"
-  | "invite.resent"
-  | "invite.revoked"
-  | "invite.accepted"
-  | "invite.rejected"
-  | "auth.signed_in"
-  | "auth.signed_out"
-  | "user.role_changed"
-  | "password.reset_requested"
-  | "password.reset_completed"
-  | "access.revoked"
-  | "access.restored"
+  // who is at the keyboard
+  | "name.added"
+  | "name.picked"
+  | "owner.unlocked"
+  | "owner.unlock_refused"
+  | "owner.locked"
   // work
   | "story.created"
   | "upload.rejected"
@@ -72,7 +65,7 @@ function clientIp(h: Headers): string | null {
 
 type RecordInput = {
   action: AuditAction;
-  actor?: Actor | { id: string; email: string } | null;
+  actor?: Actor | { id: string; name: string } | null;
   subject?: string | null;
   detail?: Record<string, unknown> | null;
 };
@@ -98,7 +91,7 @@ export async function record(input: RecordInput): Promise<void> {
       data: {
         action: input.action,
         actorId: input.actor?.id ?? null,
-        actorEmail: input.actor?.email ?? null,
+        actorName: input.actor?.name ?? null,
         subject: input.subject ?? null,
         ip,
         userAgent,

@@ -22,15 +22,14 @@ export const dynamic = "force-dynamic";
  * already accepted is a list you scan rather than act on, with one button
  * each to move it along.
  *
- * Admin-only: `requireAdmin` answers 404, so a client learns nothing about
- * whether this route exists.
+ * Owner-only: `requireAdmin` sends anyone else to the `/owner` password prompt.
  */
 export default async function QueuePage({
   searchParams,
 }: {
   searchParams: Promise<{ toast?: string; error?: string }>;
 }) {
-  const [{ toast, error }, admin] = await Promise.all([searchParams, requireAdmin()]);
+  const [{ toast, error }, admin] = await Promise.all([searchParams, requireAdmin("/queue")]);
   const owner = await printerName();
 
   const stories = await db.story.findMany({

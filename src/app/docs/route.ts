@@ -15,10 +15,9 @@ import { sourceUrl } from "@/lib/runtime";
  * honest: this page is a tool for reading the API, not part of the product's
  * surface.
  *
- * It is behind a session for the same reason `/api/openapi.json` is: it
- * describes an invite-only app to the people already inside it. Middleware
- * only checks that a session cookie is *present*, so the real check is here —
- * a forged cookie gets a redirect to sign-in, not a console.
+ * It needs a name for the same reason `/api/openapi.json` does. Middleware
+ * only checks that a name cookie is *present*, so the real check is here — a
+ * forged cookie gets a redirect to `/hello`, not a console.
  *
  * Everything it loads comes from this origin: `scripts/vendor-swagger.ts`
  * copies Swagger UI into `public/docs/` at build time, so the page needs no
@@ -53,8 +52,7 @@ function nonceFrom(value: string | null): string {
  * fails at the preflight regardless.
  *
  * `syntaxHighlight: false` is the difference between a console and a stall.
- * The document runs to 71 operations once Better Auth's half is folded in, and
- * highlighting every example is far and away the most expensive thing Swagger
+ * Highlighting every example is far and away the most expensive thing Swagger
  * UI does: rendering the lot took **147 ms with it off and about 55 seconds
  * with it on**, measured in Chrome against this build. Examples render as
  * plain monospace instead, which for a page people read to find a path is not
@@ -80,7 +78,7 @@ const INIT = `
 
 export async function GET() {
   const user = await currentUser();
-  if (!user) redirect("/signin?next=%2Fdocs");
+  if (!user) redirect("/hello?next=%2Fdocs");
 
   const nonce = nonceFrom((await headers()).get("x-nonce"));
   const n = nonce ? ` nonce="${nonce}"` : "";
@@ -102,11 +100,8 @@ export async function GET() {
 <header class="console-head">
   <h1>Pretty Please Print — API</h1>
   <p>
-    You are signed in as <strong>${escapeHtml(user.name)}</strong> (${user.role}), and
-    <em>Try it out</em> already carries that session — there is nothing to paste.
-    <strong>Authorize</strong> is only for a bearer token, which you get from the
-    <code>set-auth-token</code> header on any sign-in response; it is the same session
-    token, so signing out revokes it.
+    You are <strong>${escapeHtml(user.name)}</strong> (${user.role}), and
+    <em>Try it out</em> already carries your name cookie — there is nothing to paste.
     Written up in <a href="${escapeHtml(sourceUrl())}/blob/main/docs/api.md">docs/api.md</a>.
   </p>
 </header>

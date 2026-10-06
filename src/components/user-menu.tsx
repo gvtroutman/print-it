@@ -1,25 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { authClient } from "@/lib/auth-client";
+import { forgetMe, lockOwnerPages } from "@/app/actions/identity";
 
 /**
- * Replaces the prototype's role switcher, which the handoff marks as
- * "prototype only, drop it in production". Roles come from the session now,
- * so there is nothing to switch — this is the signed-in user and a way out.
+ * Who this device says it is, and a way to change that: "Not you?" for
+ * everyone, "Lock owner pages" for the printer owner.
  */
 export function UserMenu({
   name,
   initials,
-  email,
   role,
-  passkeyCount,
 }: {
   name: string;
   initials: string;
-  email: string;
   role: "client" | "admin";
-  passkeyCount: number;
 }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
@@ -54,25 +49,9 @@ export function UserMenu({
       {open && (
         <div className="ppp-in absolute right-0 top-[50px] z-50 w-[264px] rounded-panel border-[3px] border-ink bg-porcelain p-[17.6px] shadow-stamp-lg">
           <p className="m-0 font-display text-[17px] text-ink">{name}</p>
-          <p className="m-0 mt-[2px] font-mono text-[11.5px] text-ink-3">{email}</p>
           <p className="m-0 mt-[8.8px] inline-block rounded-chip border-2 border-ink bg-cream-2 px-[8px] font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink">
-            {role === "admin" ? "Printer owner" : "Invited member"}
+            {role === "admin" ? "Printer owner" : "Regular"}
           </p>
-          {/* How you sign in, and a way to change it. Without this the only
-              passkey prompt in the whole app is the one at invite time. */}
-          <div className="mt-[13.2px] border-t-2 border-dashed border-rule pt-[13.2px]">
-            <p className="m-0 font-mono text-[11.5px] uppercase text-ink-3">
-              {passkeyCount === 0
-                ? "Signing in with a password"
-                : `${passkeyCount} passkey${passkeyCount === 1 ? "" : "s"} on this account`}
-            </p>
-            <a
-              href="/welcome"
-              className="mt-[6px] inline-block font-bold text-[14px] text-cherry-dk underline underline-offset-2 hover:text-cherry"
-            >
-              {passkeyCount === 0 ? "Add a passkey →" : "Add another →"}
-            </a>
-          </div>
 
           {/* The API console. In the account menu rather than the nav because
               it is a tool for the person, not a place the work lives — and
@@ -91,16 +70,14 @@ export function UserMenu({
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={async () => {
-              await authClient.signOut();
-              window.location.assign("/signin");
-            }}
-            className="stamp mt-[13.2px] w-full cursor-pointer rounded-chip border-[3px] border-ink bg-cream-2 px-[17.6px] py-[9px] text-[14px] font-bold text-ink hover:bg-cherry-wash"
-          >
-            Sign out
-          </button>
+          <form action={role === "admin" ? lockOwnerPages : forgetMe}>
+            <button
+              type="submit"
+              className="stamp mt-[13.2px] w-full cursor-pointer rounded-chip border-[3px] border-ink bg-cream-2 px-[17.6px] py-[9px] text-[14px] font-bold text-ink hover:bg-cherry-wash"
+            >
+              {role === "admin" ? "Lock owner pages" : `Not ${name}? Switch`}
+            </button>
+          </form>
         </div>
       )}
     </div>

@@ -6,14 +6,23 @@
 [![Stars](https://img.shields.io/github/stars/danileau/prettypleaseprint?style=flat)](https://github.com/danileau/prettypleaseprint/stargazers)
 [![Forks](https://img.shields.io/github/forks/danileau/prettypleaseprint?style=flat)](https://github.com/danileau/prettypleaseprint/network/members)
 
-**Invite-only 3D print requests for a small office.** One person owns the
-printer. Everyone else uploads a model, says what they are hoping for, and
-follows it through the print stages on a board — instead of asking in a
-corridor and then wondering.
+**3D print requests for a small office, with no sign-in.** One person owns the
+printer. Everyone else picks their name, uploads a model, says what they are
+hoping for, and follows it through the print stages on a board — instead of
+asking in a corridor and then wondering.
 
-Self-hosted, Docker Compose, no accounts anywhere but your own machine. Five
-people and one printer is the size it is built for, and it is honest about
-that: there is no multi-tenancy, no billing, and no queue theory.
+Self-hosted, Docker Compose, no accounts at all. Five people and one printer on
+one office network is the size it is built for, and it is honest about that:
+there is no multi-tenancy, no billing, no queue theory — and no passwords for
+anyone but the printer owner.
+
+> **Keep it on a trusted network.** Names are not proof of identity: anyone who
+> can reach the app can pick anybody's name. Put it on the public internet and
+> anyone with the URL can submit prints, read anyone's tickets and comment as
+> them. See [Do not put this on the internet](docs/authentication.md#do-not-put-this-on-the-internet).
+
+This is a fork of [danileau/prettypleaseprint](https://github.com/danileau/prettypleaseprint)
+with its invitation-and-password sign-in removed.
 
 ## What it looks like
 
@@ -27,9 +36,10 @@ that: there is no multi-tenancy, no billing, and no queue theory.
 
 ## What it does
 
-- **Invite-only.** There is no public sign-up. A `User` row cannot come into
-  existence without a pending invitation, enforced in a single hook that every
-  authentication method goes through.
+- **No sign-in.** Pick your name from the list at `/hello`, or type it the
+  first time; the browser remembers it. No accounts, invitations, passwords,
+  passkeys or email. The printer owner unlocks their pages with one password
+  from the server's environment. See **[How identity works](docs/authentication.md)**.
 - **Upload a model** — `.stl` or `.3mf`, validated against its actual bytes
   rather than its filename, measured for its bounding box, stored on disk
   and never in the web root.
@@ -56,7 +66,7 @@ that: there is no multi-tenancy, no billing, and no queue theory.
   is copied server-side, so the two tickets own independent files.
 - **See what each person has sent** — the printer owner picks one person or
   several at `/admin/prints` and gets everything they have uploaded, in any
-  state. Each member on the guest list links straight to theirs.
+  state.
 - **Say how much it matters** — a request carries a priority (low, medium,
   high). The printer owner's queue lists the urgent ones first, and the
   requester or the owner can change it on the ticket while it is still on the
@@ -80,13 +90,11 @@ that: there is no multi-tenancy, no billing, and no queue theory.
   or gradient swatches, and a rainbow “whatever” option. Turning off, renaming,
   or removing an entry changes future requests without rewriting old tickets.
   See **[Materials and colours](docs/material-catalog.md)**.
-- **Revoke access when someone leaves** — suspends the account, signs them out
-  everywhere and refuses new sign-ins, while keeping their tickets, comments
-  and history. Reversible, and audited.
 - **See the actual geometry** — the uploaded mesh rendered in the browser,
   auto-framed, drag to rotate.
-- **An audit trail** of everything that changes who can get in or what happens
-  to someone's model, readable at `/admin/audit`, never edited or deleted.
+- **An audit trail** of every name picked or added, every unlock of the owner
+  pages, and everything that happens to someone's model, readable at
+  `/admin/audit`, never edited or deleted.
 - **Ask for features, triaged like the backlog** — a parallel "frr" board at
   `/frr` where anyone files a feature request (title, priority, category) and
   the owner moves it through the same stages, conversation, notifications and
@@ -94,8 +102,8 @@ that: there is no multi-tenancy, no billing, and no queue theory.
   See **[Feature requests](docs/feature-requests.md)**.
 - **Drive it over HTTP** — every ticket, transition, comment and notification
   is a JSON endpoint, described by an OpenAPI 3.1 document and callable from a
-  Swagger console at `/docs`. Same session, same scope, same audit trail as the
-  UI; the rules live in one place, so the API cannot enforce less than the
+  Swagger console at `/docs`. Same name cookie, same scope, same audit trail as
+  the UI; the rules live in one place, so the API cannot enforce less than the
   board does. See **[the API](docs/api.md)**.
 - **Open a model straight in PrusaSlicer** — one click on a ticket hands the
   model to a slicer running on your own machine. A small helper the printer
@@ -115,56 +123,49 @@ that: there is no multi-tenancy, no billing, and no queue theory.
 | Host | anything that runs Docker Compose on **`linux/amd64`** — a NAS, an x86 VPS, a spare laptop. **Not arm64.** The published `ppp-app` and `ppp-migrate` images are built for amd64 only, and a second architecture would have to be verified rather than merely built — the suites are this project's contract, and running them twice is not a commitment it makes. An arm64 host (a Pi 5, an Ampere VPS, an Apple Silicon Mac) fails at `docker compose pull` with `no matching manifest for linux/arm64`. |
 | Memory | ~1 GB for the whole stack (app, Postgres) |
 | Disk | small — the database is megabytes; uploads are capped at 250 MB each |
-| TLS | **required.** The app refuses to start on plain `http://` in production, and passkeys need a secure context |
-| Mail | **optional.** Nothing needs it — see [Mail is optional](docs/authentication.md#mail-is-optional--genuinely) |
+| TLS | **required in production.** The app refuses to start when `APP_URL` is not `https://` (localhost excepted): the owner password is typed into it, and the identity cookies carry the `Secure` flag — see [HTTPS](docs/deployment.md#https-is-not-optional) |
+| Network | **a trusted one.** There is no sign-in; see [Do not put this on the internet](docs/authentication.md#do-not-put-this-on-the-internet) |
+| Mail | **none.** The app sends no email |
 
 ## Quick start
 
 ```bash
-git clone https://github.com/danileau/prettypleaseprint.git && cd prettypleaseprint
+git clone https://github.com/gvtroutman/print-it.git && cd print-it
 cp .env.docker.example .env.docker
 ```
 
-Edit `.env.docker` — generate the two secrets and say who the admin is:
+Edit `.env.docker` — generate the secrets and say who the printer owner is:
 
 ```bash
-BETTER_AUTH_SECRET="$(openssl rand -base64 32)"
+APP_SECRET="$(openssl rand -base64 32)"
 DB_PASSWORD="$(openssl rand -hex 24)"
-ADMIN_EMAIL="you@example.org"
+ADMIN_PASSWORD="$(openssl rand -base64 18)"
 ADMIN_NAME="Your Name"
 ```
 
-**Leave `APP_URL` and `PASSKEY_RP_ID` at the example's localhost values for
-now.** They are what Better Auth derives cookie scope and the WebAuthn relying
-party from, so setting them to a public hostname and then running on
-`http://localhost:3000` gives you a stack you cannot sign into: the browser
-sends an origin the app does not trust, and receives a `__Secure-` cookie it
-discards over plain HTTP. Set them when you deploy — see
+**Leave `APP_URL` at the example's localhost value for now.** It decides
+whether the identity cookies are marked `Secure` and which `Origin` the API
+accepts writes from, so setting it to a public hostname and then running on
+`http://localhost:3000` gives you a stack whose API refuses your browser's
+writes as cross-origin, and whose cookies are marked `Secure` for a connection
+that is not. Set it when you deploy — see
 **[docs/deployment.md](docs/deployment.md)**.
 
-Then bring it up. This build-from-source variant publishes ports and catches
-mail locally, which is what you want for a first look:
+Then bring it up. This build-from-source variant publishes ports, which is what
+you want for a first look:
 
 ```bash
 docker compose --env-file .env.docker \
   -f docker-compose.prod.yml -f docker-compose.build.yml \
-  -f docker-compose.test.yml --profile mailcatcher up -d --build
+  -f docker-compose.test.yml up -d --build
 ```
 
-The migrator prints a **one-use link** for the admin to choose a username and
-a password. Read it, and open it within thirty minutes:
-
-```bash
-docker compose --env-file .env.docker -f docker-compose.prod.yml logs migrate
-```
-
-Then invite the office from `/admin/invites`. For a real deployment behind a
-reverse proxy, see **[docs/deployment.md](docs/deployment.md)**.
-
-> There is deliberately no `ADMIN_PASSWORD`. A password in an env file is also
-> in `docker inspect`, in the shell history that wrote it, and in every backup
-> of the host — still valid months later. A link that expires in half an hour
-> is a smaller thing to leak.
+Open **http://localhost:3000/hello** and pick or type a name — that is the
+whole of getting in. The printer owner's pages (the queue, the catalogue, the
+audit trail) are unlocked at `/owner` with `ADMIN_PASSWORD`. For a real
+deployment behind a reverse proxy, see **[docs/deployment.md](docs/deployment.md)**
+— and read [Do not put this on the internet](docs/authentication.md#do-not-put-this-on-the-internet)
+before you give it a public hostname.
 
 ## Configuration
 
@@ -173,27 +174,30 @@ with commentary is [`.env.docker.example`](.env.docker.example).
 
 | Variable | Required | What it does |
 | --- | --- | --- |
-| `BETTER_AUTH_SECRET` | **yes** | Signs session cookies. `openssl rand -base64 32`. Losing it invalidates every session. |
+| `APP_SECRET` | **yes** | Signs the `ppp.who` and `ppp.owner` cookies and PrusaSlicer links. `openssl rand -base64 32`. Losing or changing it means everyone picks their name again; nothing else is lost. (Was `BETTER_AUTH_SECRET`.) |
+| `ADMIN_PASSWORD` | **yes** | Unlocks the owner pages at `/owner`. Unset, they are switched off. Changing it locks every browser that had them unlocked. |
 | `DB_PASSWORD` | **yes** | Postgres password. Baked into the data directory on first start — see [Restore](#restore). |
-| `APP_URL` | **yes** | The origin the browser sees, including scheme. Cookies, invitation links and the WebAuthn relying party derive from it. Must be `https://` in production. |
-| `PASSKEY_RP_ID` | **yes** | Registrable domain, no scheme or port. **Permanent** — changing it kills every enrolled passkey. |
-| `PASSKEY_RP_NAME` | | Shown in the browser's passkey prompt. |
-| `ADMIN_EMAIL` / `ADMIN_NAME` | **yes** | The single admin, created on first start. |
+| `APP_URL` | **yes** | The origin the browser sees, including scheme. The cookies' `Secure` flag and the API's `Origin` check derive from it. Should be `https://` anywhere but a laptop. (Was `BETTER_AUTH_URL` for a host-side run.) |
+| `ADMIN_NAME` | **yes** | The printer owner, created on first start and renamed if it changes. |
+| `ADMIN_EMAIL` | | Optional. Stored on the owner's row; nothing sends to it. |
 | `DATA_ROOT` | | Where the database and uploads live on disk. Default `./data`. |
-| `SMTP_URL` | | SMTP transport. **Leave unset and the app still works** — links are shown to the admin to hand over. |
-| `RESEND_API_KEY` | | Alternative to `SMTP_URL`; takes precedence. |
-| `MAIL_FROM` | | Envelope sender. |
-| `TRUST_PROXY_HEADERS` | | Which header carries the client address: `false` (trust nothing, the default), `true` (left-most `X-Forwarded-For`), or `cloudflare` (`CF-Connecting-IP`). See [the reasoning](docs/deployment.md#why-trust_proxy_headers-is-a-separate-switch). |
-| `HIBP_DISABLED` | | `true` disables the breach check. Only for a host with no outbound internet — it fails closed, so without it nobody could register. |
+| `TRUST_PROXY_HEADERS` | | Which header carries the client address: `false` (trust nothing, the default), `true` (left-most `X-Forwarded-For`), or `cloudflare` (`CF-Connecting-IP`). It also decides what the owner password's guess limit counts per address. See [the reasoning](docs/deployment.md#why-trust_proxy_headers-is-a-separate-switch). |
 | `IMPORT_SOURCES` | | `printables` lets a request start from a Printables link instead of an upload. **Off when unset.** Needs outbound HTTPS, and a misspelt value stops the app. See [Importing from a link](docs/deployment.md#importing-from-a-link). |
-| `SOURCE_URL` | | Where this instance's source lives, shown in the footer. **Change it if you modify the code** — see [Licence](#licence). Defaults to the upstream repository. |
-| `PPP_REGISTRY` / `PPP_TAG` | | Which published image to run. Pin `PPP_TAG` to a release (`v0.3.0`) or a commit SHA; either is also how you roll back. |
+| `SOURCE_URL` | | Where this instance's source lives, shown in the footer. **Change it if you modify the code** — see [Licence](#licence). Defaults to `https://github.com/gvtroutman/print-it`. |
+| `PPP_REGISTRY` / `PPP_TAG` | | Which published image to run. `PPP_REGISTRY` defaults to `ghcr.io/gvtroutman` — upstream's images still have sign-in. Pin `PPP_TAG` to a release (`v0.3.0`) or a commit SHA; either is also how you roll back. |
 | `CF_TUNNEL_TOKEN` | | Connector token for `docker-compose.tunnel.yml`, from Cloudflare Zero Trust. A credential: anything holding it can serve the hostnames routed to that tunnel. See [Deploying behind a Cloudflare Tunnel](docs/deployment.md#deploying-behind-a-cloudflare-tunnel). |
 
 ## Deploying
 
 The short version: pull a published image, put a reverse proxy in front, point
-`DATA_ROOT` at real storage.
+`DATA_ROOT` at real storage — and keep it where only the office can reach it.
+
+> **This app has no sign-in.** Anyone who can load it can pick any name, read
+> that person's tickets and models, comment as them and submit prints. A
+> reverse proxy with a public DNS name or a Cloudflare Tunnel makes it
+> reachable from the whole internet unless you put something in front that
+> *does* authenticate — a VPN, or Cloudflare Access. See
+> [Do not put this on the internet](docs/authentication.md#do-not-put-this-on-the-internet).
 
 ```bash
 docker compose --env-file .env.docker \
@@ -203,7 +207,8 @@ docker compose --env-file .env.docker \
 On a connection whose public address is not yours to keep — a dynamic one, or
 none at all — `docker-compose.tunnel.yml` replaces the reverse proxy with a
 Cloudflare Tunnel connector that dials *outward*, so there is no port to
-forward and no `A` record to keep current. See
+forward and no `A` record to keep current. It also puts the app on the public
+internet, so read the warning above first. See
 [Deploying behind a Cloudflare Tunnel](docs/deployment.md#deploying-behind-a-cloudflare-tunnel).
 
 `docker-compose.prod.yml` **consumes** images rather than building them, so a
@@ -247,7 +252,7 @@ Everything that matters is under `DATA_ROOT` plus one file:
 
 | | |
 | --- | --- |
-| `$DATA_ROOT/db/` | Postgres — accounts, tickets, comments, the audit trail |
+| `$DATA_ROOT/db/` | Postgres — names, tickets, comments, the audit trail |
 | `$DATA_ROOT/uploads/` | the uploaded `.stl` / `.3mf` files, as plain files |
 | `$DATA_ROOT/models/` | **only if you have not migrated yet** — the old object store's data directory. Plain `tar` cannot read it usefully; see [Deployment](docs/deployment.md). |
 | `.env.docker` | the secrets. **Not** under `DATA_ROOT`, and not in the repo. |
@@ -329,10 +334,11 @@ Nothing is damaged by getting this wrong — the wrong password is refused, not
 destructive. Put the right one back and everything returns. This is the main
 reason `.env.docker` belongs in the backup.
 
-**`BETTER_AUTH_SECRET` is not recoverable, and costs one sign-in.** Restore
-without it and every existing session cookie stops validating — a held cookie
-goes from `200` to a `307` back to the sign-in page. Nobody is locked out:
-passwords and passkeys are untouched, and everyone simply signs in again.
+**`APP_SECRET` is not recoverable, and costs one click each.** Restore without
+it and every existing `ppp.who` and `ppp.owner` cookie stops validating — a held
+cookie goes from `200` to a `307` back to `/hello`. Nobody is locked out: the
+names are rows, so everyone simply picks theirs again, and the owner unlocks
+again with `ADMIN_PASSWORD`.
 
 ## Troubleshooting
 
@@ -352,7 +358,7 @@ The published images are public, so this should not happen — check the tag
 exists before assuming it is an auth problem:
 
 ```bash
-docker manifest inspect ghcr.io/danileau/ppp-app:v0.3.0
+docker manifest inspect ghcr.io/gvtroutman/ppp-app:v0.3.0
 ```
 
 On a **fork** with private packages you do need a credential, and it must be a
@@ -380,13 +386,13 @@ Behind Cloudflare's proxy, visitors see Cloudflare's certificate regardless, so
 an **Origin Certificate** plus SSL mode *Full (strict)* removes ACME from the
 picture entirely.
 
-**Every page loads and nothing works — sign-in included.**
+**Every page loads and nothing works.**
 Cloudflare's **Rocket Loader** rewrites every `<script>` to load through its own
 deferred loader, and the rewritten tags do not carry the per-request CSP nonce
 this app's `script-src` requires. Hydration never happens, so no client-side code
 runs: the pages render from server HTML and look perfectly normal, but the
-sign-in form, the upload progress bar, the 3D viewer and the Activity menu all do
-nothing. The console shows CSP violations; the app's own logs show nothing at
+upload progress bar, the 3D viewer and the Activity menu all do nothing (picking
+a name still works — `/hello` is a plain form). The console shows CSP violations; the app's own logs show nothing at
 all, because the requests never reach it. Turn Rocket Loader off, globally or
 with a Configuration Rule scoped to the hostname — see
 [deployment](docs/deployment.md). Auto Minify and Brotli are fine.
@@ -398,57 +404,58 @@ Cloudflare set it to `cloudflare` — not `true`, because Cloudflare *appends* t
 Behind a proxy that replaces the header, `true`. Set either only if the app
 cannot be reached without going through that proxy.
 
-**The bootstrap link expired.**
-Re-run the migrator; it prints a fresh one, and keeps doing so until a password
-is actually set. It never resets an existing password.
+**`/owner` says the owner pages are switched off.**
+`ADMIN_PASSWORD` is not set in the app's environment. Set it in `.env.docker`
+and recreate the app container.
+
+**`/owner` says there is no printer owner yet.**
+The seed has not run, or failed — usually because `ADMIN_NAME` is empty. Read
+the migrator's log:
 
 ```bash
 docker compose --env-file .env.docker -f docker-compose.prod.yml up -d migrate
 docker compose --env-file .env.docker -f docker-compose.prod.yml logs migrate
 ```
 
-**Nobody can register, and the error mentions a breach check.**
-The password check calls `api.pwnedpasswords.com` and fails closed. If the host
-has no outbound internet, set `HIBP_DISABLED=true` — and only then.
+**Every request answers 500 and the log says `APP_SECRET is required`.**
+It is unset — or still named `BETTER_AUTH_SECRET` from before sign-in was
+removed. Rename it.
 
 ## Documentation
 
 | | |
 | --- | --- |
-| **[Authentication](docs/authentication.md)** | invite-only registration, passwords, passkeys, resets, and why each decision went the way it did |
+| **[How identity works](docs/authentication.md)** | picking a name, the owner password, the cookies, and what having no sign-in costs |
 | **[Architecture](docs/architecture.md)** | the viewer, upload validation, decisions taken against the design handoff, and the file layout |
 | **[Deployment](docs/deployment.md)** | containers, reverse proxies, the deploy wizard, TLS, first run |
 | **[Materials and colours](docs/material-catalog.md)** | the owner-managed catalogue behind the request form |
 | **[Feature requests](docs/feature-requests.md)** | the `/frr` track — file a request, triage it exactly like the print backlog |
-| **[The API](docs/api.md)** | the JSON surface, bearer tokens, the OpenAPI document and the console at `/docs` |
+| **[The API](docs/api.md)** | the JSON surface, calling it with the name cookie, the OpenAPI document and the console at `/docs` |
 | **[Open in PrusaSlicer](docs/prusaslicer.md)** | the one-click "send to the slicer" bridge, the helper, and why the deep link cannot be used |
 | **[Development](docs/development.md)** | stack, local setup, the verification suites, the full local run, CI, cutting a release |
 | **[Security audit](docs/security-audit.md)** | the OWASP Top 10 assessment, findings, and residual risk accepted |
 | **[Security policy](SECURITY.md)** | how to report a vulnerability |
-| **[Contributing](CONTRIBUTING.md)** | the eleven suites are the contract; what a good change looks like |
+| **[Contributing](CONTRIBUTING.md)** | the nine suites are the contract; what a good change looks like |
 | **[Changelog](CHANGELOG.md)** | what changed in each release |
 
 ## Security
 
-Invite-only enforced in one hook across every authentication method. Passwords
-are ≥10 characters and refused if they appear in a known breach corpus.
-Authorisation answers **404, not 403**, for a resource you may not see — a 403
-confirms it exists. CSP carries a per-request nonce. Every access and content
-change is audited.
+**There is intentionally no user authentication.** A visitor is whoever they
+say they are on `/hello`, and that is only safe where everyone who can reach
+the app is somebody you would hand the printer queue to anyway — an office
+network. Read [How identity works](docs/authentication.md) for exactly what
+anyone on that network can do, and
+[Do not put this on the internet](docs/authentication.md#do-not-put-this-on-the-internet).
 
-Session cookies are `HttpOnly`, `SameSite=Lax` and `__Secure-` prefixed, with
-cookie caching deliberately off so sign-out is immediate. A session is worth
-**twenty idle minutes**, not a month: the window used to renew itself on every
-visit, which meant a captured cookie on a shared desk was good more or less
-indefinitely. Twenty minutes is only humane because passkeys are here, and
-signing back in is a touch.
-
-Shortening it limits how long a stolen cookie is useful but not whether it is
-useful *now*, so the four actions that outlive a session — inviting somebody,
-re-sending an invitation, minting a password-reset link, revoking or restoring
-access — ask for the passkey or the password again if the current sign-in is
-more than five minutes old. That is the one control on the list a copied cookie
-cannot satisfy.
+What is still enforced: the printer owner's pages need `ADMIN_PASSWORD`, which
+sets a signed browser-session cookie good for at most twelve hours, with wrong
+guesses limited to ten a minute per address. The name cookie is signed with
+`APP_SECRET` and can only ever name a client, never the owner. Authorisation
+answers **404, not 403**, for a ticket that is not yours — a 403 confirms it
+exists. Writes from another origin are refused. CSP carries a per-request
+nonce. Every name picked, every unlock of the owner pages and every change to a
+ticket is audited — with the caveat that the trail records the name somebody
+picked, not proof of who they were.
 
 The full assessment, including what was found and fixed and what is knowingly
 accepted, is in [docs/security-audit.md](docs/security-audit.md). To report
@@ -456,10 +463,10 @@ something, see [SECURITY.md](SECURITY.md).
 
 ## Contributing
 
-Issues and pull requests are welcome. The eleven verification suites in
-`scripts/` are the contract — `verify:models`, `verify:auth`, `verify:upload`,
-`verify:import`, `verify:queue`, `verify:frr`, `verify:benefits`, `verify:catalog`, `verify:api`,
-`verify:passkey` and `probe:security`. All but `verify:models` run in CI against the built
+Issues and pull requests are welcome. The nine verification suites in
+`scripts/` are the contract — `verify:models`, `verify:upload`, `verify:import`,
+`verify:queue`, `verify:frr`, `verify:benefits`, `verify:catalog`, `verify:api`
+and `probe:security`. All but `verify:models` run in CI against the built
 container image rather than a dev server. If a change makes one fail, that is the
 change talking.
 

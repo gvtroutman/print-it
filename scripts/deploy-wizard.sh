@@ -67,8 +67,8 @@ PROJECT_DIR="${PPP_DIR:-$(cd "$(dirname "$0")" && pwd)}"
 # health loop on it, and could have a perfectly good deploy rolled back because
 # an unrelated machine blipped. PPP_HEALTH_URL still overrides.
 HEALTH_URL="${PPP_HEALTH_URL:-}"
-REGISTRY_OWNER="${PPP_REGISTRY_OWNER:-danileau}"
-REPO="${PPP_REPO:-danileau/prettypleaseprint}"
+REGISTRY_OWNER="${PPP_REGISTRY_OWNER:-gvtroutman}"
+REPO="${PPP_REPO:-gvtroutman/print-it}"
 IMAGES="${PPP_IMAGES:-ppp-app ppp-migrate}"
 WINDOW="${PPP_WINDOW:-15}"
 HEALTH_TIMEOUT="${PPP_HEALTH_TIMEOUT:-300}"
@@ -883,10 +883,11 @@ if [ -n "$COSIGN" ]; then
   # cosign was actually installed somewhere, because without it the wizard
   # skips the check and says so.
   #
-  # The REPO NAME: keyless signing embeds the repository path, so images built
-  # before the rename carry the old one. Both are admitted; a fork, another
+  # The REPO NAME: keyless signing embeds the repository path. This fork
+  # publishes its own images (the upstream ones still carry sign-in), so only
+  # its own release workflow is admitted; upstream, another fork, another
   # workflow, another branch and a non-version tag are not.
-  IDENTITY="^https://github\.com/danileau/(prettypleaseprint|ppp)/\.github/workflows/release-images\.yml@refs/(heads/main|tags/v[0-9][0-9A-Za-z.\-]*)$"
+  IDENTITY="^https://github\.com/gvtroutman/print-it/\.github/workflows/release-images\.yml@refs/(heads/main|tags/v[0-9][0-9A-Za-z.\-]*)$"
   for img in $IMAGES; do
     if "$COSIGN" verify \
         --certificate-identity-regexp "$IDENTITY" \

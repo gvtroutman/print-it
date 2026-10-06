@@ -18,7 +18,7 @@
 #   3. Saves .env, .env.backup and .env.docker, writes a throwaway .env.docker
 #      and raises the stack under its own project name on a data directory
 #      outside the repository.
-#   4. The nine integration suites in CI's order, all of them even after one
+#   4. The eight integration suites in CI's order, all of them even after one
 #      fails, then the two image pins CI keeps.
 #   5. Takes the stack down, removes its data and puts the three env files
 #      back exactly as they were — on success, on failure and on Ctrl-C.
@@ -35,8 +35,8 @@
 #     Either way the cleanup then runs in full, and a second Ctrl-C during it
 #     is ignored so the env files are always put back.
 #
-# It is CI's `verify` job in what matters — the same three compose files, the
-# same profile, the same suites in the same order — and differs where a
+# It is CI's `verify` job in what matters — the same three compose files and
+# the same suites in the same order — and differs where a
 # developer's machine has to be protected: the project is `ppp-fulltest`, the
 # images are tagged `full-test-local`, DATA_ROOT is a throwaway directory, and
 # the health wait is longer (120 s against CI's 90).
@@ -47,7 +47,7 @@
 # Usage:
 #   scripts/full-test.sh                 # everything; exit 0 only if all passed
 #   scripts/full-test.sh --no-build      # raise the stack without rebuilding
-#   scripts/full-test.sh --only "verify:auth verify:api"   # a subset of suites
+#   scripts/full-test.sh --only "verify:queue verify:api"  # a subset of suites
 #   scripts/full-test.sh --preflight     # only the refusals in step 1, then exit
 #   scripts/full-test.sh --restore       # undo what a killed run left behind
 #
@@ -58,7 +58,6 @@
 #   PPP_FULLTEST_OUT             where logs and the data directory go
 #                                (default: a fresh directory under $TMPDIR)
 #   PPP_FULLTEST_HEALTH_TIMEOUT  seconds to wait for /api/health (default 120)
-#   CHROME_PATH                  passed through to verify:passkey
 
 set -euo pipefail
 
@@ -79,7 +78,7 @@ while [ $# -gt 0 ]; do
     --only) [ $# -ge 2 ] || die "--only needs a quoted list of suites"; ONLY="$2"; ONLY_GIVEN=1; shift 2 ;;
     --restore) MODE="restore"; shift ;;
     --preflight) MODE="preflight"; shift ;;
-    -h|--help) sed -n '2,61p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,60p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "unknown arg: $1" ;;
   esac
 done
@@ -96,24 +95,24 @@ cd "$ROOT"
 PROJECT="ppp-fulltest"
 COMPOSE=(docker compose -p "$PROJECT" --env-file .env.docker
   -f docker-compose.prod.yml -f docker-compose.build.yml
-  -f docker-compose.test.yml --profile mailcatcher)
+  -f docker-compose.test.yml)
 COMPOSE_FILES_NEEDED="docker-compose.prod.yml docker-compose.build.yml docker-compose.test.yml"
 
 # The names docker-compose.prod.yml pins with container_name. They are why
 # only one stack can exist on a machine, whatever its project is called.
 # and docker-compose.test.yml adds the Printables stand-in.
-STACK_NAMES="ppp-app ppp-db ppp-migrate ppp-mailpit ppp-printables-stub"
+STACK_NAMES="ppp-app ppp-db ppp-migrate ppp-printables-stub"
 
-# What docker-compose.test.yml publishes on the host. APP_PORT,
-# MAILPIT_UI_PORT and PRINTABLES_STUB_PORT could move three of them, but this
-# script unsets them all, so the five are fixed. PPP_FULLTEST_PORTS exists for this script's own tests, which
+# What docker-compose.test.yml publishes on the host. APP_PORT and
+# PRINTABLES_STUB_PORT could move two of them, but this script unsets them
+# both, so the three are fixed. PPP_FULLTEST_PORTS exists for this script's own tests, which
 # have to run on machines where 3000 is taken.
-PORTS="${PPP_FULLTEST_PORTS:-3000 5432 1025 8025 4010}"
+PORTS="${PPP_FULLTEST_PORTS:-3000 5432 4010}"
 
 # In CI's order (the `verify` job of .github/workflows/ci.yml). A test pins
 # this list to that file, because the hand-rolled predecessor of this script
 # had quietly lost verify:catalog.
-SUITES="verify:auth verify:upload verify:import verify:queue verify:frr verify:benefits verify:catalog verify:api verify:passkey probe:security"
+SUITES="verify:upload verify:import verify:queue verify:frr verify:benefits verify:catalog verify:api probe:security"
 
 ENV_FILES=".env .env.backup .env.docker"
 
@@ -284,12 +283,13 @@ fi
 # always win"). So a DB_PASSWORD or a PPP_TAG exported in the terminal this
 # was started from would silently replace the generated one, or point the
 # suites somewhere else entirely.
-unset DB_PASSWORD APP_URL APP_PORT BETTER_AUTH_SECRET BETTER_AUTH_URL \
-  ADMIN_EMAIL ADMIN_NAME MAIL_FROM SMTP_URL DATABASE_URL MODELS_ROOT PPP_TAG \
-  PPP_REGISTRY PPP_ENV_FILE MAILPIT_UI_PORT TRUST_PROXY_HEADERS MAILPIT_URL \
-  PRINTABLES_STUB_PORT PRINTABLES_STUB_URL IMPORT_SOURCES IMPORT_PRINTABLES_BASE \
-  RESEND_API_KEY PASSKEY_RP_ID PASSKEY_RP_NAME COMPOSE_PROFILES COMPOSE_FILE \
-  COMPOSE_PROJECT_NAME DATA_ROOT HIBP_DISABLED
+# APP_SECRET and ADMIN_PASSWORD matter twice over: the suites mint the app's
+# cookies with them, so a stale export would make every request a 401.
+unset DB_PASSWORD APP_URL APP_PORT APP_SECRET ADMIN_PASSWORD ADMIN_EMAIL \
+  ADMIN_NAME DATABASE_URL MODELS_ROOT PPP_TAG PPP_REGISTRY PPP_ENV_FILE \
+  TRUST_PROXY_HEADERS PRINTABLES_STUB_PORT PRINTABLES_STUB_URL IMPORT_SOURCES \
+  IMPORT_PRINTABLES_BASE COMPOSE_PROFILES COMPOSE_FILE COMPOSE_PROJECT_NAME \
+  DATA_ROOT
 
 # Outside the repository on purpose: the data tree ends up owned by container
 # uids, and inside the checkout it would be walked into the next build context.
@@ -396,10 +396,10 @@ rm -f $ENV_FILES
 # As CI does it (the "Compose environment" step).
 {
   cat .env.docker.example
-  echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)"
+  echo "APP_SECRET=$(openssl rand -base64 32)"
   echo "DB_PASSWORD=$(openssl rand -hex 24)"
-  echo "ADMIN_EMAIL=ci-admin@example.test"
   echo "ADMIN_NAME=Ruben Haas"
+  echo "ADMIN_PASSWORD=$(openssl rand -hex 24)"
   # The build overlay tags what it builds ${PPP_REGISTRY}/ppp-app:${PPP_TAG}.
   # Left at `latest`, a local build would overwrite the image this developer
   # pulled, and the next `docker compose up` of their own stack would run it.

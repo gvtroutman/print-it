@@ -118,7 +118,7 @@ export default async function ProfilePage() {
             <p className="m-0 text-[15.5px] text-ink-2">
               {isAdmin
                 ? "Owns the printer, sees every ticket"
-                : `Invited by ${owner} · sees only their own tickets`}
+                : `Orders from ${owner} · sees only their own tickets`}
             </p>
           </div>
         </div>

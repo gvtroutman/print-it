@@ -11,13 +11,12 @@ const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  // Passkeys need publickey-credentials-get/create on this origin only.
   {
     key: "Permissions-Policy",
     value:
       "camera=(), microphone=(), geolocation=(), payment=(), " +
       "interest-cohort=(), browsing-topics=(), " +
-      "publickey-credentials-get=(self), publickey-credentials-create=(self)",
+      "publickey-credentials-get=(), publickey-credentials-create=()",
   },
   // Cross-origin isolation. COOP severs window handles to other origins, so a
   // popup cannot reach back into this document; CORP stops other sites
@@ -50,7 +49,7 @@ const nextConfig: NextConfig = {
   // of a full node_modules tree.
   output: "standalone",
   poweredByHeader: false,
-  serverExternalPackages: ["@prisma/client", "nodemailer"],
+  serverExternalPackages: ["@prisma/client"],
   experimental: {
     /**
      * Let an upload actually be as large as the app says it is.

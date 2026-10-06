@@ -1,10 +1,9 @@
 // Pretty Please Print — schema
 //
 // Two groups of models:
-//   * Auth      — owned by Better Auth (User/Session/Account/Verification/Passkey).
-//                 Shapes are dictated by the library; verify with
-//                 `npx @better-auth/cli generate` after changing plugins.
-//   * Domain    — Invite/Story/Comment/Notification, from the handoff data model.
+//   * People    — User: a name somebody picked on /hello, or the printer owner.
+//                 There are no accounts, passwords or sessions.
+//   * Domain    — Story/Comment/Notification, from the handoff data model.
 
 generator client {
   provider = "prisma-client-js"
@@ -16,7 +15,7 @@ datasource db {
 }
 
 // ===========================================================================
-// Auth
+// People
 // ===========================================================================
 
 enum Role {
@@ -24,50 +23,24 @@ enum Role {
   admin
 }
 
+/// Somebody who orders prints. A `client` row is created the first time a
+/// name is typed on /hello; the single `admin` row is the printer owner,
+/// written by the seed and reachable only through ADMIN_PASSWORD.
 model User {
-  id            String   @id @default(cuid())
-  name          String
-  email         String   @unique
-  emailVerified Boolean  @default(false)
-  image         String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id        String   @id @default(cuid())
+  name      String
+  /// Optional contact address. Names picked on /hello have none.
+  email     String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  /// --- username plugin ---
-  ///
-  /// The login identifier. Folded to lower case on write, which is what makes
-  /// the unique index case-insensitive; `displayUsername` keeps whatever was
-  /// typed so the profile can show it back.
-  ///
-  /// Nullable because an account can exist before it has one: the seeded admin
-  /// is a row written straight through Prisma, and picks a username and a
-  /// password from the set-password link the seed prints.
-  username        String? @unique
-  displayUsername String?
-
-  /// Avatar fallback, e.g. "AY". Derived from `name` on create. The default is
-  /// a safety net only — `databaseHooks.user.create.before` always sets it.
+  /// Avatar fallback, e.g. "AY". Derived from `name` on create.
   initials String @default("??")
 
   /// Exactly one `admin` exists; enforced by the partial unique index
   /// `user_single_admin`, added in the enforce_single_admin migration.
   role Role @default(client)
 
-  /// Who invited this user. Null for the seeded admin only.
-  invitedById  String?
-  invitedBy    User?   @relation("Invitations", fields: [invitedById], references: [id], onDelete: SetNull)
-  invitedUsers User[]  @relation("Invitations")
-
-  // --- admin plugin ---
-  banned     Boolean?  @default(false)
-  banReason  String?
-  banExpires DateTime?
-
-  sessions Session[]
-  accounts Account[]
-  passkeys Passkey[]
-
-  invitesSent   Invite[]       @relation("InviteAuthor")
   auditEvents   AuditEvent[]   @relation("AuditActor")
   stories       Story[]
   comments      Comment[]
@@ -81,157 +54,28 @@ model User {
   @@map("user")
 }
 
-model Session {
-  id        String   @id @default(cuid())
-  expiresAt DateTime
-  token     String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  ipAddress String?
-  userAgent String?
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // --- admin plugin ---
-  impersonatedBy String?
-
-  @@index([userId])
-  @@map("session")
-}
-
-model Account {
-  id        String @id @default(cuid())
-  accountId String
-
-  /// Dead, and kept on purpose. Better Auth 1.7.0–1.7.2 required this column
-  /// and wrote `local:credential` into it; 1.7.3 stopped writing it and went
-  /// back to recognising an account by `providerId` and `accountId`, so a
-  /// required column here made every insert fail. It is nullable rather than
-  /// dropped because the deploy wizard rolls back to the previous image when a
-  /// deploy fails its health check, and that image's client still selects it —
-  /// drop it once no deployment can roll back past this point.
-  issuer     String?
-  providerId String
-  userId                String
-  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  accessToken           String?
-  refreshToken          String?
-  idToken               String?
-  accessTokenExpiresAt  DateTime?
-  refreshTokenExpiresAt DateTime?
-  scope                 String?
-  /// scrypt digest as `salt:hash`, written by Better Auth. Only
-  /// `providerId: "credential"` rows carry one; a passkey has no password.
-  password              String?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-
-  @@unique([providerId, accountId])
-  @@index([userId])
-  @@map("account")
-}
-
-/// Better Auth's generic token store. Backs password-reset links and the
-/// WebAuthn challenges. `verification.storeIdentifier: "hashed"` in
-/// src/lib/auth.ts means `identifier` holds a digest, not the token — a
-/// database reader cannot replay a live reset link.
-model Verification {
-  id         String   @id @default(cuid())
-  identifier String
-  value      String
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  @@index([identifier])
-  @@map("verification")
-}
-
-/// WebAuthn credential. `publicKey` is a public key — safe at rest — and the
-/// private half never leaves the authenticator.
-model Passkey {
-  id           String    @id @default(cuid())
-  name         String?
-  publicKey    String
-  userId       String
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  credentialID String
-  counter      Int
-  deviceType   String
-  backedUp     Boolean
-  transports   String?
-  createdAt    DateTime? @default(now())
-  aaguid       String?
-
-  @@index([userId])
-  @@index([credentialID])
-  @@map("passkey")
-}
-
-/// Backs `rateLimit: { storage: "database" }` in src/lib/auth.ts. Shape is
-/// dictated by Better Auth: `key` unique, `lastRequest` an epoch-millisecond
-/// bigint. Rows are disposable — truncating it only resets the counters.
-model RateLimit {
-  id          String @id @default(cuid())
-  key         String @unique
-  count       Int
-  lastRequest BigInt
-
-  @@map("rateLimit")
-}
-
 // ===========================================================================
 // Domain
 // ===========================================================================
 
-/// An invitation to join. There is no public sign-up: a `User` row can only
-/// come into existence when a matching pending invite exists (enforced in
-/// `src/lib/auth.ts` via `user.validateUserInfo`).
-model Invite {
-  id    String @id @default(cuid())
-  email String
-
-  /// SHA-256 of the invite token. The raw token exists only inside the
-  /// emailed link — a database dump does not let anyone accept an invite.
-  tokenHash String @unique
-
-  /// Display name the admin suggested; the invitee can override it on claim.
-  name String?
-  role Role    @default(client)
-
-  invitedById String
-  invitedBy   User   @relation("InviteAuthor", fields: [invitedById], references: [id], onDelete: Cascade)
-
-  expiresAt  DateTime
-  acceptedAt DateTime?
-  revokedAt  DateTime?
-  createdAt  DateTime  @default(now())
-
-  /// Last time the link was (re)sent, for throttling resends in the UI.
-  sentAt DateTime @default(now())
-
-  @@index([email])
-  @@index([expiresAt])
-  @@map("invite")
-}
-
 /// Append-only record of who did what. Closes the A09 gap from SECURITY.md.
 ///
-/// Deliberately denormalised: `actorEmail` and `subject` are copied in at
+/// Deliberately denormalised: `actorName` and `subject` are copied in at
 /// write time so the trail still reads correctly after the user or the story
 /// it refers to has been deleted. Nothing in the app ever updates a row here.
 model AuditEvent {
   id     String   @id @default(cuid())
   at     DateTime @default(now())
-  /// Dotted verb, e.g. "invite.sent", "story.status_changed".
+  /// Dotted verb, e.g. "name.picked", "story.status_changed".
   action String
 
-  actorId    String?
-  actor      User?   @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
-  /// Kept even if the account is later removed.
-  actorEmail String?
+  actorId   String?
+  actor     User?   @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  /// Kept even if the person is later removed. Rows written before sign-in
+  /// was removed hold an email address here instead of a name.
+  actorName String?
 
-  /// What was acted on, in human terms: "PPP-104", "ayla@office.example".
+  /// What was acted on, in human terms: "PPP-104", "Ayla Berg".
   subject String?
 
   ip        String?
@@ -289,24 +133,24 @@ model Story {
   uploaderId String
   uploader   User   @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
 
-  quantity  Int      @default(1)
+  quantity   Int              @default(1)
   /// Set by the requester when filing and changeable while the ticket is still
   /// on the rail, by them or by the owner. It orders the owner's queue; it
   /// promises nothing about when the printer is free.
-  priority  StoryPriority @default(medium)
+  priority   StoryPriority    @default(medium)
   /// Snapshots the catalog label at submission time. Catalog entries may be
   /// renamed or disabled later without rewriting an old order.
-  material  String   @default("PETG")
-  colorName String
-  colorHex  String
+  material   String           @default("PETG")
+  colorName  String
+  colorHex   String
   /// CSS swatch snapshot. Gradients render here while colorHex remains the
   /// representative solid used by the 3D viewer.
   colorStyle String?
   /// Snapshot of how the swatch behaves. Kept separate from the editable
   /// label so renaming "Whatever's on" cannot change an old ticket.
   colorMode  CatalogColorMode @default(solid)
-  tip       String
-  note      String   @default("")
+  tip        String
+  note       String           @default("")
 
   /// Free-text print settings the requester optionally notes (layer height,
   /// infill, supports, temps…), shown to the owner on the ticket so specifics
@@ -351,12 +195,12 @@ model Story {
 /// A material the printer owner can currently offer. Disabling an entry only
 /// removes it from new requests; stories keep their material snapshot.
 model CatalogMaterial {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  active    Boolean  @default(true)
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id        String         @id @default(cuid())
+  name      String         @unique
+  active    Boolean        @default(true)
+  sortOrder Int            @default(0)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
   colors    CatalogColor[]
 
   @@index([active, sortOrder])
@@ -366,19 +210,19 @@ model CatalogMaterial {
 /// A spool colour belongs to one material: the upload form changes its colour
 /// choices as soon as the requester picks a different material.
 model CatalogColor {
-  id         String          @id @default(cuid())
+  id         String           @id @default(cuid())
   materialId String
-  material   CatalogMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  material   CatalogMaterial  @relation(fields: [materialId], references: [id], onDelete: Cascade)
   name       String
   hex        String
   /// A CSS colour or linear-gradient used by swatches in the UI.
   style      String
   /// `solid`, `gradient`, or `whatever`; never inferred from the display name.
   mode       CatalogColorMode @default(solid)
-  active     Boolean         @default(true)
-  sortOrder  Int             @default(0)
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  active     Boolean          @default(true)
+  sortOrder  Int              @default(0)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
 
   @@unique([materialId, name])
   @@index([materialId, active, sortOrder])
@@ -399,19 +243,19 @@ model Comment {
 }
 
 model Notification {
-  id          String   @id @default(cuid())
+  id          String          @id @default(cuid())
   recipientId String
-  recipient   User     @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  recipient   User            @relation(fields: [recipientId], references: [id], onDelete: Cascade)
   storyId     Int?
-  story       Story?   @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  story       Story?          @relation(fields: [storyId], references: [id], onDelete: Cascade)
   /// A notification points at a print story OR a feature request (or neither,
   /// for a withdrawal). The two id columns are mutually exclusive in practice;
   /// the Activity feed routes to /story or /frr on whichever is set.
   featureId   Int?
   feature     FeatureRequest? @relation(fields: [featureId], references: [id], onDelete: Cascade)
   text        String
-  read        Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  read        Boolean         @default(false)
+  createdAt   DateTime        @default(now())
 
   @@index([recipientId, read])
   @@map("notification")

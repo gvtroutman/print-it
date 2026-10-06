@@ -23,8 +23,8 @@ Choose an action:
    q         quit
 > 
 Deploy c0ffee1 (replacing abc1234)? [y/N] → verifying signatures with <SANDBOX>/stub/cosign…
-  ✓ ppp-app:c0ffee1 signed by release-images on danileau/prettypleaseprint
-  ✓ ppp-migrate:c0ffee1 signed by release-images on danileau/prettypleaseprint
+  ✓ ppp-app:c0ffee1 signed by release-images on gvtroutman/print-it
+  ✓ ppp-migrate:c0ffee1 signed by release-images on gvtroutman/print-it
 → authenticating to ghcr.io…
 → pulling c0ffee1…
 stub: pulled

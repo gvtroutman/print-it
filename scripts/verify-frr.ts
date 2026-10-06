@@ -18,9 +18,9 @@ import {
   featureRef as refOf,
   nextFeatureStatus,
 } from "../src/lib/scope";
-import { ensureCredentials, signInWithPassword, usernameFor } from "./_accounts";
+import { actAs, createClient } from "./_accounts";
 
-const APP = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+const APP = process.env.APP_URL ?? "http://localhost:3000";
 
 let passed = 0;
 const failures: string[] = [];
@@ -94,13 +94,8 @@ function formIndexContaining(html: string, marker: string): number {
   return forms.findIndex((f) => f.includes(marker));
 }
 
-async function signIn(user: { id: string; email: string }): Promise<Browser> {
-  const b = new Browser();
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  await ensureCredentials(APP, user.id, usernameFor(user.email));
-  await signInWithPassword(b, APP, usernameFor(user.email));
-  return b;
-}
+/** A browser carrying the cookie `/hello` (or `/owner`, for the owner) would set. */
+const as = (user: { id: string; role: string }) => actAs(new Browser(), user);
 
 async function makeFeature(requesterId: string, title: string, status = "Requested") {
   return db.featureRequest.create({
@@ -113,30 +108,22 @@ async function makeFeature(requesterId: string, title: string, status = "Request
 
 async function main() {
   section("setup");
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
   await db.auditEvent.deleteMany();
   await db.notification.deleteMany();
   await db.featureComment.deleteMany();
   await db.featureRequest.deleteMany();
   await db.story.deleteMany();
-  await db.verification.deleteMany();
-  await db.session.deleteMany();
-  await db.invite.deleteMany();
   await db.user.deleteMany({ where: { role: "client" } });
 
   const admin = await db.user.findFirst({ where: { role: "admin" } });
   if (!admin) throw new Error("No admin — run npm run db:seed");
-  const ayla = await db.user.create({
-    data: { email: "ayla@office.example", name: "Ayla Berg", initials: "AY", role: "client", emailVerified: true, invitedById: admin.id },
-  });
-  const mallory = await db.user.create({
-    data: { email: "mallory@office.example", name: "Mallory Quint", initials: "MQ", role: "client", emailVerified: true, invitedById: admin.id },
-  });
+  const ayla = await createClient("Ayla Berg", { email: "ayla@office.example" });
+  const mallory = await createClient("Mallory Quint", { email: "mallory@office.example", initials: "MQ" });
 
-  const ruben = await signIn(admin);
-  const client = await signIn(ayla);
-  const other = await signIn(mallory);
-  console.info(`  admin=${admin.email}  client=${ayla.email}  third=${mallory.email}`);
+  const ruben = as(admin);
+  const client = as(ayla);
+  const other = as(mallory);
+  console.info(`  admin=${admin.name}  client=${ayla.name}  third=${mallory.name}`);
 
   // ------------------------------------------------------------------
   section("filing a request through the form");
@@ -151,7 +138,7 @@ async function main() {
   });
   const filed = await db.featureRequest.findFirst({ where: { title: "Dark mode for the board" } });
   check("it is stored", !!filed, "the request was not created");
-  check("owned by the requester, from the session", filed?.requesterId === ayla.id);
+  check("owned by the requester, from the name cookie", filed?.requesterId === ayla.id);
   check("it starts Requested", filed?.status === "Requested", String(filed?.status));
   check("the priority and category are kept", filed?.priority === "high" && filed?.category === "ui");
   check("the owner is notified",
@@ -159,7 +146,7 @@ async function main() {
   check("and it is audited",
         (await db.auditEvent.count({ where: { action: "feature.created", subject: refOf(filed!.id) } })) === 1);
 
-  // A posted requesterId is ignored — the session decides.
+  // A posted requesterId is ignored — the cookie decides.
   const spoofPage = await (await client.go(`${APP}/frr/new`)).text();
   await client.submit(`${APP}/frr/new`, spoofPage, formIndexContaining(spoofPage, 'name="title"'), {
     title: "Filed as someone else", description: "x", priority: "low", category: "other",
@@ -171,8 +158,11 @@ async function main() {
 
   // ------------------------------------------------------------------
   section("the queue is owner-only");
-  const denied = await client.go(`${APP}/frr/queue`);
-  check("a client gets 404, not 403", denied.status === 404, `status ${denied.status}`);
+  const denied = await client.raw(`${APP}/frr/queue`);
+  check("a client is sent to the owner password prompt",
+        denied.status >= 300 && denied.status < 400 &&
+        (denied.headers.get("location") ?? "").includes("/owner"),
+        `status ${denied.status} ${denied.headers.get("location") ?? ""}`);
   const queue = await (await ruben.go(`${APP}/frr/queue`)).text();
   check("the owner sees the request waiting", rendered(queue).includes("Dark mode for the board"));
 
@@ -267,6 +257,16 @@ async function main() {
         `error was "${declineErr}" — empty means the action never ran`);
   check("and the request it was scraped from is untouched",
         (await db.featureRequest.findUnique({ where: { id: stillNew.id } }))?.status === "Requested");
+
+  // The same real form, replayed by the requester rather than the owner. It is
+  // her own request, so only `requireAdmin` inside the action stands between
+  // her and declining it.
+  const selfDecline = await client.submit(`${APP}/frr/${stillNew.id}`, declinePage, dForm, {});
+  check("a client replaying the owner's decline form changes nothing",
+        (await db.featureRequest.findUnique({ where: { id: stillNew.id } }))?.status === "Requested");
+  check("and is sent to the owner password prompt",
+        (selfDecline.headers.get("location") ?? "").includes("/owner"),
+        `status ${selfDecline.status} ${selfDecline.headers.get("location") ?? ""}`);
 
   // ------------------------------------------------------------------
   section("the conversation");

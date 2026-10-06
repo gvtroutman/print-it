@@ -36,8 +36,7 @@ const LENSES: Array<{ key: Lens; label: string; actions?: string[] }> = [
     key: "access",
     label: "Who got in",
     actions: [
-      "invite.sent", "invite.resent", "invite.revoked", "invite.accepted",
-      "invite.rejected", "auth.signed_in", "auth.signed_out", "user.role_changed",
+      "name.added", "name.picked", "owner.unlocked", "owner.unlock_refused", "owner.locked",
     ],
   },
   {
@@ -63,8 +62,8 @@ const REFUSALS = new Set<string>(REFUSAL_ACTIONS);
 
 function tone(action: string): string {
   if (REFUSALS.has(action)) return "bg-cherry text-ink";
-  if (action.startsWith("auth.")) return "bg-aqua-wash text-ink";
-  if (action.startsWith("invite.")) return "bg-mint-wash text-ink";
+  if (action.startsWith("owner.")) return "bg-aqua-wash text-ink";
+  if (action.startsWith("name.")) return "bg-mint-wash text-ink";
   return "bg-cream-2 text-ink-2";
 }
 
@@ -73,7 +72,7 @@ export default async function AuditPage({
 }: {
   searchParams: Promise<{ lens?: string }>;
 }) {
-  const admin = await requireAdmin();
+  const admin = await requireAdmin("/admin/audit");
   const { lens: raw } = await searchParams;
   const lens = (LENSES.find((l) => l.key === raw)?.key ?? "all") as Lens;
   const actions = LENSES.find((l) => l.key === lens)?.actions;
@@ -171,7 +170,7 @@ export default async function AuditPage({
                     </span>
                   </td>
                   <td className="px-[17.6px] py-[11px] align-top text-[13.5px]">
-                    {e.actorEmail ?? <span className="text-ink-3">—</span>}
+                    {e.actorName ?? <span className="text-ink-3">—</span>}
                   </td>
                   <td className="px-[17.6px] py-[11px] align-top text-[13.5px]">
                     <span className="font-mono text-[12.5px]">{e.subject ?? "—"}</span>

@@ -167,9 +167,9 @@ case "$url" in
     # The one listing GitHub gates even for a public package.
     [ "$who" = anon ] && echo 401 >"$S/http/packages.anon"
     respond packages "$S/packages.json" ;;
-  "https://api.github.com/repos/danileau/prettypleaseprint/releases?per_page=100")
+  "https://api.github.com/repos/gvtroutman/print-it/releases?per_page=100")
     respond releases "$S/releases.json" ;;
-  https://api.github.com/repos/danileau/prettypleaseprint/compare/*"?per_page=1&page=2")
+  https://api.github.com/repos/gvtroutman/print-it/compare/*"?per_page=1&page=2")
     # Only the cheap form is served: without the paging suffix the real answer
     # is megabytes, so asking for it is a bug worth failing on.
     pair="${url##*/compare/}"; pair="${pair%%\?*}"
@@ -405,7 +405,7 @@ t() {
   fi
 }
 
-REPO_URL="https://api.github.com/repos/danileau/prettypleaseprint"
+REPO_URL="https://api.github.com/repos/gvtroutman/print-it"
 NOTES_PROMPT="I have read the upgrade notes above. Continue? [y/N]"
 BLIND_PROMPT="Continue without having seen them? [y/N]"
 
@@ -519,10 +519,10 @@ case_07_unpublished_refused() {
   rc_is 1
   has "✗ v0.4.0 is not fully published yet — missing: ppp-migrate:v0.4.0"
   has "A version tag exists a few minutes before its images do. Wait for the build:"
-  has "https://github.com/danileau/prettypleaseprint/actions/workflows/release-images.yml"
+  has "https://github.com/gvtroutman/print-it/actions/workflows/release-images.yml"
   has "then run the wizard again. Nothing was changed."
   hasnt "[y/N]"; hasnt "Upgrade notes"
-  log_has docker.log "manifest inspect ghcr.io/danileau/ppp-app:v0.4.0"
+  log_has docker.log "manifest inspect ghcr.io/gvtroutman/ppp-app:v0.4.0"
   not_pulled; env_untouched
   log_hasnt docker.log "login"
 }
@@ -532,7 +532,7 @@ case_08_published_proceeds() {
   run $'\n1\ny\ny\n'
   deployed v0.4.0
   log_count docker.log "manifest inspect" 2
-  log_has docker.log "manifest inspect ghcr.io/danileau/ppp-migrate:v0.4.0"
+  log_has docker.log "manifest inspect ghcr.io/gvtroutman/ppp-migrate:v0.4.0"
   hasnt "could not check"
 }
 
@@ -540,7 +540,7 @@ case_09_denied_is_not_missing() {
   new_sandbox v0.1.0
   echo denied >"$ST/manifests/ppp-app:v0.4.0"
   run $'\n1\ny\ny\n'
-  has 'could not check whether ppp-app:v0.4.0 is published (Get "https://ghcr.io/v2/danileau/ppp-app:v0.4.0": denied) — the pull will tell.'
+  has 'could not check whether ppp-app:v0.4.0 is published (Get "https://ghcr.io/v2/gvtroutman/ppp-app:v0.4.0": denied) — the pull will tell.'
   count_is "[y/N]" 2
   deployed v0.4.0
 }
@@ -553,8 +553,8 @@ case_10_sha_target_makes_no_manifest_call() {
   log_hasnt docker.log "manifest"
   # What was verified is what was deployed: the two target images, nothing else.
   log_count cosign.log "" 2
-  log_has cosign.log " ghcr.io/danileau/ppp-app:c0ffee1"
-  log_has cosign.log " ghcr.io/danileau/ppp-migrate:c0ffee1"
+  log_has cosign.log " ghcr.io/gvtroutman/ppp-app:c0ffee1"
+  log_has cosign.log " ghcr.io/gvtroutman/ppp-migrate:c0ffee1"
   # And the login was given the token, on stdin.
   [ "$(cat "$ST/login-stdin" 2>/dev/null)" = "$TOKEN_VALUE" ] || fail "docker login did not get the token on stdin"
 }
@@ -574,7 +574,7 @@ notes_v01_to_v04() {
            "    │ # Upgrading now" \
            "    │ export THUMBS=1" \
            "    │ Then deploy." \
-           "All release notes: https://github.com/danileau/prettypleaseprint/releases" \
+           "All release notes: https://github.com/gvtroutman/print-it/releases" \
            "$NOTES_PROMPT"
   # Nothing outside an Upgrading section, nothing a fence was hiding, nothing
   # from a draft.
@@ -706,7 +706,7 @@ case_17_sha_older_than_every_release() {
 undetermined() {  # <current> <target> <reason>
   in_order "⚠ could not work out which releases lie between $1 and $2: $3." \
            "Upgrade notes were NOT shown. Read them before continuing:" \
-           "https://github.com/danileau/prettypleaseprint/releases" \
+           "https://github.com/gvtroutman/print-it/releases" \
            "$BLIND_PROMPT"
   hasnt "$NOTES_PROMPT"
 }
@@ -874,7 +874,7 @@ case_26b_failed_pull_restores_the_tag() {
   has "✗ pull failed — .env.docker restored to abc1234, nothing was restarted"
   log_has docker.log "pull saw PPP_TAG=\"c0ffee1\""
   log_hasnt docker.log " up -d"
-  log_has docker.log "login ghcr.io -u danileau --password-stdin"
+  log_has docker.log "login ghcr.io -u gvtroutman --password-stdin"
   log_has docker.log "logout ghcr.io"
   env_untouched
 }
@@ -1006,12 +1006,12 @@ import json, sys
 data = json.load(open(sys.argv[1]))
 for r in data:
     if r["tag_name"] == "v0.4.0":
-        r["html_url"] = "https://github.com/danileau/prettypleaseprint/releases/tag/v0.4.0"
+        r["html_url"] = "https://github.com/gvtroutman/print-it/releases/tag/v0.4.0"
 json.dump(data, open(sys.argv[1], "w"))
 PY
   run $'\n1\nn\n'
   # 200 lines: the heading and 199 steps. 101 are left.
-  in_order "    │ step 199" "    │ … 101 more lines — see https://github.com/danileau/prettypleaseprint/releases/tag/v0.4.0" "$NOTES_PROMPT"
+  in_order "    │ step 199" "    │ … 101 more lines — see https://github.com/gvtroutman/print-it/releases/tag/v0.4.0" "$NOTES_PROMPT"
   hasnt "step 200"
 }
 
@@ -1093,8 +1093,8 @@ case_41_a_429_from_compare_is_the_rate_limit() {
 
 case_42_other_spellings_of_a_missing_image() {
   local text
-  for text in "ERROR: ghcr.io/danileau/ppp-migrate:v0.4.0: not found" \
-              "no such manifest: ghcr.io/danileau/ppp-migrate:v0.4.0" \
+  for text in "ERROR: ghcr.io/gvtroutman/ppp-migrate:v0.4.0: not found" \
+              "no such manifest: ghcr.io/gvtroutman/ppp-migrate:v0.4.0" \
               "MANIFEST_UNKNOWN: manifest unknown"; do
     new_sandbox v0.1.0
     printf '%s\n' "$text" >"$ST/manifests/ppp-migrate:v0.4.0.err"

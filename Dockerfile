@@ -34,11 +34,6 @@ RUN npx prisma generate
 # `next build` imports modules that read DATABASE_URL at module scope. Nothing
 # connects during the build; this only has to parse.
 ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build"
-# Never used to sign anything: the auth module is imported during the build to
-# collect route data, and Better Auth wants a secret present when it is. The
-# real one arrives as runtime environment, and server code reads process.env at
-# request time rather than having it inlined.
-ENV BETTER_AUTH_SECRET="build-time-placeholder-never-signs-anything"
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 

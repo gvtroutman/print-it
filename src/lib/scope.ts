@@ -11,7 +11,6 @@ import type { FeatureStatus, Prisma, StoryStatus } from "@prisma/client";
 export type Actor = {
   id: string;
   name: string;
-  email: string;
   initials: string;
   role: "client" | "admin";
 };

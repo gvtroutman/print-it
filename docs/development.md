@@ -7,10 +7,10 @@
 | | |
 | --- | --- |
 | Framework | Next.js 15 (App Router), React 19, TypeScript |
-| Auth | [Better Auth](https://better-auth.com) 1.7 — username/password, passkeys, breach check, admin plugin |
+| Identity | none to speak of — a signed name cookie and an owner password, in `src/lib/identity*.ts`. See [How identity works](authentication.md) |
 | Data | Prisma 6 → PostgreSQL 17 |
 | Styling | Tailwind v4, design tokens from the handoff as CSS variables |
-| Local infra | Docker Compose: Postgres, Mailpit (mail). Model files go to `./data/uploads` — there is no storage service |
+| Local infra | Docker Compose: Postgres. Model files go to `./data/uploads` — there is no storage service, and no mail |
 
 Chosen to match the existing house style (`huere-siech` is Next 15 + Prisma,
 `danileau.com` is React + TS + Tailwind) and the handoff's own suggested stack.
@@ -18,22 +18,20 @@ Chosen to match the existing house style (`huere-siech` is Next 15 + Prisma,
 ## Getting started
 
 ```bash
-cp .env.example .env          # then set BETTER_AUTH_SECRET: openssl rand -base64 32
-docker compose up -d          # postgres :5432, mailpit :8025
+cp .env.example .env          # then set APP_SECRET (openssl rand -base64 32) and ADMIN_PASSWORD
+docker compose up -d          # postgres :5432
 npm install
 npm run db:migrate
-npm run db:seed               # creates the one admin from ADMIN_EMAIL/ADMIN_NAME
+npm run db:seed               # creates the printer owner from ADMIN_NAME
 npm run dev
 ```
 
-`npm run db:seed` prints a one-use link for the admin to choose a username and
-a password — open it, then invite people from `/admin/invites`. In development
-every outgoing email is caught by **Mailpit at http://localhost:8025**, so
-invitation and reset links are clickable there.
+Open http://localhost:3000/hello and pick or add a name. The owner pages are at
+`/owner`, behind `ADMIN_PASSWORD`. There is nothing to click in a mailbox: the
+app sends no email.
 
 ```bash
 npm run verify:models         # upload validator vs. hostile fixtures (no server needed)
-npm run verify:auth           # registration, sign-in and password reset, end to end
 npm run verify:upload         # upload -> board -> story, end to end
 npm run verify:import         # a model from a link, against a stand-in for Printables
 npm run verify:queue          # the admin queue, status flow and conversation
@@ -41,34 +39,25 @@ npm run verify:frr            # the feature-request track (file, triage, the flo
 npm run verify:benefits       # the owner-managed benefits (tip) catalogue
 npm run verify:catalog        # the owner-managed material/colour catalogue
 npm run verify:api            # the JSON API, the OpenAPI document and the console
-npm run verify:passkey        # WebAuthn ceremonies in a real browser
-npm run probe:security        # 122 OWASP-mapped security probes
+npm run probe:security        # OWASP-mapped security probes
 ```
 
 ## Verifying it
 
-`npm run verify:auth` drives the real HTTP surface — including submitting the
-server-action forms the way a browser with JavaScript disabled does — and reads
-delivered mail out of Mailpit. Nothing is stubbed. It checks that:
+There is no sign-in to drive, so the suites do not click through `/hello`.
+They mint the same `ppp.who` and `ppp.owner` cookies the app does, by importing
+[`src/lib/identity-token.ts`](../src/lib/identity-token.ts) (the shared
+plumbing is `scripts/_accounts.ts`), and then go through the real HTTP surface
+for everything those cookies unlock. Nothing else is stubbed. `probe:security`
+covers the doors themselves — `/hello` and `/owner`.
 
-1. An uninvited address is refused, with **no account** and a row in the
-   audit trail.
-2. The admin can invite through the UI and the mail arrives — and posting the
-   invited address at the sign-up endpoint **without the link** is refused with
-   the same answer a stranger gets.
-3. The invitee registers through the link, lands signed in, and the account is
-   stamped from the invite (role, initials, inviter) rather than the request.
-4. The link is single-use.
-5. A client gets 404 on the admin surface and cannot drive its actions.
-6. Posted `role`/`initials` are ignored.
-7. The database itself rejects a second admin.
+That only works when the suites and the app agree on `APP_SECRET` and
+`ADMIN_PASSWORD`. `npm run env:container` copies both out of `.env.docker`; a
+mismatch shows up as every request answering 401, or every owner page bouncing
+to `/owner`.
 
-It is destructive — point it at a development database only.
-
-The WebAuthn ceremonies are `verify:passkey`'s: a headless Chrome with a
-virtual authenticator attached over the DevTools protocol registers a passkey
-and signs in with it, so the browser half is real. **Not covered** is a
-physical authenticator — a phone, a security key, a platform's own prompt.
+The suites are destructive — they delete users and tickets — so point them at
+a development database only.
 
 ## Continuous integration
 
@@ -79,7 +68,7 @@ as four gates that can be required by name in branch protection:
 | --- | --- |
 | `guard` | typecheck, the secret scanner over every tracked file, the markdown link check, and the wizards' own tests (`scripts/tests/*.test.sh`, each in a sandbox with stubbed `docker`, `gh` and `curl`) |
 | `models` | the upload validator against hostile fixtures — no server needed |
-| `verify` | raises the real compose stack and runs all ten integration suites against the built image, **including the WebAuthn ceremonies in a headless Chrome** |
+| `verify` | raises the real compose stack and runs all eight integration suites against the built image |
 | `trivy` | filesystem scan for vulnerabilities, secrets and misconfiguration; HIGH/CRITICAL fail |
 
 `verify` uses docker compose rather than GitHub `services:` so that running the
@@ -133,19 +122,19 @@ One script does that the same way every time:
 
 ```bash
 scripts/full-test.sh                              # everything; exit 0 only if all of it passed
-scripts/full-test.sh --only "verify:auth verify:api"   # a subset, while iterating
+scripts/full-test.sh --only "verify:upload verify:api"   # a subset, while iterating
 scripts/full-test.sh --no-build                   # reuse the images of the last run
 scripts/full-test.sh --restore                    # undo what a killed run left behind
 ```
 
 It runs the three cheap gates, a `trivy` filesystem scan if `trivy` is
 installed, and `verify:models`; then raises the stack, waits for
-`/api/health`, runs the ten integration suites — all of them, even after one
+`/api/health`, runs the eight integration suites — all of them, even after one
 fails — and the two image pins CI keeps (no npm in the runtime images; the
 migrator still runs without it).
 
 It is CI's `verify` job in what matters: the same three compose files, the
-same `mailcatcher` profile, the same suites in the same order. It differs
+same suites in the same order. It differs
 where a developer's machine has to be protected: the compose project is
 `ppp-fulltest` rather than the default, the images are tagged
 `full-test-local` rather than `latest`, `DATA_ROOT` is a throwaway directory
@@ -154,8 +143,8 @@ outside the checkout, and the health wait is 120 seconds rather than 90.
 - **It refuses to start if a ppp stack exists on the machine**, running or
   stopped. The compose file pins the container names, so only one stack can
   exist, and the test would have to remove yours to raise its own. It will not:
-  take yours down first. It also refuses if port 3000, 5432, 1025 or 8025 is
-  taken. `--preflight` runs only these checks.
+  take yours down first. It also refuses if a port it needs (3000, 5432, or
+  the Printables stand-in's) is taken. `--preflight` runs only these checks.
 - **It raises its own compose project, `ppp-fulltest`**, never `ppp`, so the
   teardown cannot reach a project it did not create; and before the first suite
   it checks that the app container belongs to that project. The suites delete

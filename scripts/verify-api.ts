@@ -22,10 +22,12 @@ import "./_env";
  * DESTRUCTIVE: wipes users and stories. Development database only.
  */
 import { db } from "../src/lib/db";
+import { OWNER_COOKIE, WHO_COOKIE } from "../src/lib/identity-rules";
+import { signWho } from "../src/lib/identity-token";
 import { storyRef } from "../src/lib/scope";
-import { ensureCredentials, signInWithPassword, usernameFor } from "./_accounts";
+import { actAs, createClient } from "./_accounts";
 
-const APP = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+const APP = process.env.APP_URL ?? "http://localhost:3000";
 
 let passed = 0;
 const failures: string[] = [];
@@ -37,14 +39,11 @@ const section = (t: string) =>
   console.info(`\n── ${t} ${"─".repeat(Math.max(0, 54 - t.length))}`);
 
 /**
- * A cookie jar, plus the bearer token the sign-in handed back.
- *
- * Both are kept so the same client can be driven either way — which is the
- * only honest way to assert that the two carry identical authority.
+ * A cookie jar. The identity cookies are the only credential the API has:
+ * there is no bearer token any more, for a script or anybody else.
  */
 class Client {
   jar = new Map<string, string>();
-  token: string | null = null;
 
   private store(r: Response) {
     for (const line of r.headers.getSetCookie()) {
@@ -55,8 +54,6 @@ class Client {
       if (!v || line.includes("Max-Age=0")) this.jar.delete(k);
       else this.jar.set(k, v);
     }
-    const issued = r.headers.get("set-auth-token");
-    if (issued) this.token = issued;
   }
 
   /** Cookie-carried, the way a browser does it. */
@@ -69,18 +66,6 @@ class Client {
     const r = await fetch(url, { ...init, redirect: "manual", headers });
     this.store(r);
     return r;
-  }
-
-  /** Bearer-carried, the way a script does it. No cookie, no Origin. */
-  bearer(url: string, init: RequestInit = {}): Promise<Response> {
-    return fetch(url, {
-      ...init,
-      redirect: "manual",
-      headers: {
-        ...((init.headers as Record<string, string>) ?? {}),
-        authorization: `Bearer ${this.token ?? ""}`,
-      },
-    });
   }
 
   async json<T = Record<string, unknown>>(
@@ -102,13 +87,11 @@ class Client {
   }
 }
 
-async function signIn(user: { id: string; email: string }): Promise<Client> {
-  const c = new Client();
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
-  await ensureCredentials(APP, user.id, usernameFor(user.email));
-  await signInWithPassword(c, APP, usernameFor(user.email));
-  return c;
-}
+/** A client carrying the cookie `/hello` (or `/owner`, for the owner) would set. */
+const as = (user: { id: string; role: string }) => actAs(new Client(), user);
+
+/** The jar as a `cookie` header, for a bare `fetch` that sends no Origin. */
+const cookieOf = (c: Client) => [...c.jar].map(([k, v]) => `${k}=${v}`).join("; ");
 
 async function makeStory(uploaderId: string, title: string, status = "Requested") {
   return db.story.create({
@@ -132,36 +115,26 @@ type Doc = {
 
 async function main() {
   section("setup");
-  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
   await db.auditEvent.deleteMany();
   await db.notification.deleteMany();
   await db.story.deleteMany();
-  await db.verification.deleteMany();
-  await db.session.deleteMany();
-  await db.invite.deleteMany();
   await db.user.deleteMany({ where: { role: "client" } });
 
   const admin = await db.user.findFirst({ where: { role: "admin" } });
   if (!admin) throw new Error("No admin — run npm run db:seed");
-  const ayla = await db.user.create({
-    data: { email: "ayla@office.example", name: "Ayla Berg", initials: "AY",
-            role: "client", emailVerified: true, invitedById: admin.id },
-  });
-  const mallory = await db.user.create({
-    data: { email: "mallory@office.example", name: "Mallory Quint", initials: "MQ",
-            role: "client", emailVerified: true, invitedById: admin.id },
-  });
+  const ayla = await createClient("Ayla Berg", { email: "ayla@office.example" });
+  const mallory = await createClient("Mallory Quint", { email: "mallory@office.example", initials: "MQ" });
 
-  const ruben = await signIn(admin);
-  const client = await signIn(ayla);
-  const other = await signIn(mallory);
-  console.info(`  admin=${admin.email}  client=${ayla.email}  third=${mallory.email}`);
+  const ruben = as(admin);
+  const client = as(ayla);
+  const other = as(mallory);
+  console.info(`  admin=${admin.name}  client=${ayla.name}  third=${mallory.name}`);
 
   // ------------------------------------------------------------------
-  section("an unauthenticated caller is answered, not redirected");
+  section("a caller with no name is answered, not redirected");
 
-  // The whole reason middleware exempts /api from the sign-in redirect: an
-  // XHR that follows a 307 to an HTML page reports a mystifying success.
+  // The whole reason middleware exempts /api from the name-picker redirect:
+  // an XHR that follows a 307 to an HTML page reports a mystifying success.
   for (const [method, path] of [
     ["GET", "/api/stories"],
     ["GET", "/api/stories/1"],
@@ -175,38 +148,53 @@ async function main() {
           r.status === 401 && body.trimStart().startsWith("{"),
           `status ${r.status} body ${body.slice(0, 80)}`);
   }
+  const told = await (await fetch(`${APP}/api/stories`)).json().catch(() => ({}));
+  check("and the 401 says what to do about it",
+        (told as { error?: string }).error === "Pick your name first.", JSON.stringify(told));
 
-  // Enabling Better Auth's openAPI plugin mounts an endpoint that answers the
-  // whole auth surface to anybody, session or not. The app calls that
-  // generator in process and never over HTTP, so middleware shuts the route —
-  // for everyone, not merely for strangers, since nothing legitimate uses it.
-  for (const [who, as] of [["a stranger", null], ["a signed-in caller", client]] as const) {
-    const r = as
-      ? await as.raw(`${APP}/api/auth/open-api/generate-schema`)
-      : await fetch(`${APP}/api/auth/open-api/generate-schema`, { redirect: "manual" });
-    check(`the auth plugin's schema endpoint is 404 to ${who}`,
-          r.status === 404, `status ${r.status}`);
+  /*
+   * A cookie is only an identity if this app signed it. Each of these carries
+   * one that middleware lets through — it checks presence, not the MAC — so
+   * the 401 is `currentUser` doing its job inside the handler.
+   */
+  const withCookie = (cookie: string) =>
+    fetch(`${APP}/api/stories`, { headers: { cookie }, redirect: "manual" });
+  const [aylaId, aylaMac] = [ayla.id, signWho(ayla.id).slice(ayla.id.length + 1)];
+  for (const [label, cookie] of [
+    ["an unsigned name cookie", `${WHO_COOKIE}=${aylaId}`],
+    ["a name cookie with a forged MAC", `${WHO_COOKIE}=${aylaId}.${"A".repeat(aylaMac.length)}`],
+    ["a real MAC moved onto another id", `${WHO_COOKIE}=${mallory.id}.${aylaMac}`],
+    // Signed correctly, by this app's own secret — but for the owner's row.
+    // `ppp.who` resolves to client rows only, so this is nobody at all.
+    ["a correctly signed name cookie for the owner's row", `${WHO_COOKIE}=${signWho(admin.id)}`],
+    ["an owner cookie that was never issued", `${OWNER_COOKIE}=${Date.now() + 3_600_000}.forged`],
+  ] as const) {
+    const r = await withCookie(cookie);
+    check(`${label} is 401`, r.status === 401, `status ${r.status}`);
   }
-  check("and its CDN-loading reference page is off",
-        (await fetch(`${APP}/api/auth/reference`, { redirect: "manual" })).status === 404);
+
+  // Sign-in's whole HTTP surface is gone, not merely unlinked.
+  for (const path of ["/api/auth/sign-in/username", "/api/auth/get-session", "/api/auth/open-api/generate-schema"]) {
+    const r = await fetch(`${APP}${path}`, { method: path.includes("sign-in") ? "POST" : "GET", redirect: "manual" });
+    check(`${path} is gone`, r.status === 404, `status ${r.status}`);
+  }
 
   const anonDocs = await fetch(`${APP}/docs`, { redirect: "manual" });
-  check("/docs sends a signed-out visitor to sign in",
+  check("/docs sends a caller with no name to pick one",
         anonDocs.status >= 300 && anonDocs.status < 400 &&
-        (anonDocs.headers.get("location") ?? "").includes("/signin"),
+        (anonDocs.headers.get("location") ?? "").includes("/hello"),
         `status ${anonDocs.status} → ${anonDocs.headers.get("location")}`);
 
   // ------------------------------------------------------------------
   section("the document describes the app that is running");
 
   const { status: docStatus, body: doc } = await client.json<Doc>(`${APP}/api/openapi.json`);
-  check("a signed-in client can read it", docStatus === 200, `status ${docStatus}`);
+  check("a client with a name can read it", docStatus === 200, `status ${docStatus}`);
   check("it is OpenAPI 3.1", doc.openapi === "3.1.0", String(doc.openapi));
   check("it names this deployment as the server",
         doc.servers?.[0]?.url === APP, JSON.stringify(doc.servers));
-  check("it declares both ways to carry a session",
-        Boolean(doc.components?.securitySchemes?.sessionCookie) &&
-        Boolean(doc.components?.securitySchemes?.bearerAuth),
+  check("it declares the two identity cookies, and nothing else",
+        Object.keys(doc.components?.securitySchemes ?? {}).sort().join(",") === "ownerCookie,whoCookie",
         Object.keys(doc.components?.securitySchemes ?? {}).join(","));
 
   const paths = Object.keys(doc.paths ?? {});
@@ -222,31 +210,18 @@ async function main() {
     check(`it documents ${expected}`, paths.includes(expected));
   }
 
-  const authPaths = paths.filter((p) => p.startsWith("/api/auth/"));
-  check("Better Auth's own surface is folded in, not re-typed",
-        authPaths.length >= 10, `${authPaths.length} auth paths`);
-  check("and every one is mounted where this app mounts it",
-        authPaths.every((p) => p.startsWith("/api/auth/")),
-        authPaths.slice(0, 3).join(" "));
-  check("the sign-in that hands out a bearer token is in there",
-        paths.includes("/api/auth/sign-in/username"),
-        authPaths.filter((p) => p.includes("sign-in")).join(" "));
+  check("nothing from the old sign-in surface is still documented",
+        !paths.some((p) => p.startsWith("/api/auth/")),
+        paths.filter((p) => p.startsWith("/api/auth/")).slice(0, 3).join(" "));
 
   // The check that catches drift: ask for every documented path and refuse a
   // 404. A description of an endpoint that is not there is worse than none.
   //
-  // Unauthenticated, on purpose. `withActor` answers 401 before it looks at a
+  // With no name, on purpose. `withActor` answers 401 before it looks at a
   // path parameter or touches the database, so "not 404" proves the route is
   // mounted without a single row changing — which matters, because driving
-  // this loop with a live session would post to `/api/auth/sign-out` and
-  // every other verb the document lists.
-  //
-  // Better Auth's half is deliberately NOT probed: those paths come from its
-  // own router rather than from anything written here, so there is nothing to
-  // drift, and hammering sixty auth endpoints to prove it would trip the rate
-  // limiter and muddy the audit trail. What is asserted about them is that
-  // they are rebased onto this app's mount point, above.
-  const ownPaths = paths.filter((p) => !p.startsWith("/api/auth/"));
+  // this loop as somebody would post to every verb the document lists.
+  const ownPaths = paths;
   const missing: string[] = [];
   for (const path of ownPaths) {
     const methods = Object.keys(doc.paths?.[path] ?? {}).filter((m) =>
@@ -571,35 +546,15 @@ async function main() {
   check("an empty body marks the whole feed read", all.body.unread === 0, JSON.stringify(all.body));
 
   // ------------------------------------------------------------------
-  section("a bearer token is the session, and nothing more");
+  section("the cookie is the only credential");
 
-  check("sign-in handed one back", Boolean(client.token), String(client.token).slice(0, 12));
-
-  const viaToken = await client.bearer(`${APP}/api/stories`);
-  check("it authenticates without a cookie", viaToken.status === 200, `status ${viaToken.status}`);
-
-  const scopedByToken = await client.bearer(`${APP}/api/stories/${theirs.id}`);
-  check("and grants no more than the cookie does",
-        scopedByToken.status === 404, `status ${scopedByToken.status}`);
-
-  const garbage = await fetch(`${APP}/api/stories`, {
-    headers: { authorization: "Bearer not-a-real-token" },
+  // The bearer plugin went with sign-in. An Authorization header carrying the
+  // very value that works as a cookie must not work as a token.
+  const asHeader = await fetch(`${APP}/api/stories`, {
+    headers: { authorization: `Bearer ${client.jar.get(WHO_COOKIE) ?? ""}` },
   });
-  check("an invented token is 401", garbage.status === 401, `status ${garbage.status}`);
-
-  // Signing out has to kill both, or the token is a way back in to an account
-  // whose owner believes they have left.
-  const parting = client.token;
-  await client.raw(`${APP}/api/auth/sign-out`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: "{}",
-  });
-  const afterSignOut = await fetch(`${APP}/api/stories`, {
-    headers: { authorization: `Bearer ${parting}` },
-  });
-  check("signing out revokes the bearer token too",
-        afterSignOut.status === 401, `status ${afterSignOut.status}`);
+  check("a name cookie's value sent as a bearer token is 401",
+        asHeader.status === 401, `status ${asHeader.status}`);
 
   // ------------------------------------------------------------------
   section("cross-origin writes are refused");
@@ -613,11 +568,10 @@ async function main() {
   check("and nothing moved",
         (await db.story.findUnique({ where: { id: started.id } }))?.status === "Printing");
 
-  // A token from an account that is already signed in — re-signing anybody in
-  // resets their password, and `revokeSessionsOnPasswordReset` would take the
-  // session this suite is still holding out from under it.
+  // The cookie, sent by hand with no Origin header — which is what a script
+  // calling the API with a copied `ppp.who` looks like.
   const noOrigin = await fetch(`${APP}/api/stories`, {
-    headers: { authorization: `Bearer ${other.token}` },
+    headers: { cookie: cookieOf(other) },
   });
   check("a request with no Origin at all is fine — that is curl",
         noOrigin.status === 200, `status ${noOrigin.status}`);
@@ -627,7 +581,7 @@ async function main() {
 
   const console_ = await ruben.raw(`${APP}/docs`);
   const html = await console_.text();
-  check("/docs serves a document to a signed-in caller",
+  check("/docs serves a document to a caller with a name",
         console_.status === 200 &&
         (console_.headers.get("content-type") ?? "").includes("text/html"),
         `status ${console_.status}`);
