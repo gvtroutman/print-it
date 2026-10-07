@@ -11,26 +11,25 @@
 # devDependencies just to apply a migration at boot.
 
 # ---------------------------------------------------------------------------
-FROM node:22-alpine AS deps
+FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Prisma's query engine is a native binary: it needs OpenSSL, and glibc shims
 # on Alpine.
 RUN apk add --no-cache openssl libc6-compat
 
+# Installed here rather than in a stage of its own: copying node_modules from
+# one stage into another took 50 s on the NAS's disk, longer than most of the
+# build steps. The layer still only rebuilds when the lockfile changes. The
+# cache mount keeps npm's download cache between builds without putting it in
+# the image, so a lockfile change only fetches what is new.
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 
-# ---------------------------------------------------------------------------
-FROM node:22-alpine AS builder
-WORKDIR /app
-RUN apk add --no-cache openssl libc6-compat
-
-COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-RUN npx prisma generate
-
+# `npm run build` runs `prisma generate` itself, so it is not run separately.
+#
 # `next build` imports modules that read DATABASE_URL at module scope. Nothing
 # connects during the build; this only has to parse.
 ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build"
@@ -40,7 +39,10 @@ ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build"
 # request time rather than having it inlined.
 ENV BETTER_AUTH_SECRET="build-time-placeholder-never-signs-anything"
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+# Next keeps its compiler cache in .next/cache. A cache mount carries it from
+# one build to the next (compiling takes over two minutes from cold on the NAS)
+# and leaves it out of every image.
+RUN --mount=type=cache,target=/app/.next/cache npm run build
 
 # ---------------------------------------------------------------------------
 # Runs once per deploy, before the app starts.
@@ -60,9 +62,10 @@ RUN apk add --no-cache openssl libc6-compat
 # because the root package.json's `overrides` have to come across. Without
 # them the Prisma CLI pulls a vulnerable deepmerge-ts through @prisma/config
 # — which is a HIGH that only shows up when you scan the published image.
-# Versions are read from the real manifest so nothing can drift.
+# Versions are read from the real manifest so nothing can drift. The cache
+# mount is the same npm download cache the builder uses.
 COPY package.json /tmp/package.json
-RUN node -e "\
+RUN --mount=type=cache,target=/root/.npm node -e "\
       const p = require('/tmp/package.json'); \
       require('fs').writeFileSync('package.json', JSON.stringify({ \
         name: 'ppp-migrate', private: true, \

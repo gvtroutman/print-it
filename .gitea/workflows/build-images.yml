@@ -38,18 +38,39 @@ jobs:
             target: runner
           - name: ppp-migrate
             target: migrator
+    env:
+      # The build cache (npm downloads, Next's compiler cache, unchanged
+      # layers) is what makes a build fast, so it is kept, but only up to this
+      # size: least recently used goes first. One app build's worth is ~1.5 GB.
+      CACHE_CAP: 2gb
+      # The disk Docker and the live app's data share.
+      DATA_DIR: /DATA
+      MIN_FREE_GB: 4
     steps:
       - uses: actions/checkout@v4
 
       # The NAS disk is small and is also where the live app keeps its
-      # database and uploads. Start from an empty build cache rather than
-      # trusting the last run to have left room: a run that filled the disk
-      # never reached its own clean-up. Cache a build is still using is
-      # skipped, so the other matrix job is safe.
+      # database and uploads. Trim the build cache to its cap before building
+      # rather than trusting the last run to have left room: a run that filled
+      # the disk never reached its own clean-up. Cache a build is still using
+      # is skipped, so the other matrix job is safe.
+      #
+      # If the disk is low anyway, for whatever reason, drop the cache
+      # entirely: a cold build is slow, a full disk takes the database down.
+      # Should this Docker not know --keep-storage, the fallback is the same
+      # full clear.
       - name: Make room
         run: |
-          docker builder prune -af
+          set -euo pipefail
           docker image prune -f
+          docker builder prune -af --keep-storage "$CACHE_CAP" || docker builder prune -af
+          free_gb=$(docker run --rm --mount "type=bind,source=$DATA_DIR,target=/data,readonly" \
+            alpine:3 df -Pk /data | awk 'NR==2 { print int($4 / 1048576) }')
+          echo "$free_gb GB free on $DATA_DIR"
+          if [ "$free_gb" -lt "$MIN_FREE_GB" ]; then
+            echo "under $MIN_FREE_GB GB free: clearing the whole build cache"
+            docker builder prune -af
+          fi
 
       - name: Build
         run: |
@@ -74,15 +95,16 @@ jobs:
       # Every build leaves the previous :latest untagged plus a SHA-tagged copy
       # and its build cache; six builds in one afternoon filled the disk. The
       # SHA tag lives on in the registry, so drop it locally, then clear
-      # untagged images (never one a container still uses) and all build
-      # cache. Keeping a day of cache (the old `until=24h`) let ten pushes in
-      # one day fill the disk again, at ~0.4 GB of cache each.
+      # untagged images (never one a container still uses) and trim the build
+      # cache back to its cap. Capping by age (the old `until=24h`) let ten
+      # pushes in one day fill the disk, at ~0.4 GB of cache each; a size cap
+      # stays put however many pushes there are.
       - name: Clean up
         if: always()
         run: |
           docker rmi "$IMAGE:$SHORT" || true
           docker image prune -f
-          docker builder prune -af
+          docker builder prune -af --keep-storage "$CACHE_CAP" || docker builder prune -af
 
   # Point the ZimaOS compose file at the images just pushed, so the stack on
   # the NAS always names the newest build on main. It only edits the file;
