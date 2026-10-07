@@ -71,3 +71,39 @@ jobs:
           docker rmi "$IMAGE:$SHORT" || true
           docker image prune -f
           docker builder prune -f --filter until=24h
+
+  # Point the ZimaOS compose file at the images just pushed, so the stack on
+  # the NAS always names the newest build on main. It only edits the file;
+  # redeploying the stack is still a separate step.
+  #
+  # The job's Docker is the host's, so a bind mount reaches the NAS's own
+  # disk. --mount (not -v) refuses a missing source instead of quietly
+  # creating an empty directory, so a moved file fails the run loudly.
+  update-compose:
+    needs: images
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      STACK_DIR: /DATA/AppData/print-it
+      COMPOSE_FILE: docker-compose.zimaos.yml
+    steps:
+      - name: Pin both images to this commit
+        run: |
+          set -euo pipefail
+          short="${GITHUB_SHA::7}"
+          repo="localhost:3002/${{ github.repository_owner }}"
+          # Rewrite through a temp file and cat it back, rather than sed -i,
+          # so the file keeps its owner and mode and stays editable over SMB.
+          docker run --rm \
+            --mount "type=bind,source=$STACK_DIR,target=/stack" \
+            -e REPO="$repo" -e SHORT="$short" -e FILE="/stack/$COMPOSE_FILE" \
+            alpine:3 sh -euc '
+              sed -E "s#(image: *$REPO/ppp-(app|migrate)):[A-Za-z0-9._-]+#\1:$SHORT#" "$FILE" > /tmp/compose.yml
+              n=$(grep -cE "image: *$REPO/ppp-(app|migrate):$SHORT\$" /tmp/compose.yml || true)
+              if [ "$n" != 2 ]; then
+                echo "expected 2 images pinned to $SHORT, found $n; $FILE left unchanged" >&2
+                exit 1
+              fi
+              cat /tmp/compose.yml > "$FILE"
+              grep -E "image: *$REPO/" "$FILE"
+            '
