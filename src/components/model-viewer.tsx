@@ -3,15 +3,24 @@
 import { useEffect, useRef, useState } from "react";
 import type * as THREE from "three";
 
-import { VIEWER_MAX_BYTES, formatBytes } from "@/lib/upload-limits";
+import {
+  PREVIEWABLE_EXTENSIONS,
+  VIEWER_MAX_BYTES,
+  extensionOf,
+  formatBytes,
+} from "@/lib/upload-limits";
 
 /**
  * The real geometry, rotatable. Handoff §4.
  *
  * Replaces the stand-in primitive the prototype used — it could not parse a
  * mesh, so it drew a torus knot and hoped. This loads the actual uploaded
- * `.stl` or `.3mf` from `/api/models/[id]`, which is same-origin and scoped
- * by the ownership rule, so nothing here needs a CSP relaxation.
+ * model — STL, 3MF, OBJ, PLY, AMF, GLB or glTF — from `src`, which is always
+ * one of the app's own scoped routes (`/api/models/[id]` for an order's main
+ * model, `/api/stories/[id]/attachments/[id]` for another part).
+ *
+ * Every model is drawn in the requested filament colour, whatever materials
+ * the file carries: the point is to see what will come off the printer.
  *
  * three.js is ~600 KB, so it is imported dynamically inside the effect: it is
  * fetched when someone opens a ticket, and never on the board or the queue.
@@ -28,13 +37,14 @@ type Phase =
   | { kind: "error"; message: string };
 
 export function ModelViewer({
-  storyId,
+  src,
   filename,
   colorHex,
   dims,
   fileSize,
 }: {
-  storyId: number;
+  /** Where the bytes come from — a same-origin, scoped route. */
+  src: string;
   filename: string;
   colorHex: string;
   /** Used for the text alternative, so the canvas is not a dead end. */
@@ -55,9 +65,11 @@ export function ModelViewer({
    * guard on a hole the raised cap opened.
    */
   const tooLarge = fileSize > VIEWER_MAX_BYTES;
+  const ext = extensionOf(filename);
+  const previewable = (PREVIEWABLE_EXTENSIONS as readonly string[]).includes(ext);
 
   useEffect(() => {
-    if (tooLarge) return;
+    if (tooLarge || !previewable) return;
     const el = host.current;
     if (!el) return;
 
@@ -70,11 +82,8 @@ export function ModelViewer({
     (async () => {
       try {
         const THREE = await import("three");
-        const isStl = /\.stl$/i.test(filename);
-        const { STLLoader } = await import("three/examples/jsm/loaders/STLLoader.js");
-        const { ThreeMFLoader } = await import("three/examples/jsm/loaders/3MFLoader.js");
 
-        const response = await fetch(`/api/models/${storyId}`);
+        const response = await fetch(src);
         if (!response.ok) {
           throw new Error(
             response.status === 404
@@ -85,19 +94,51 @@ export function ModelViewer({
         const buffer = await response.arrayBuffer();
         if (disposed) return;
 
-        // Both loaders parse from an ArrayBuffer, so the bytes never touch a
-        // second URL and nothing is cached where it should not be.
-        // The cast is a typings wrinkle, not a real mismatch: STLLoader is
-        // declared as returning BufferGeometry<NormalOrGLBufferAttributes>,
-        // which three's own Mesh and EdgesGeometry do not accept. The runtime
-        // object is an ordinary BufferGeometry.
+        // Every loader parses from the bytes in hand, so they never touch a
+        // second URL and nothing is cached where it should not be. Only the
+        // one loader this file needs is fetched.
+        // The geometry casts are a typings wrinkle, not a real mismatch:
+        // STLLoader and PLYLoader are declared as returning
+        // BufferGeometry<NormalOrGLBufferAttributes>, which three's own Mesh
+        // and EdgesGeometry do not accept. The runtime object is an ordinary
+        // BufferGeometry.
         let geometry: THREE.BufferGeometry | null = null;
         let group: THREE.Object3D | null = null;
-        if (isStl) {
-          geometry = new STLLoader().parse(buffer) as unknown as THREE.BufferGeometry;
-        } else {
-          group = new ThreeMFLoader().parse(buffer);
+        switch (ext) {
+          case ".stl": {
+            const { STLLoader } = await import("three/examples/jsm/loaders/STLLoader.js");
+            geometry = new STLLoader().parse(buffer) as unknown as THREE.BufferGeometry;
+            break;
+          }
+          case ".ply": {
+            const { PLYLoader } = await import("three/examples/jsm/loaders/PLYLoader.js");
+            geometry = new PLYLoader().parse(buffer) as unknown as THREE.BufferGeometry;
+            break;
+          }
+          case ".3mf": {
+            const { ThreeMFLoader } = await import("three/examples/jsm/loaders/3MFLoader.js");
+            group = new ThreeMFLoader().parse(buffer);
+            break;
+          }
+          case ".amf": {
+            const { AMFLoader } = await import("three/examples/jsm/loaders/AMFLoader.js");
+            group = new AMFLoader().parse(buffer);
+            break;
+          }
+          case ".obj": {
+            const { OBJLoader } = await import("three/examples/jsm/loaders/OBJLoader.js");
+            group = new OBJLoader().parse(new TextDecoder().decode(buffer));
+            break;
+          }
+          case ".glb":
+          case ".gltf": {
+            const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
+            group = (await new GLTFLoader().parseAsync(buffer, "")).scene;
+            break;
+          }
         }
+        if (disposed) return;
+        if (!geometry && !group) throw new Error("That model could not be displayed.");
 
         const width = el.clientWidth || 480;
         const height = el.clientHeight || 380;
@@ -281,8 +322,11 @@ export function ModelViewer({
       cleanupInput?.();
       renderer?.dispose?.();
     };
-  }, [storyId, filename, colorHex, tooLarge]);
+  }, [src, ext, colorHex, tooLarge, previewable]);
 
+  if (!previewable) {
+    return <NotAMesh filename={filename} />;
+  }
   if (tooLarge) {
     return <TooLargeToPreview fileSize={fileSize} />;
   }
@@ -323,6 +367,32 @@ export function ModelViewer({
           drag to rotate · {filename}
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * A STEP file, which the browser cannot draw.
+ *
+ * Same tone as the too-large panel: nothing is wrong, the file is stored and
+ * will print. STEP describes exact solids rather than triangles, and turning
+ * one into a mesh is the job of a CAD kernel — which every slicer has and a
+ * web page does not.
+ */
+function NotAMesh({ filename }: { filename: string }) {
+  return (
+    <div className="flex h-[380px] flex-col justify-center rounded-panel border-[3px] border-ink bg-sun-wash p-[22px] shadow-stamp-lg">
+      <p className="m-0 font-mono text-[11.5px] font-bold uppercase tracking-[0.12em] text-sun-dk">
+        Preview skipped · {extensionOf(filename).slice(1)}
+      </p>
+      <h3 className="m-0 mt-[6px] font-display text-[21px] leading-[1.15] text-ink">
+        A CAD file, not a mesh
+      </h3>
+      <p className="m-0 mt-[8px] max-w-[46ch] text-[14.5px] leading-[1.5] text-ink-2">
+        {filename} describes exact solids rather than triangles, and a browser
+        has nothing to draw them with. Download it and open it in PrusaSlicer,
+        Bambu Studio, Cura or any CAD tool — they all read STEP.
+      </p>
     </div>
   );
 }

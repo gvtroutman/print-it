@@ -34,8 +34,11 @@ export function buildCsp(nonce: string, isProd: boolean): string {
     "img-src 'self' data: blob:",
     // This app talks to its own origin only. No analytics, CDN or beacons.
     // Model files are streamed by /api/models/[id], so the viewer needs
-    // nothing wider than this.
-    "connect-src 'self'",
+    // nothing wider than this — except `data:`, because a self-contained
+    // .gltf carries its geometry as data: URIs and three.js reads those with
+    // fetch(). A data: URL is decoded in the browser and never leaves it, so
+    // it opens no channel to anywhere.
+    "connect-src 'self' data:",
     "form-action 'self'",
     "frame-ancestors 'none'",
     "base-uri 'none'",

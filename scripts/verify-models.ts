@@ -15,11 +15,13 @@ import {
   MAX_BYTES,
   type Rejection,
 } from "../src/lib/models";
+import { inspectMedia } from "../src/lib/media";
+import { parseLink, parseLinks, displayLink } from "../src/lib/links";
 
 let passed = 0;
 const failures: string[] = [];
 
-function check(name: string, ok: boolean, detail = "") {
+function check(name: string, ok: boolean, detail: string | null = "") {
   console.info(`  ${ok ? "ok  " : "FAIL"}  ${name}${ok || !detail ? "" : `\n          ${detail}`}`);
   ok ? passed++ : failures.push(name);
 }
@@ -263,6 +265,195 @@ const bombResult = inspectModel("bomb.3mf", bomb);
 const elapsed = Date.now() - t0;
 check("a zip bomb is refused", !bombResult.ok, why(bombResult));
 check("and refused quickly, without inflating it", elapsed < 4000, `took ${elapsed}ms`);
+
+section("the other 3D formats are recognised and measured");
+
+/** The eight corners and six quads of the box from the origin to (x, y, z). */
+const corners = (x: number, y: number, z: number) => [
+  [0, 0, 0], [x, 0, 0], [x, y, 0], [0, y, 0],
+  [0, 0, z], [x, 0, z], [x, y, z], [0, y, z],
+];
+const quads = [[0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]];
+const text = (s: string) => new TextEncoder().encode(s);
+
+function obj(x: number, y: number, z: number): Uint8Array {
+  return text(
+    "# generated\no box\n" +
+      corners(x, y, z).map((p) => `v ${p.join(" ")}`).join("\n") +
+      "\nvn 0 0 1\nvt 0 0\n" +
+      quads.map((q) => `f ${q.map((i) => `${i + 1}/1/1`).join(" ")}`).join("\n") + "\n",
+  );
+}
+
+function plyAscii(x: number, y: number, z: number): Uint8Array {
+  const c = corners(x, y, z);
+  return text(
+    `ply\nformat ascii 1.0\ncomment generated\nelement vertex ${c.length}\n` +
+      "property float x\nproperty float y\nproperty float z\n" +
+      `element face ${quads.length}\nproperty list uchar int vertex_indices\nend_header\n` +
+      c.map((p) => p.join(" ")).join("\n") + "\n" +
+      quads.map((q) => `4 ${q.join(" ")}`).join("\n") + "\n",
+  );
+}
+
+function plyBinary(x: number, y: number, z: number): Uint8Array {
+  const c = corners(x, y, z);
+  // An element *before* the vertices, with a list in it, so the walker has to
+  // skip something variable-length to find them.
+  const header = text(
+    "ply\nformat binary_little_endian 1.0\nelement material 1\nproperty list uchar uchar name\n" +
+      `element vertex ${c.length}\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\n` +
+      `element face ${quads.length}\nproperty list uchar int vertex_indices\nend_header\n`,
+  );
+  const body = new Uint8Array(1 + 3 + c.length * 13 + quads.length * 17);
+  const v = new DataView(body.buffer);
+  let o = 0;
+  v.setUint8(o, 3); o += 1; body.set([65, 66, 67], o); o += 3;
+  for (const p of c) {
+    for (const n of p) { v.setFloat32(o, n, true); o += 4; }
+    v.setUint8(o, 200); o += 1;
+  }
+  for (const q of quads) {
+    v.setUint8(o, 4); o += 1;
+    for (const i of q) { v.setInt32(o, i, true); o += 4; }
+  }
+  const out = new Uint8Array(header.length + body.length);
+  out.set(header);
+  out.set(body, header.length);
+  return out;
+}
+
+/** A binary PLY cut off part way through its vertices. */
+function truncatedPly(): Uint8Array {
+  const full = plyBinary(10, 10, 10);
+  const bodyStart = new TextDecoder("latin1").decode(full).indexOf("end_header\n") + "end_header\n".length;
+  return full.subarray(0, bodyStart + 4 + 13 * 3);
+}
+
+function amf(x: number, y: number, z: number, unit = "millimeter"): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8"?>\n<amf unit="${unit}"><object id="0"><mesh><vertices>` +
+    corners(x, y, z).map((p) => `<vertex><coordinates><x>${p[0]}</x><y>${p[1]}</y><z>${p[2]}</z></coordinates></vertex>`).join("") +
+    "</vertices><volume>" +
+    boxTriangles(1, 1, 1).map(() => "<triangle><v1>0</v1><v2>1</v2><v3>2</v3></triangle>").join("") +
+    "</volume></mesh></object></amf>"
+  );
+}
+
+function gltfJson(bufferUri?: string, byteLength = 36) {
+  return {
+    asset: { version: "2.0" },
+    buffers: [{ byteLength, ...(bufferUri ? { uri: bufferUri } : {}) }],
+    bufferViews: [{ buffer: 0, byteOffset: 0, byteLength }],
+    accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: "VEC3", min: [0, 0, 0], max: [1, 1, 0] }],
+    meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
+    nodes: [{ mesh: 0 }],
+    scenes: [{ nodes: [0] }],
+  };
+}
+
+function glb(): Uint8Array {
+  const pad = (b: Uint8Array, fill: number) => {
+    const out = new Uint8Array(Math.ceil(b.length / 4) * 4).fill(fill);
+    out.set(b);
+    return out;
+  };
+  const json = pad(text(JSON.stringify(gltfJson())), 0x20);
+  const bin = new Uint8Array(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]).buffer);
+  const total = 12 + 8 + json.length + 8 + bin.length;
+  const out = new Uint8Array(total);
+  const v = new DataView(out.buffer);
+  out.set(text("glTF"), 0);
+  v.setUint32(4, 2, true);
+  v.setUint32(8, total, true);
+  v.setUint32(12, json.length, true);
+  v.setUint32(16, 0x4e4f534a, true);
+  out.set(json, 20);
+  v.setUint32(20 + json.length, bin.length, true);
+  v.setUint32(24 + json.length, 0x004e4942, true);
+  out.set(bin, 28 + json.length);
+  return out;
+}
+
+const formats: Array<[string, string, Uint8Array, string | null]> = [
+  ["OBJ", "bracket.obj", obj(40, 30, 12), "40 × 30 × 12 mm"],
+  ["ASCII PLY", "scan.ply", plyAscii(25, 50, 75), "25 × 50 × 75 mm"],
+  ["binary PLY (with an element before the vertices)", "scan.ply", plyBinary(60, 20, 10), "60 × 20 × 10 mm"],
+  ["AMF", "part.amf", text(amf(70, 35, 5)), "70 × 35 × 5 mm"],
+  ["AMF in inches", "part.amf", text(amf(1, 2, 3, "inch")), "25 × 51 × 76 mm"],
+  ["zipped AMF", "part.amf", zipSync({ "part.amf": text(amf(15, 15, 15)) }), "15 × 15 × 15 mm"],
+  ["STEP (accepted, not measured)", "housing.step", text("ISO-10303-21;\nHEADER;\nENDSEC;\nDATA;\nENDSEC;\nEND-ISO-10303-21;\n"), null],
+  ["STP", "housing.stp", text("﻿ISO-10303-21;\nHEADER;\n"), null],
+  ["GLB (accepted, not measured)", "scan.glb", glb(), null],
+  ["self-contained glTF", "scan.gltf",
+    text(JSON.stringify(gltfJson(`data:application/octet-stream;base64,${Buffer.from(new Float32Array(9).buffer).toString("base64")}`))), null],
+];
+for (const [label, name, bytes, dims] of formats) {
+  const r = inspectModel(name, bytes);
+  check(`${label} accepted`, r.ok, why(r));
+  check(`${label} dimensions ${dims ?? "left unknown"}`, ok(r)?.dims === dims, String(ok(r)?.dims));
+}
+
+const formatRefusals: Array<[string, string, Uint8Array, Rejection]> = [
+  ["a binary file named .obj", "x.obj", binaryStl(10, 10, 10), "not_a_model"],
+  ["an OBJ with vertices but no faces", "points.obj", text("v 0 0 0\nv 1 1 1\nv 2 0 1\n"), "no_geometry"],
+  ["a PLY point cloud (no faces)", "cloud.ply",
+    text("ply\nformat ascii 1.0\nelement vertex 1\nproperty float x\nproperty float y\nproperty float z\nend_header\n1 2 3\n"), "no_geometry"],
+  ["a PLY whose header promises more than its body", "short.ply", truncatedPly(), "corrupt"],
+  ["an HTML file named .step", "x.step", text("<!DOCTYPE html><script>alert(1)</script>"), "not_a_model"],
+  ["a glTF that points at a .bin beside it", "scan.gltf", text(JSON.stringify(gltfJson("scan.bin"))), "external_refs"],
+  ["a glTF 1.0 file", "old.gltf", text(JSON.stringify({ ...gltfJson(), asset: { version: "1.0" } })), "not_a_model"],
+  ["a GLB whose length header lies", "bad.glb", glb().subarray(0, 40), "not_a_model"],
+  ["an STL renamed to .glb", "x.glb", binaryStl(10, 10, 10), "not_a_model"],
+];
+for (const [label, name, bytes, expected] of formatRefusals) {
+  const r = inspectModel(name, bytes);
+  check(`${label} is refused`, !r.ok && r.reason === expected, `got "${why(r)}", expected "${expected}"`);
+}
+
+section("photos and videos are checked by their bytes");
+
+const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
+const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16]);
+const webp = text("RIFF\0\0\0\0WEBPVP8 ");
+const mp4 = new Uint8Array([0, 0, 0, 24, ...text("ftypisom"), 0, 0, 2, 0]);
+const mov = new Uint8Array([0, 0, 0, 20, ...text("ftypqt  "), 0, 0, 2, 0]);
+const webm = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86]);
+
+const mediaOk: Array<[string, Uint8Array, string]> = [
+  ["photo.png", png, "image/png"],
+  ["photo.jpg", jpeg, "image/jpeg"],
+  ["photo.JPEG", jpeg, "image/jpeg"],
+  ["photo.webp", webp, "image/webp"],
+  ["clip.mp4", mp4, "video/mp4"],
+  ["clip.mov", mov, "video/quicktime"],
+  ["clip.webm", webm, "video/webm"],
+];
+for (const [name, bytes, mime] of mediaOk) {
+  const r = inspectMedia(name, bytes);
+  check(`${name} accepted as ${mime}`, r.ok && r.mimeType === mime, r.ok ? r.mimeType : r.reason);
+}
+const mediaRefused: Array<[string, string, Uint8Array, string]> = [
+  ["a PNG named .jpg", "photo.jpg", png, "not_media"],
+  ["HTML named .png", "photo.png", text("<html><script>alert(1)</script>"), "not_media"],
+  ["an SVG", "logo.svg", text("<svg onload=alert(1)>"), "bad_extension"],
+  ["a QuickTime file named .mp4", "clip.mp4", mov, "not_media"],
+  ["an empty photo", "photo.png", new Uint8Array(0), "empty"],
+];
+for (const [label, name, bytes, expected] of mediaRefused) {
+  const r = inspectMedia(name, bytes);
+  check(`${label} is refused`, !r.ok && r.reason === expected, r.ok ? "accepted" : r.reason);
+}
+
+section("links");
+
+check("a bare domain becomes https", (parseLink("printables.com/model/1") as { href?: string }).href === "https://printables.com/model/1");
+check("javascript: is refused", !parseLink("javascript:alert(1)").ok);
+check("data: is refused", !parseLink("data:text/html,<script>alert(1)</script>").ok);
+check("credentials are dropped", (parseLink("https://user:pw@example.com/x") as { href?: string }).href === "https://example.com/x");
+check("repeats collapse", parseLinks(["https://a.example/x", "https://a.example/x"]).length === 1);
+check("a stored javascript: link never renders", displayLink("javascript:alert(1)") === null);
+check("display label is host and path", displayLink("https://www.youtube.com/watch?v=abc")?.label === "youtube.com/watch");
 
 section("presentation helpers");
 

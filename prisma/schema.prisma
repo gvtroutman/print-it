@@ -329,6 +329,11 @@ model Story {
   /// requester typed — see src/lib/import.ts. Null for an upload.
   sourceUrl String?
 
+  /// Links the requester sent with the order — the product it fits, a video of
+  /// the problem. Typed by a person, so http(s) only and re-checked at render;
+  /// see src/lib/links.ts.
+  links String[] @default([])
+
   // --- measured from the mesh at upload time, display only ---
   //
   // There is deliberately no `estimate` column. A print time derived from the
@@ -342,10 +347,43 @@ model Story {
 
   comments      Comment[]
   notifications Notification[]
+  attachments   StoryAttachment[]
 
   @@index([uploaderId])
   @@index([status])
   @@map("story")
+}
+
+enum AttachmentKind {
+  model
+  image
+  video
+}
+
+/// A file sent with an order besides its main model: another part to print, or
+/// a photo or video that explains the job. The main model stays on `Story`, so
+/// everything that already reads it — the slicer link, the download, a reprint
+/// — is unchanged. Bytes live under MODELS_ROOT like the model's.
+model StoryAttachment {
+  id      String         @id @default(cuid())
+  storyId Int
+  story   Story          @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  kind    AttachmentKind
+
+  filename   String
+  fileSize   Int
+  /// Decided on the server from the bytes, never taken from the browser.
+  mimeType   String
+  storageKey String
+  /// Measured for a model where the format allows it; null otherwise.
+  dims       String?
+
+  /// The order the requester added them in.
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([storyId])
+  @@map("storyAttachment")
 }
 
 /// A material the printer owner can currently offer. Disabling an entry only

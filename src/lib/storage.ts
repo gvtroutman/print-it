@@ -47,12 +47,20 @@ import { DIR_MODE, FILE_MODE } from "@/lib/storage-layout";
  * A key built from user input is how path traversal and object overwrites
  * happen. The display name lives in the database column instead.
  */
-export function storageKeyFor(extension: string): string {
+export function storageKeyFor(extension: string, folder: "models" | "media" = "models"): string {
   const now = new Date();
   const yyyymm = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-  const ext = extension === ".3mf" ? "3mf" : "stl";
-  return `models/${yyyymm}/${randomUUID()}.${ext}`;
+  // Picked from a fixed list, so nothing the uploader typed reaches the path.
+  const ext = STORED_EXTENSION[extension] ?? "bin";
+  return `${folder}/${yyyymm}/${randomUUID()}.${ext}`;
 }
+
+const STORED_EXTENSION: Record<string, string> = {
+  ".stl": "stl", ".3mf": "3mf", ".obj": "obj", ".ply": "ply", ".amf": "amf",
+  ".step": "step", ".stp": "stp", ".glb": "glb", ".gltf": "gltf",
+  ".png": "png", ".jpg": "jpg", ".jpeg": "jpg", ".webp": "webp", ".gif": "gif",
+  ".mp4": "mp4", ".m4v": "m4v", ".mov": "mov", ".webm": "webm",
+};
 
 /**
  * A key resolved under ROOT, or a refusal.
@@ -121,15 +129,28 @@ export async function putModel(key: string, bytes: Uint8Array): Promise<void> {
  * that the ticket is gone.
  */
 export async function openModel(key: string): Promise<{ stream: Readable; size: number } | null> {
-  const path = pathFor(key);
-  let info;
+  const size = await storedSize(key);
+  if (size === null) return null;
+  return { stream: createReadStream(pathFor(key)), size };
+}
+
+/** The length of a stored file, or null when there is nothing there. */
+export async function storedSize(key: string): Promise<number | null> {
   try {
-    info = await stat(path);
+    const info = await stat(pathFor(key));
+    return info.isFile() ? info.size : null;
   } catch {
     return null;
   }
-  if (!info.isFile()) return null;
-  return { stream: createReadStream(path), size: info.size };
+}
+
+/**
+ * Part of a stored file, `start` to `end` inclusive — what a `Range` request
+ * asks for. A video element seeks by asking for the bytes at that point, and
+ * Safari will not play a video at all from a server that cannot answer one.
+ */
+export function openStoredRange(key: string, start: number, end: number): Readable {
+  return createReadStream(pathFor(key), { start, end });
 }
 
 /** Idempotent, like `DeleteObject` was: gone already is not an error. */
@@ -149,7 +170,19 @@ export async function copyModel(srcKey: string, destKey: string): Promise<void> 
   });
 }
 
+/**
+ * Content types for models, by extension — safe to go by the name here
+ * because the bytes were already checked against it. Photos and videos take
+ * theirs from `inspectMedia`, which reads the bytes.
+ */
 export const MIME_FOR: Record<string, string> = {
   ".stl": "model/stl",
   ".3mf": "model/3mf",
+  ".obj": "model/obj",
+  ".ply": "application/octet-stream",
+  ".amf": "application/octet-stream",
+  ".step": "model/step",
+  ".stp": "model/step",
+  ".glb": "model/gltf-binary",
+  ".gltf": "model/gltf+json",
 };

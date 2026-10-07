@@ -30,7 +30,7 @@ const NAV: Record<Actor["role"], NavGroup[]> = {
     {
       items: [
         { label: "The rail", href: "/board" },
-        { label: "Order up", href: "/upload" },
+        { label: "New order", href: "/upload" },
         { label: "My orders", href: "/me" },
         { label: "Feature requests", href: "/frr" },
       ],

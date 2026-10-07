@@ -5,10 +5,25 @@ Notable changes. Every entry names a released version; deployments pin
 
 ## Unreleased
 
+### Added
+
+- **An order can carry more than one file.** Besides `.stl` and `.3mf`, a
+  model can be OBJ, PLY, AMF, STEP/STP, GLB or glTF, and photos (PNG, JPEG,
+  WebP, GIF), videos (MP4, MOV, WebM) and up to ten links can go with it. The
+  first 3D file is the main model; the rest are stored as attachments. Every
+  file is checked against its bytes, as before. Needs the
+  `story_attachments_and_links` migration, which is additive.
+- **A viewer on every ticket** for everything that came with it: 3D models
+  spin in the filament colour, photos open full size, videos play and seek.
+  STEP files are stored and downloadable but not previewed.
+
 ### Changed
 
+- **The "Order up" tab is now "New order".**
+
 - **The header is wrinkled kraft paper** instead of black, with the navigation
-  in ink to match. The texture is drawn in CSS, so it costs no download.
+  in ink to match. It is a photo of real kraft, about 210 KB, bundled with the
+  build.
 
 - **No source link in the footer.** The *Source · AGPL-3.0* link is gone from
   every page. It was the app's AGPL-3.0 section 13 source offer, removed on

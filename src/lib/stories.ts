@@ -143,6 +143,13 @@ export const STORY_FIELDS = {
   mimeType: true,
   dims: true,
   sourceUrl: true,
+  links: true,
+  // Named fields again: an attachment's `storageKey` is as private as the
+  // model's.
+  attachments: {
+    orderBy: { sortOrder: "asc" },
+    select: { id: true, kind: true, filename: true, fileSize: true, mimeType: true, dims: true },
+  },
   createdAt: true,
   updatedAt: true,
   uploaderId: true,
@@ -544,6 +551,7 @@ export async function withdrawStory(actor: Actor, id: number) {
     select: {
       id: true, title: true, status: true, storageKey: true,
       uploaderId: true, uploader: { select: { name: true } },
+      attachments: { select: { storageKey: true } },
     },
   });
   if (!story) throw problem(404, "That ticket no longer exists.");
@@ -574,10 +582,13 @@ export async function withdrawStory(actor: Actor, id: number) {
   // After the row is gone, so a failure here cannot leave a story pointing at
   // an object that is not there. The reverse would be worse: an orphaned
   // object is invisible, a story with no file is broken in the viewer.
-  try {
-    await deleteModel(story.storageKey);
-  } catch (error) {
-    console.error(`[withdraw] ${ref}: object ${story.storageKey} not removed`, error);
+  // The attachment rows went with the story (cascade); their files go too.
+  for (const key of [story.storageKey, ...story.attachments.map((a) => a.storageKey)]) {
+    try {
+      await deleteModel(key);
+    } catch (error) {
+      console.error(`[withdraw] ${ref}: object ${key} not removed`, error);
+    }
   }
 
   // Tell the printer owner when they had it in hand — a request still waiting
@@ -634,6 +645,11 @@ export async function requeueStory(
       colorName: true, tip: true, note: true, printSettings: true,
       filename: true, fileSize: true,
       mimeType: true, storageKey: true, dims: true, sourceUrl: true, uploaderId: true,
+      links: true,
+      attachments: {
+        orderBy: { sortOrder: "asc" },
+        select: { kind: true, filename: true, fileSize: true, mimeType: true, storageKey: true, dims: true, sortOrder: true },
+      },
     },
   });
   if (!src) throw problem(404, "That ticket no longer exists.");
@@ -687,11 +703,25 @@ export async function requeueStory(
 
   // Copy the object first, so a failure here opens no ticket that points at
   // geometry which was never written — the same ordering the upload uses.
+  // The order's other files come along, each copied the same way: the same
+  // order again means the same parts and the same reference photos.
   const destKey = storageKeyFor(extensionOf(src.filename));
+  const extraKeys = src.attachments.map((a) =>
+    storageKeyFor(extensionOf(a.filename), a.kind === "model" ? "models" : "media"),
+  );
+  const copied: string[] = [];
   try {
+    // Noted before each copy, as in intake.ts: a copy can fail after its file
+    // is in place, and removing one that never landed is a no-op.
+    copied.push(destKey);
     await copyModel(src.storageKey, destKey);
+    for (const [i, a] of src.attachments.entries()) {
+      copied.push(extraKeys[i]!);
+      await copyModel(a.storageKey, extraKeys[i]!);
+    }
   } catch (error) {
     console.error(`[requeue] ${storyRef(src.id)}: object copy failed`, error);
+    for (const key of copied) await deleteModel(key).catch(() => undefined);
     throw problem(502, "The file could not be copied. Try again in a moment.");
   }
 
@@ -718,6 +748,18 @@ export async function requeueStory(
       // The same model from the same place; a reprint did not stop having come
       // from there.
       sourceUrl: src.sourceUrl,
+      links: src.links,
+      attachments: {
+        create: src.attachments.map((a, i) => ({
+          kind: a.kind,
+          filename: a.filename,
+          fileSize: a.fileSize,
+          mimeType: a.mimeType,
+          storageKey: extraKeys[i]!,
+          dims: a.dims,
+          sortOrder: a.sortOrder,
+        })),
+      },
     },
     select: { id: true },
   });
