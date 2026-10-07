@@ -101,9 +101,17 @@ async function writeAtomically(finalPath: string, write: (tmp: string) => Promis
     await fh.sync();
     await fh.close();
     await rename(tmp, finalPath);
-    const dh = await open(dirname(finalPath), "r");
-    await dh.sync();
-    await dh.close();
+    // Windows will not fsync a directory handle (EPERM), and NTFS journals the
+    // rename itself, so there is nothing to make durable there. Production is
+    // Linux in Docker, where this sync is the step that keeps the rename.
+    if (process.platform !== "win32") {
+      const dh = await open(dirname(finalPath), "r");
+      try {
+        await dh.sync();
+      } finally {
+        await dh.close();
+      }
+    }
   } catch (error) {
     await rm(tmp, { force: true });
     throw error;
