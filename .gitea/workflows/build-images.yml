@@ -41,6 +41,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The NAS disk is small and is also where the live app keeps its
+      # database and uploads. Start from an empty build cache rather than
+      # trusting the last run to have left room: a run that filled the disk
+      # never reached its own clean-up. Cache a build is still using is
+      # skipped, so the other matrix job is safe.
+      - name: Make room
+        run: |
+          docker builder prune -af
+          docker image prune -f
+
       - name: Build
         run: |
           set -euo pipefail
@@ -64,13 +74,15 @@ jobs:
       # Every build leaves the previous :latest untagged plus a SHA-tagged copy
       # and its build cache; six builds in one afternoon filled the disk. The
       # SHA tag lives on in the registry, so drop it locally, then clear
-      # untagged images (never one a container still uses) and day-old cache.
+      # untagged images (never one a container still uses) and all build
+      # cache. Keeping a day of cache (the old `until=24h`) let ten pushes in
+      # one day fill the disk again, at ~0.4 GB of cache each.
       - name: Clean up
         if: always()
         run: |
           docker rmi "$IMAGE:$SHORT" || true
           docker image prune -f
-          docker builder prune -f --filter until=24h
+          docker builder prune -af
 
   # Point the ZimaOS compose file at the images just pushed, so the stack on
   # the NAS always names the newest build on main. It only edits the file;
