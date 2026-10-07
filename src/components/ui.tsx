@@ -21,7 +21,16 @@ import { PRIORITY_CHIP } from "@/lib/catalog";
  */
 const WORDMARK = { src: "/print-it-wordmark-arched.png", width: 834, height: 191 };
 
-export function Brand({ size = 34, lit = false }: { size?: number; lit?: boolean }) {
+export function Brand({
+  size = 34,
+  lit = false,
+  className = "",
+}: {
+  size?: number;
+  lit?: boolean;
+  /** Extra classes for the image, e.g. to size it differently by breakpoint. */
+  className?: string;
+}) {
   const height = Math.round(size * 1.1);
   return (
     <span className="flex items-center">
@@ -32,7 +41,7 @@ export function Brand({ size = 34, lit = false }: { size?: number; lit?: boolean
         alt="Print It!"
         width={Math.round((height * WORDMARK.width) / WORDMARK.height)}
         height={height}
-        className={`logo-shadow block ${lit ? "ppp-neon" : ""}`}
+        className={`logo-shadow block ${lit ? "ppp-neon" : ""} ${className}`}
       />
     </span>
   );

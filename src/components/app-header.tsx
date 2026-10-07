@@ -6,19 +6,9 @@ import { relativeTime } from "@/lib/catalog";
 import { Brand } from "@/components/ui";
 import { ActivityMenu, type FeedItem } from "@/components/activity-menu";
 import { UserMenu } from "@/components/user-menu";
+import { MobileMenu, type NavGroup } from "@/components/mobile-menu";
 import { PasskeyNudge } from "@/components/passkey-nudge";
 import { PreviewBanner, StartPreview } from "@/components/member-preview";
-
-/**
- * The sign over the counter, on every screen.
- *
- * Wrinkled kraft paper under the wordmark, with ink text on it (`.kraft` in
- * globals.css). `data-authenticated` is a stable hook for
- * the test suites so they assert on "there is a signed-in shell here" rather
- * than on a piece of copy that a redesign can move — which is exactly what
- * went wrong before.
- */
-type NavGroup = { heading?: string; items: Array<{ label: string; href: string }> };
 
 /**
  * The owner's menu is split in two and named plainly: the day-to-day print
@@ -61,6 +51,15 @@ const NAV: Record<Actor["role"], NavGroup[]> = {
   ],
 };
 
+/**
+ * The sign over the counter, on every screen.
+ *
+ * Wrinkled kraft paper under the wordmark, with ink text on it (`.kraft` in
+ * globals.css). `data-authenticated` is a stable hook for
+ * the test suites so they assert on "there is a signed-in shell here" rather
+ * than on a piece of copy that a redesign can move — which is exactly what
+ * went wrong before.
+ */
 export async function AppHeader({
   user,
   active,
@@ -93,13 +92,21 @@ export async function AppHeader({
         {/* Keep identity and account controls on a stable top row. Navigation
             has its own wrapping row, so adding destinations cannot push the
             activity or profile menus away from the wordmark. */}
-        <div className="mx-auto max-w-[1180px] px-[16px] py-[11px] sm:px-[26.4px] sm:py-[13.2px]">
-          <div className="flex items-center gap-[16px] lg:gap-[22px]">
-            <Link href={user.role === "admin" ? "/queue" : "/board"} aria-label="Print It!, home">
-              <Brand size={34} />
+        <div className="mx-auto max-w-[1180px] px-[16px] py-[22px] sm:px-[26.4px] sm:py-[13.2px]">
+          {/* On a phone the kraft band is the sign alone: the wordmark
+              centred with room around it, at most 389px wide (2.4× its
+              desktop width) and never more than 80% of the screen. The menus
+              move to the bar below. */}
+          <div className="flex items-center gap-[16px] max-sm:justify-center lg:gap-[22px]">
+            <Link
+              href={user.role === "admin" ? "/queue" : "/board"}
+              aria-label="Print It!, home"
+              className="block max-sm:w-[80%] max-sm:max-w-[389px]"
+            >
+              <Brand size={34} className="max-sm:h-auto max-sm:w-full" />
             </Link>
 
-            <div className="ml-auto flex items-center gap-[8.8px] sm:gap-[13.2px]">
+            <div className="ml-auto flex items-center gap-[13.2px] max-sm:hidden">
               <ActivityMenu
                 items={items}
                 unread={unread}
@@ -116,7 +123,7 @@ export async function AppHeader({
             </div>
           </div>
 
-          <nav className="mt-[11px] flex flex-wrap items-center gap-x-[22px] gap-y-[8px]">
+          <nav className="mt-[11px] flex flex-wrap items-center gap-x-[22px] gap-y-[8px] max-sm:hidden">
             {NAV[user.role].map((group, i) => (
               <div
                 key={group.heading ?? i}
@@ -154,6 +161,28 @@ export async function AppHeader({
               </div>
             ))}
           </nav>
+        </div>
+      </div>
+
+      {/* The phone's second bar: the hamburger (tabs and account) on the
+          left, activity on the right. Above `sm` both live in the band. */}
+      <div className="border-b-[3px] border-ink bg-cream-2 sm:hidden">
+        <div className="flex items-center justify-between px-[16px] py-[8.8px]">
+          <MobileMenu
+            nav={NAV[user.role]}
+            active={active}
+            name={user.name}
+            initials={user.initials}
+            email={user.email}
+            role={user.role}
+            passkeyCount={passkeyCount}
+            ownerTools={user.role === "admin" ? <StartPreview /> : undefined}
+          />
+          <ActivityMenu
+            items={items}
+            unread={unread}
+            title={user.role === "admin" ? "New from the group" : "Updates on your prints"}
+          />
         </div>
       </div>
 
