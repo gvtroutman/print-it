@@ -79,7 +79,6 @@ export default async function BoardPage({
               Order a print
             </Link>
           </div>
-          <div className="checker h-[10px] border-t-[3px] border-ink" aria-hidden />
         </div>
 
         {stories.length === 0 ? (
