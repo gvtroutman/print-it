@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 
 import { auth } from "@/lib/auth";
-import { COLOR_MODES, STORY_PRIORITIES, TIPS, WishSchema } from "@/lib/catalog";
+import { COLOR_MODES, STORY_PRIORITIES, WishSchema } from "@/lib/catalog";
 import { ACCEPTED_EXTENSIONS, MAX_BYTES, formatBytes } from "@/lib/models";
 import { FLOW } from "@/lib/scope";
 import { IMPORT_SOURCES } from "@/lib/import-source";
@@ -123,7 +123,6 @@ const STORY_SCHEMA = {
         mode: { type: "string", enum: [...COLOR_MODES] },
       },
     },
-    tip: { type: "string", enum: [...TIPS] },
     note: { type: "string" },
     file: {
       type: "object",
@@ -695,8 +694,8 @@ export async function buildOpenApiDocument() {
             "uploaded. The body is the wish and **every field is optional**: " +
             "what is left out is carried over from the old ticket, so `{}` " +
             "repeats it exactly. What is sent is held to the rules an upload " +
-            "is — the material and color must be in `GET /api/catalog` today, " +
-            "and the tip must be a benefit on offer. The old ticket is not changed.",
+            "is — the material and color must be in `GET /api/catalog` today. " +
+            "The old ticket is not changed.",
           parameters: [storyIdParam],
           requestBody: {
             required: false,
@@ -714,7 +713,7 @@ export async function buildOpenApiDocument() {
             "400": errorResponse("A field did not parse."),
             "403": errorResponse("Only the person who asked for it can print it again."),
             "404": errorResponse("No such ticket, or not one you may see."),
-            "409": errorResponse("The material, color or benefit is not on offer any more."),
+            "409": errorResponse("The material or color is not on offer any more."),
             ...COMMON_ERRORS,
           },
         },
@@ -1129,7 +1128,6 @@ export async function buildOpenApiDocument() {
                   material: "PETG",
                   colorName: "Slate",
                   quantity: 1,
-                  tip: "A beer",
                 },
               },
             },

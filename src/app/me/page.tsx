@@ -43,17 +43,13 @@ export default async function ProfilePage() {
   const isAdmin = user.role === "admin";
   const scope = storyScope(user);
 
-  const [stories, finished, beers, favourite, waiting, bytes] = await Promise.all([
+  const [stories, finished, favourite, waiting, bytes] = await Promise.all([
     db.story.findMany({
       where: scope,
       orderBy: { createdAt: "desc" },
       include: { uploader: { select: { name: true, initials: true } } },
     }),
     db.story.count({ where: { AND: [scope, { status: { in: PRINTED } }] } }),
-    // A beer is owed once the work is actually done — not when it is asked for.
-    db.story.count({
-      where: { AND: [scope, { tip: "A beer" }, { status: { in: PRINTED } }] },
-    }),
     db.story.groupBy({
       by: ["material"],
       where: scope,
@@ -85,7 +81,6 @@ export default async function ProfilePage() {
         { value: String(finished), label: "Printed for the group", skin: "bg-aqua" },
         { value: String(waiting), label: "Waiting on you", skin: "bg-sun" },
         { value: formatBytes(bytes._sum.fileSize ?? 0), label: "Geometry off the plate", skin: "bg-cream-2" },
-        { value: String(beers), label: "Beers owed to you", skin: "bg-mint" },
       ]
     : [
         { value: String(stories.length), label: "Requests made", skin: "bg-aqua" },
@@ -94,7 +89,6 @@ export default async function ProfilePage() {
           label: waitingToCollect > 0 ? "Ready to collect" : "In your hands",
           skin: waitingToCollect > 0 ? "bg-cherry-wash" : "bg-mint",
         },
-        { value: String(beers), label: `Beers owed to ${owner}`, skin: "bg-sun" },
         { value: usual, label: "Your usual material", skin: "bg-cream-2" },
       ];
 
@@ -180,9 +174,6 @@ export default async function ProfilePage() {
                     needs a look
                   </span>
                 )}
-                <span className="w-[120px] font-mono text-[11px] uppercase tracking-[0.04em] text-ink-3">
-                  {story.tip}
-                </span>
               </div>
             ))
           )}

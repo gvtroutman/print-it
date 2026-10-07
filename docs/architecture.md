@@ -397,11 +397,10 @@ side:
 - **`/history`** is a scoped read of the finished prints (`Delivery`/`Done`/
   `Declined`) through the same `storyScope`, filtered by status/material/date,
   with the re-queue control on each row. `/board` and `/me` are untouched.
-- **The benefits (tips) are owner-managed data**, not a constant: a `Benefit`
-  table the owner edits at `/admin/benefits`, seeded with the original five.
-  `Story.tip` stays a plain string so a past request survives an edit, and the
-  upload endpoint validates the tip against the current *active* list — the
-  catalogue, not the form, is authoritative.
+- **Tips are gone.** A request no longer offers the owner anything in return.
+  `Story.tip` and the `benefit` table are still in the schema — the column so
+  old tickets keep what they offered, both so a rolled-back image still works —
+  but nothing reads or writes them, and new tickets store `""`.
 - **Materials and colours are owner-managed data**, with ordered
   `CatalogMaterial` and `CatalogColor` rows. The upload page reads only active
   combinations and the upload endpoint repeats that lookup authoritatively.
@@ -467,7 +466,6 @@ src/lib/
   dashboard.ts           the three panels above the audit log
   stories.ts             every operation on a print ticket — the rules, once
   features.ts            every operation on a feature request — the 'frr' track
-  benefits.ts            the owner-managed benefits (tip) catalogue
   catalog.ts             request schemas, priorities and catalogue types, shared with the browser
   catalog-data.ts        live material/colour reads and the authoritative lookup
   models.ts              upload validation + mesh measurement
@@ -505,7 +503,6 @@ src/app/admin/           the printer owner's pages; 404 for anyone else
   invites/               the guest list: invite, reset, suspend
   prints/                prints by person
   catalog/               materials and colours on the shelf
-  benefits/              the benefits catalogue
   audit/                 the dashboard and the log
 src/app/api/
   auth/[...all]/         every Better Auth endpoint
@@ -531,7 +528,6 @@ scripts/
   stubs/                 the stand-in for Printables that suite runs against
   verify-queue.ts        the queue, the flow, priority, prints by person
   verify-frr.ts          the feature-request track, filed and triaged
-  verify-benefits.ts     the owner-managed benefits catalogue
   verify-catalog.ts      the owner-managed material/colour catalogue
   verify-api.ts          the JSON API, the document and the console
   verify-passkey.ts      WebAuthn in a real browser

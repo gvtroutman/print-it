@@ -209,9 +209,6 @@ export default async function StoryPage({
                     {story.colorName}
                   </span>
                 </Fact>
-                <Fact label="On offer">
-                  <span className="text-cherry-dk">{story.tip}</span>
-                </Fact>
               </div>
 
               {/* Change the priority after filing — the requester's on their

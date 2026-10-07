@@ -94,7 +94,7 @@ export default async function QueuePage({
                     </Link>
                     <p className="m-0 mt-[6px] text-[14px] text-ink-2">
                       {quantityText(story.quantity)} · {story.material} ·{" "}
-                      {story.colorName} · offers {story.tip}
+                      {story.colorName}
                     </p>
                     <p className="m-0 mt-[4px] font-mono text-[11.5px] uppercase tracking-[0.05em] text-ink-3">
                       {story.uploader.name} · {relativeTime(story.createdAt)}
@@ -154,9 +154,6 @@ export default async function QueuePage({
                     needs a look
                   </span>
                 )}
-                <span className="w-[120px] font-mono text-[11px] uppercase tracking-[0.04em] text-ink-3">
-                  {story.tip}
-                </span>
                 {nextStatus(story.status) && (
                   <AdminActions
                     storyId={story.id}

@@ -109,14 +109,13 @@ async function signIn(user: { id: string; email: string }): Promise<Browser> {
   return browser;
 }
 
-async function upload(browser: Browser, material: string, colorName: string, tip: string) {
+async function upload(browser: Browser, material: string, colorName: string) {
   const form = new FormData();
   form.set("file", new File([stlBox() as BlobPart], "catalog.stl"));
   form.set("title", "Catalog test");
   form.set("material", material);
   form.set("colorName", colorName);
   form.set("quantity", "1");
-  form.set("tip", tip);
   form.set("note", "");
   form.set("printSettings", "");
   return browser.raw(`${APP}/api/upload`, { method: "POST", body: form });
@@ -169,8 +168,6 @@ async function main() {
       invitedById: admin.id,
     },
   });
-  const benefit = await db.benefit.findFirst({ where: { active: true } }) ??
-    await db.benefit.create({ data: { label: "A coffee", sortOrder: 0 } });
   const owner = await signIn(admin);
   const client = await signIn(clientUser);
 
@@ -230,9 +227,9 @@ async function main() {
   const uploadPage = await (await client.go(`${APP}/upload`)).text();
   check("active choices render", uploadPage.includes("Sunset") && uploadPage.includes("Dealer&#x27;s choice"));
   check("an inactive colour is absent", !uploadPage.includes(">Black<"));
-  const accepted = await upload(client, "ASA", "Sunset", benefit.label);
+  const accepted = await upload(client, "ASA", "Sunset");
   check("an active combination is accepted", accepted.status === 200, `status ${accepted.status}`);
-  const refused = await upload(client, "ASA", "Black", benefit.label);
+  const refused = await upload(client, "ASA", "Black");
   check("an inactive combination is refused", refused.status === 400, `status ${refused.status}`);
 
   const story = await db.story.findFirst({ where: { title: "Catalog test" }, orderBy: { id: "desc" } });

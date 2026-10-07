@@ -114,7 +114,7 @@ async function makeStory(uploaderId: string, title: string, status = "Requested"
   return db.story.create({
     data: {
       title, status: status as never, uploaderId,
-      material: "PETG", colorName: "Slate", colorHex: "#4a5d78", tip: "A beer",
+      material: "PETG", colorName: "Slate", colorHex: "#4a5d78",
       quantity: 1, note: "", filename: "part.stl", fileSize: 1234,
       mimeType: "model/stl", storageKey: `secret-object-key-${title}`,
       dims: "10 × 10 × 10 mm",

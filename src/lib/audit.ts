@@ -57,9 +57,6 @@ export type AuditAction =
   | "catalog.color_removed"
   | "catalog.color_reordered"
   | "catalog.color_availability_changed"
-  // benefits (the owner-managed tip catalogue)
-  | "benefit.created"
-  | "benefit.updated"
   // feature requests (the 'frr' track)
   | "feature.created"
   | "feature.status_changed"

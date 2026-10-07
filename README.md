@@ -74,10 +74,6 @@ that: there is no multi-tenancy, no billing, and no queue theory.
   job.
 - **Talk on the ticket** — a conversation thread per request, so "can you do it
   in teal" lives with the model rather than in a chat app.
-- **Owner-managed benefits** — the "what's in it for you" tips are the printer
-  owner's to define at `/admin/benefits`, and the ones they mark *preferred* are
-  starred on the upload form so people know what the owner actually wants. Editing
-  or retiring a benefit never rewrites a past request's tip.
 - **Owner-managed materials and colours** — the printer owner decides what is
   currently on the shelf at `/admin/catalog`, including display order, solid
   or gradient swatches, and a rainbow “whatever” option. Turning off, renaming,
@@ -463,9 +459,9 @@ something, see [SECURITY.md](SECURITY.md).
 
 ## Contributing
 
-Issues and pull requests are welcome. The eleven verification suites in
+Issues and pull requests are welcome. The ten verification suites in
 `scripts/` are the contract — `verify:models`, `verify:auth`, `verify:upload`,
-`verify:import`, `verify:queue`, `verify:frr`, `verify:benefits`, `verify:catalog`, `verify:api`,
+`verify:import`, `verify:queue`, `verify:frr`, `verify:catalog`, `verify:api`,
 `verify:passkey` and `probe:security`. All but `verify:models` run in CI against the built
 container image rather than a dev server. If a change makes one fail, that is the
 change talking.

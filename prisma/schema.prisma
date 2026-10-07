@@ -305,7 +305,10 @@ model Story {
   /// Snapshot of how the swatch behaves. Kept separate from the editable
   /// label so renaming "Whatever's on" cannot change an old ticket.
   colorMode  CatalogColorMode @default(solid)
-  tip       String
+  /// Retired: what the requester offered the owner in return ("a beer").
+  /// Requests no longer ask, so new tickets store "". Kept so tickets filed
+  /// before keep their data and a rolled-back image can still write it.
+  tip       String   @default("")
   note      String   @default("")
 
   /// Free-text print settings the requester optionally notes (layer height,
@@ -524,14 +527,9 @@ model FeatureComment {
   @@map("featureComment")
 }
 
-/// A "benefit" — the tip a requester offers the printer owner ("what's in it
-/// for you"). Owner-managed data, replacing the old hardcoded TIPS const, so
-/// the owner defines the list and marks which ones they currently prefer.
-///
-/// `Story.tip` stays a plain string with no FK: a past request keeps the exact
-/// tip it was made with even after the list is edited or a benefit retired.
-/// `active` retires a benefit without deleting that history; `preferred` is
-/// what the upload form highlights.
+/// Retired: the owner-managed list of tips a requester could offer. Nothing
+/// reads or writes it any more; the table is kept rather than dropped so a
+/// rolled-back image still finds it.
 model Benefit {
   id        String   @id @default(cuid())
   label     String   @unique

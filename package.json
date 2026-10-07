@@ -41,7 +41,6 @@
     "env:container": "tsx scripts/use-container-env.ts",
     "verify:queue": "tsx scripts/verify-queue.ts",
     "verify:frr": "tsx scripts/verify-frr.ts",
-    "verify:benefits": "tsx scripts/verify-benefits.ts",
     "verify:catalog": "tsx scripts/verify-catalog.ts",
     "verify:api": "tsx scripts/verify-api.ts",
     "vendor:swagger": "tsx scripts/vendor-swagger.ts",

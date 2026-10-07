@@ -111,7 +111,7 @@ async function storedFiles(dir = MODELS_ROOT): Promise<number> {
 }
 
 const link = (id: number, slug = "") => `https://www.printables.com/model/${id}${slug ? `-${slug}` : ""}`;
-const WISH = { material: "PETG", colorName: "Slate", quantity: 1, tip: "A beer" };
+const WISH = { material: "PETG", colorName: "Slate", quantity: 1 };
 
 const rendered = (html: string) => html.replace(/<!--\s*-->/g, "");
 
@@ -359,8 +359,6 @@ async function main() {
   await resetHits();
   const badWish = await aylaB.post("/api/import", { ...WISH, colorName: "Plaid", url: link(3161), fileId: "101" });
   check("a colour that is not on the shelf is refused", badWish.status === 400, `status ${badWish.status}`);
-  const badTip = await aylaB.post("/api/import", { ...WISH, tip: "A pony", url: link(3161), fileId: "101" });
-  check("and so is a benefit that is not on offer", badTip.status === 400, `status ${badTip.status}`);
   const quiet = await hits();
   check("and the site was never contacted to find that out",
         quiet.graphql === 0 && quiet.files === 0, JSON.stringify(quiet));

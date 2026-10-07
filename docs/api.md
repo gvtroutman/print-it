@@ -126,7 +126,7 @@ curl -s https://print.example/api/upload \
   -H "authorization: Bearer $TOKEN" \
   -F file=@clip.stl \
   -F title='Cable clip' -F material=PETG -F colorName=Slate \
-  -F quantity=2 -F tip='A beer' -F note='Teal if you have it'
+  -F quantity=2 -F note='Teal if you have it'
 ```
 
 ## Errors

@@ -153,7 +153,6 @@ function upload(b: Browser, filename: string, bytes: Uint8Array, fields: Record<
   form.set("material", fields.material ?? "PETG");
   form.set("colorName", fields.colorName ?? "Slate");
   form.set("quantity", fields.quantity ?? "2");
-  form.set("tip", fields.tip ?? "A beer");
   form.set("note", fields.note ?? "No rush.");
   form.set("printSettings", fields.printSettings ?? "");
   // Only when asked for: a client written before priority existed sends none.
@@ -396,7 +395,7 @@ async function main() {
   const jonasStory = await db.story.create({
     data: {
       title: "Jonas's private bracket", uploaderId: jonas.id, material: "PLA",
-      colorName: "Teal", colorHex: "#12645f", tip: "A coffee", quantity: 1,
+      colorName: "Teal", colorHex: "#12645f", quantity: 1,
       filename: "bracket.stl", fileSize: 500, mimeType: "model/stl",
       storageKey: "k-jonas", dims: "1 × 1 × 1 mm",
     },
@@ -404,7 +403,7 @@ async function main() {
   const declined = await db.story.create({
     data: {
       title: "Turned down last week", uploaderId: ayla.id, status: "Declined",
-      material: "PETG", colorName: "Slate", colorHex: "#4a5d78", tip: "A beer",
+      material: "PETG", colorName: "Slate", colorHex: "#4a5d78",
       quantity: 1, filename: "nope.stl", fileSize: 500, mimeType: "model/stl",
       storageKey: "k-nope", dims: "1 × 1 × 1 mm",
     },
@@ -555,7 +554,7 @@ async function main() {
         JSON.stringify({ s: tuned.status, q: tunedCopy?.quantity, m: tunedCopy?.material, c: tunedCopy?.colorName }));
   check("the colour follows the new choice, not the old ticket", tunedCopy?.colorHex === "#12645f", tunedCopy?.colorHex);
   check("what was left alone is carried over",
-        tunedCopy?.title === psStory!.title && tunedCopy?.tip === psStory!.tip &&
+        tunedCopy?.title === psStory!.title &&
         tunedCopy?.filename === psStory!.filename && tunedCopy?.dims === psStory!.dims);
   const rushAgain = await requeue(aylaB, rushRow!.id, {});
   const rushCopy = await db.story.findUnique({
@@ -586,8 +585,6 @@ async function main() {
   check("a colour that is not on the shelf is refused", offShelf.status === 409, `status ${offShelf.status}`);
   const tooMany = await requeue(aylaB, psStory!.id, { quantity: 9999 });
   check("a changed field is held to the upload's rules", tooMany.status === 400, `status ${tooMany.status}`);
-  const badTip = await requeue(aylaB, psStory!.id, { tip: "A yacht" });
-  check("a benefit that is not on offer is refused", badTip.status === 409, `status ${badTip.status}`);
   check("and none of those opened a ticket", (await db.story.count()) === countBeforeBad);
   const notYours = await requeue(jonasB, psStory!.id, { quantity: 2 });
   check("somebody else's ticket cannot be re-queued", notYours.status === 404, `status ${notYours.status}`);

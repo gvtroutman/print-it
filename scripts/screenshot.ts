@@ -85,11 +85,11 @@ function stlBox(x: number, y: number, z: number): Uint8Array {
 
 /** One ticket per stage, so every rail colour and state is on screen at once. */
 const SEED = [
-  ["Hook for the monitor arm", "Requested", "PETG", "Slate", "#4a5d78", "A beer", 1, false],
-  ["Cable comb, 6 slots", "Accepted", "PLA", "Graphite", "#1b2126", "A coffee", 4, true],
-  ["Replacement knob, grinder", "Printing", "PETG", "Teal", "#12645f", "A spool of filament", 2, false],
-  ["Desk sign, meeting room", "Done", "PLA", "Bone white", "#eaecee", "Nerd stuff", 1, false],
-  ["Gridfinity bin, 2×1", "Delivery", "PLA", "Slate", "#4a5d78", "A beer", 6, false],
+  ["Hook for the monitor arm", "Requested", "PETG", "Slate", "#4a5d78", 1, false],
+  ["Cable comb, 6 slots", "Accepted", "PLA", "Graphite", "#1b2126", 4, true],
+  ["Replacement knob, grinder", "Printing", "PETG", "Teal", "#12645f", 2, false],
+  ["Desk sign, meeting room", "Done", "PLA", "Bone white", "#eaecee", 1, false],
+  ["Gridfinity bin, 2×1", "Delivery", "PLA", "Slate", "#4a5d78", 6, false],
 ] as const;
 
 async function main() {
@@ -108,11 +108,11 @@ async function main() {
     },
   });
 
-  for (const [title, status, material, colorName, colorHex, tip, qty, flagged] of SEED) {
+  for (const [title, status, material, colorName, colorHex, qty, flagged] of SEED) {
     await db.story.create({
       data: {
         title, status: status as never, material: material as never,
-        colorName, colorHex, tip, quantity: qty, flagged,
+        colorName, colorHex, quantity: qty, flagged,
         note: "Clips onto the round arm tube and holds a headset. No rush.",
         uploaderId: ayla.id, filename: "monitor-hook-v3.stl", fileSize: 2_517_000,
         mimeType: "model/stl", storageKey: "demo", dims: "78 × 40 × 22 mm",
@@ -146,7 +146,6 @@ async function main() {
     form.set("material", "PETG");
     form.set("colorName", "Teal");
     form.set("quantity", "2");
-    form.set("tip", "A spool of filament");
     form.set("note", "Clips onto the round arm tube and holds a headset. No rush.");
     const up = await fetch(`${APP}/api/upload`, {
       method: "POST", body: form, headers: { origin: APP, cookie },
@@ -168,7 +167,7 @@ async function main() {
     data: {
       title: "Bracket that was too thin", uploaderId: ayla.id, status: "Declined",
       material: "PLA", colorName: "Bone white", colorHex: "#eaecee",
-      tip: "Nothing, sorry", quantity: 1, filename: "bracket-v1.stl",
+      quantity: 1, filename: "bracket-v1.stl",
       fileSize: 640_000, mimeType: "model/stl", storageKey: "declined-demo",
       dims: "60 × 20 × 3 mm",
     },

@@ -79,7 +79,7 @@ class Browser {
 }
 /**
  * React SSR puts an empty comment between static text and an interpolation,
- * so "offers {tip}" reaches the wire as "offers <!-- -->A beer". Asserting on
+ * so "· {colorName}" reaches the wire as "· <!-- -->Slate". Asserting on
  * the raw markup therefore fails on copy that is perfectly correct.
  */
 const rendered = (html: string) => html.replace(/<!--\s*-->/g, "");
@@ -122,7 +122,7 @@ async function makeStory(uploaderId: string, title: string, status = "Requested"
   return db.story.create({
     data: {
       title, status: status as never, uploaderId,
-      material: "PETG", colorName: "Slate", colorHex: "#4a5d78", tip: "A beer",
+      material: "PETG", colorName: "Slate", colorHex: "#4a5d78",
       quantity: 1, note: "", filename: "part.stl", fileSize: 1234,
       mimeType: "model/stl", storageKey: `k-${title}`, dims: "10 × 10 × 10 mm",
     },
@@ -170,7 +170,7 @@ async function main() {
   let page = await (await ruben.go(`${APP}/queue`)).text();
   check("it shows up under Waiting on you",
         page.includes("Waiting on you") && page.includes("Hook for the monitor arm"));
-  check("with the wish spelled out", rendered(page).includes("offers A beer"),
+  check("with the wish spelled out", rendered(page).includes("1 print · PETG · Slate"),
         "the wish line did not render as expected");
 
   const acceptIdx = formIndexContaining(page, "Accept it");

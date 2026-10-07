@@ -35,7 +35,6 @@ export const POST = withActor(async (request, actor) => {
     colorName: body.colorName,
     quantity: body.quantity,
     priority: body.priority ?? undefined,
-    tip: body.tip,
     note: body.note ?? "",
     printSettings: body.printSettings ?? "",
     links: body.links ?? [],

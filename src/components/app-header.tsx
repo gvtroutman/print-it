@@ -43,7 +43,6 @@ const NAV: Record<Actor["role"], NavGroup[]> = {
       heading: "Setup",
       items: [
         { label: "Materials", href: "/admin/catalog" },
-        { label: "Benefits", href: "/admin/benefits" },
         { label: "Members", href: "/admin/invites" },
         { label: "Audit log", href: "/admin/audit" },
       ],

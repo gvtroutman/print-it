@@ -21,6 +21,16 @@ Notable changes. Every entry names a released version; deployments pin
 
 - **The "Order up" tab is now "New order".**
 
+### Removed
+
+- **Tips.** The request form no longer asks "And what's in it for …?", the
+  profile no longer counts beers owed, and the tip is gone from the queue,
+  the tickets and the API (a `tip` sent to the API is ignored). The
+  `/admin/benefits` page and `verify:benefits` went with it. Needs the
+  `story_tip_default` migration, which only gives `story.tip` a default of
+  `""`; old tickets keep their tip in the database, and the `benefit` table
+  stays so a rollback still works.
+
 - **The header is wrinkled kraft paper** instead of black, with the navigation
   in ink to match. It is a photo of real kraft, about 210 KB, bundled with the
   build.

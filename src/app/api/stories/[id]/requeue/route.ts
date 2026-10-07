@@ -8,8 +8,7 @@ import { getStory, requeueStory, storyIdOr400 } from "@/lib/stories";
  * The body is the wish, and every field is optional: what is left out is
  * carried over from the old ticket, so `{}` repeats it exactly and
  * `{ "quantity": 4 }` asks for four of the same. What is sent is held to the
- * rules an upload is — the material and colour must be on the shelf today,
- * the tip must be a benefit on offer.
+ * rules an upload is — the material and colour must be on the shelf today.
  *
  * Yours only. Someone else's ticket is 404 through `storyScope`, like every
  * other read; the printer owner can see every ticket and still gets 403 on

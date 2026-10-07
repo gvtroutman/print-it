@@ -186,7 +186,6 @@ export function storyResource(story: StoryRow) {
       style: story.colorStyle ?? story.colorHex,
       mode: story.colorMode,
     },
-    tip: story.tip,
     note: story.note,
     file: {
       filename: story.filename,

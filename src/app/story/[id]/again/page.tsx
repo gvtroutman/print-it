@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 
 import { getStoryOr404, printerName, requireUser, storyRef } from "@/lib/authz";
-import { listActiveBenefits } from "@/lib/benefits";
 import { availableCatalog } from "@/lib/catalog-data";
 import { AppHeader } from "@/components/app-header";
 import { Kicker, Notice } from "@/components/ui";
@@ -37,12 +36,7 @@ export default async function PrintAgainPage({
   const story = await getStoryOr404(storyId, user);
   if (story.uploader.id !== user.id) notFound();
 
-  const [owner, catalog, activeBenefits] = await Promise.all([
-    printerName(),
-    availableCatalog(),
-    listActiveBenefits(),
-  ]);
-  const benefits = activeBenefits.map((b) => ({ label: b.label, preferred: b.preferred }));
+  const [owner, catalog] = await Promise.all([printerName(), availableCatalog()]);
   const ref = storyRef(story.id);
 
   return (
@@ -64,7 +58,6 @@ export default async function PrintAgainPage({
           <UploadForm
             owner={owner}
             catalog={catalog}
-            benefits={benefits}
             again={{
               id: story.id,
               ref,
@@ -75,7 +68,6 @@ export default async function PrintAgainPage({
               colorName: story.colorName,
               quantity: story.quantity,
               priority: story.priority,
-              tip: story.tip,
               note: story.note,
               printSettings: story.printSettings,
             }}

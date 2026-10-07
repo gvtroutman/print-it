@@ -84,9 +84,6 @@ export function StoryCard({
             />
             {story.material}
           </span>
-          <span className="rounded-chip border-2 border-ink bg-aqua-wash px-[9px] py-[2px] font-mono text-[11px] font-bold uppercase tracking-[0.05em] text-ink">
-            {story.tip}
-          </span>
         </div>
 
         {/*

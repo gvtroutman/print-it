@@ -38,8 +38,6 @@ const KIND_BADGE: Record<FileKind, { label: string; className: string }> = {
   video: { label: "Video", className: "bg-ink text-cream" },
 };
 
-/** One owner-managed tip option, passed from the server (see upload/page.tsx). */
-type Benefit = { label: string; preferred: boolean };
 import { SOURCE_LABEL, identifySource, type ImportSource } from "@/lib/import-source";
 import { Button, Label, Notice } from "@/components/ui";
 import { ColorSwatch } from "@/components/color-swatch";
@@ -59,7 +57,6 @@ export type Again = {
   colorName: string;
   quantity: number;
   priority: StoryPriorityName;
-  tip: string;
   note: string;
   printSettings: string;
 };
@@ -135,25 +132,19 @@ function Segmented<T extends string | number>({
 export function UploadForm({
   owner,
   catalog,
-  benefits,
   again,
   importSources = [],
 }: {
   owner: string;
   catalog: CatalogMaterialChoice[];
-  benefits: Benefit[];
   again?: Again;
   /** The sites this instance imports from. Empty hides the link step entirely. */
   importSources?: ImportSource[];
 }) {
-  // Default to a preferred benefit if the owner has marked one, else the first
-  // on the list, else empty (the list is seeded, so empty is only a safety net).
-  const preferredLabels = benefits.filter((b) => b.preferred).map((b) => b.label);
-  const defaultTip = preferredLabels[0] ?? benefits[0]?.label ?? "";
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   // Printing again starts from what was asked for last time — where that is
-  // still on the shelf. A material, colour or benefit the owner has since
+  // still on the shelf. A material or colour the owner has since
   // retired falls back to the usual default, and `gone` says which, because a
   // choice that quietly changed under someone is one they will not notice
   // until the print arrives.
@@ -161,11 +152,9 @@ export function UploadForm({
   const initialMaterial = wanted ?? catalog.find((item) => item.name === "PETG") ?? catalog[0]!;
   const wantedColor = wanted?.colors.find((item) => item.name === again?.colorName);
   const initialColor = wantedColor ?? initialMaterial.colors.find((item) => item.name === "Slate") ?? initialMaterial.colors[0]!;
-  const tipStillOffered = again ? benefits.some((b) => b.label === again.tip) : false;
   const gone = again
     ? [
         !wanted ? again.material : !wantedColor ? `${again.material} in ${again.colorName}` : null,
-        !tipStillOffered && benefits.length > 0 ? `“${again.tip}”` : null,
       ].filter((x): x is string => x !== null)
     : [];
 
@@ -197,9 +186,6 @@ export function UploadForm({
   const [quantityDraft, setQuantityDraft] = useState<string | null>(null);
   const [priority, setPriority] = useState<StoryPriorityName>(again?.priority ?? DEFAULT_STORY_PRIORITY);
   const [color, setColor] = useState<string>(initialColor.name);
-  const [tip, setTip] = useState<string>(
-    again && (tipStillOffered || benefits.length === 0) ? again.tip : defaultTip,
-  );
   const [note, setNote] = useState(again?.note ?? "");
   const [printSettings, setPrintSettings] = useState(again?.printSettings ?? "");
 
@@ -316,7 +302,7 @@ export function UploadForm({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          url, fileId, title, material, colorName: color, quantity, priority, tip, note, printSettings, links,
+          url, fileId, title, material, colorName: color, quantity, priority, note, printSettings, links,
         }),
       });
       const body = await res.json().catch(() => ({}));
@@ -347,7 +333,7 @@ export function UploadForm({
       const res = await fetch(`/api/stories/${source.id}/requeue`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title, material, colorName: color, quantity, priority, tip, note, printSettings }),
+        body: JSON.stringify({ title, material, colorName: color, quantity, priority, note, printSettings }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -392,7 +378,6 @@ export function UploadForm({
     body.set("colorName", color);
     body.set("quantity", String(quantity));
     body.set("priority", priority);
-    body.set("tip", tip);
     body.set("note", note);
     body.set("printSettings", printSettings);
 
@@ -878,54 +863,6 @@ export function UploadForm({
           {owner} confirms what&rsquo;s actually on the spool.
         </p>
       </fieldset>
-
-      {/* ---- the tip jar ---- */}
-      {/*
-        A fieldset with a floated full-width legend broke the layout here: the
-        float took the whole row and squeezed the pills into a vertical stack.
-        A labelled radiogroup does the same job for assistive tech without
-        fighting the box model.
-      */}
-      <section
-        aria-labelledby="tip-heading"
-        className="mt-[26.4px] rounded-panel border-[3px] border-ink bg-aqua-wash p-[22px] shadow-stamp"
-      >
-        <h2 id="tip-heading" className="m-0 mb-[4px] font-display text-[22px] text-ink">
-          And what&rsquo;s in it for {owner}?
-        </h2>
-        <p className="m-0 mb-[8px] text-[14.5px] text-ink-2">
-          Optional. Nobody is counting. {owner} is counting a little.
-        </p>
-        {preferredLabels.length > 0 && (
-          <p className="m-0 mb-[15px] font-mono text-[12px] font-bold uppercase tracking-[0.04em] text-cherry-dk">
-            ★ {owner} currently prefers: {preferredLabels.join(", ")}
-          </p>
-        )}
-        <div role="radiogroup" aria-labelledby="tip-heading" className="flex flex-wrap gap-[8.8px]">
-          {benefits.map((b) => {
-            const active = b.label === tip;
-            return (
-              <button
-                key={b.label}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => setTip(b.label)}
-                className={`stamp cursor-pointer rounded-chip border-[3px] border-ink px-[18px] py-[9px] text-[14px] font-bold transition-colors ${
-                  active ? "bg-cherry-dk text-cream" : "bg-porcelain text-ink hover:bg-sun"
-                }`}
-              >
-                {b.preferred && (
-                  <span aria-label="preferred" title="Preferred">
-                    ★{" "}
-                  </span>
-                )}
-                {b.label}
-              </button>
-            );
-          })}
-        </div>
-      </section>
 
       {/* ---- note ---- */}
       <div className="mt-[22px]">

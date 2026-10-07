@@ -86,7 +86,6 @@ async function handleUpload(request: Request, user: Actor) {
     colorName: form.get("colorName"),
     quantity: form.get("quantity"),
     priority: form.get("priority") ?? undefined,
-    tip: form.get("tip"),
     note: form.get("note") ?? "",
     printSettings: form.get("printSettings") ?? "",
     links: form.getAll("links"),

@@ -6,7 +6,6 @@ import type { Actor } from "@/lib/scope";
 import { record } from "@/lib/audit";
 import { WishSchema, type Wish } from "@/lib/catalog";
 import { availableSelection } from "@/lib/catalog-data";
-import { activeBenefitLabels } from "@/lib/benefits";
 import { REJECTION_COPY, extensionOf, inspectModel, safeFilename } from "@/lib/models";
 import { MEDIA_REJECTION_COPY, inspectMedia } from "@/lib/media";
 import { parseLinks } from "@/lib/links";
@@ -58,16 +57,6 @@ export async function checkWish(raw: Record<string, unknown>): Promise<CheckedWi
   const selection = await availableSelection(wish.material, wish.colorName);
   if (!selection) {
     throw problem(400, "That material and color combination is no longer available.");
-  }
-
-  // The tip is owner-managed data, so the list — not a compile-time enum — is
-  // what decides. A benefit the owner has retired, or one never on the list,
-  // is refused here even if the form somehow posted it. If the owner has no
-  // active benefits at all, any non-empty tip is accepted rather than locking
-  // requests out.
-  const allowedTips = await activeBenefitLabels();
-  if (allowedTips.length > 0 && !allowedTips.includes(wish.tip)) {
-    throw problem(400, "That is not a benefit on offer — pick one from the list.");
   }
 
   let links: string[];
@@ -228,7 +217,6 @@ export async function openRequest(
         colorHex: selection.hex,
         colorStyle: selection.style,
         colorMode: selection.mode,
-        tip: wish.tip,
         note: wish.note,
         printSettings: wish.printSettings,
         filename,

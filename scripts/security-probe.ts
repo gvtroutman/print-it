@@ -288,7 +288,7 @@ async function main() {
   const aylaStory = await db.story.create({
     data: {
       title: "Ayla's private hook", uploaderId: ayla.id, colorName: "Slate",
-      colorHex: "#4a5d78", tip: "A beer", filename: "a.stl", fileSize: 1,
+      colorHex: "#4a5d78", filename: "a.stl", fileSize: 1,
       mimeType: "model/stl", storageKey: "secret-key-a1",
     },
   });
@@ -323,7 +323,6 @@ async function main() {
   spoof.set("material", "PLA");
   spoof.set("colorName", "Teal");
   spoof.set("quantity", "1");
-  spoof.set("tip", "A beer");
   spoof.set("note", "");
   spoof.set("uploaderId", admin.id);
   spoof.set("status", "Done");
@@ -357,7 +356,7 @@ async function main() {
   const mallorysStory = await db.story.create({
     data: {
       title: "Mallory's own", uploaderId: mallory.id, colorName: "Slate",
-      colorHex: "#4a5d78", tip: "A beer", filename: "m.stl", fileSize: 1,
+      colorHex: "#4a5d78", filename: "m.stl", fileSize: 1,
       mimeType: "model/stl", storageKey: "secret-key-m1",
     },
   });
