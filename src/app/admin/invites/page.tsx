@@ -12,6 +12,7 @@ import { InviteForm } from "./invite-form";
 import { ResetPassword } from "@/components/reset-password";
 import { DeviceLink } from "@/components/device-link";
 import { MemberAccess } from "@/components/member-access";
+import { StartPreview } from "@/components/member-preview";
 import { resendInviteAction, revokeInviteAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -95,6 +96,13 @@ export default async function InvitesPage() {
           outstanding. Links expire after {INVITE_TTL_DAYS} days and work exactly
           once.
         </p>
+
+        {/* Here as well as in the account menu, because this is where the
+            owner is thinking about members — and the menu needs JavaScript
+            to open, which this form does not. */}
+        <div className="mb-[26.4px]">
+          <StartPreview />
+        </div>
 
         <InviteForm />
 

@@ -192,6 +192,55 @@ async function main() {
         paramOf(accepted.headers.get("location"), "toast"));
 
   // ------------------------------------------------------------------
+  section("the owner can preview the member view, and leave it");
+  const members = await (await ruben.go(`${APP}/admin/invites`)).text();
+  const startIdx = formIndexContaining(members, "Preview as a member");
+  check("the guest list offers the preview", startIdx >= 0);
+  const started = await ruben.submit(`${APP}/admin/invites`, members, startIdx, {});
+  check("starting it lands on the rail",
+        started.status >= 300 && started.status < 400 &&
+        (started.headers.get("location") ?? "").endsWith("/board"),
+        `status ${started.status} location ${started.headers.get("location")}`);
+
+  const previewBoard = rendered(await (await ruben.go(`${APP}/board`)).text());
+  check("the rail says it is a preview", previewBoard.includes("Previewing as a member"));
+  check("with the member's navigation", previewBoard.includes("Order up") &&
+        !previewBoard.includes("Audit log"));
+  check("and the member's scope — a colleague's ticket is not on it",
+        !previewBoard.includes("Hook for the monitor arm"));
+  check("admin pages answer 404 while it lasts",
+        (await ruben.go(`${APP}/queue`)).status === 404 &&
+        (await ruben.go(`${APP}/admin/invites`)).status === 404);
+  check("and home is the rail", (await ruben.raw(`${APP}/`)).headers.get("location")?.endsWith("/board") === true);
+
+  // The cookie names the session that set it. Carried into another session —
+  // a later sign-in on the same browser — it must do nothing.
+  // Signed in with the password `signIn` already set, not through `signIn`
+  // itself: setting the password again would revoke `ruben`'s session.
+  const otherSession = new Browser();
+  await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
+  await signInWithPassword(otherSession, APP, usernameFor(admin.email));
+  otherSession.jar.set("ppp.preview", ruben.jar.get("ppp.preview") ?? "");
+  check("another session ignores the preview cookie",
+        (await otherSession.raw(`${APP}/queue`)).status === 200);
+  // And a client cannot use it to become anything but a client.
+  client.jar.set("ppp.preview", "anything");
+  check("a client holding the cookie is still refused the queue",
+        (await client.go(`${APP}/queue`)).status === 404);
+  client.jar.delete("ppp.preview");
+
+  const endIdx = formIndexContaining(previewBoard, "Back to the owner view");
+  check("the banner offers the way back", endIdx >= 0);
+  const ended = await ruben.submit(`${APP}/board`, previewBoard, endIdx, {});
+  check("leaving lands on the queue",
+        ended.status >= 300 && ended.status < 400 &&
+        (ended.headers.get("location") ?? "").endsWith("/queue"),
+        `status ${ended.status} location ${ended.headers.get("location")}`);
+  // `raw`, not `go`: a lost session would redirect to sign-in, which is a 200.
+  check("and the owner has the queue back",
+        (await ruben.raw(`${APP}/queue`)).status === 200 && !ruben.jar.has("ppp.preview"));
+
+  // ------------------------------------------------------------------
   section("priority orders the queue, and is changed on the ticket");
   const routine = await makeStory(ayla.id, "Routine drawer organiser");
   const rush = await makeStory(ayla.id, "Rush job for Friday");

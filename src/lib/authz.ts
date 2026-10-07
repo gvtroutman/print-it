@@ -1,9 +1,10 @@
 import "server-only";
 import { cache } from "react";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 
 import { auth } from "@/lib/auth";
+import { PREVIEW_COOKIE } from "@/lib/auth-rules";
 import { db } from "@/lib/db";
 import { storyScope, type Actor } from "@/lib/scope";
 
@@ -41,6 +42,70 @@ export {
  * braces: a session that somehow survives still resolves to nobody.
  */
 export async function currentUser(): Promise<Actor | null> {
+  const signedIn = await signedInUser();
+  if (!signedIn) return null;
+
+  const { actor, sessionId } = signedIn;
+  if (actor.role === "admin" && (await isPreviewing(sessionId))) {
+    return { ...actor, role: "client", previewing: true };
+  }
+  return actor;
+}
+
+/**
+ * The printer owner's member preview.
+ *
+ * It works by handing the owner back from `currentUser` as a client, so every
+ * page, action and API route already treats them as one: the member's
+ * navigation, the member's scope (their own tickets only), and a 404 from
+ * every admin surface. Nothing downstream has to know previews exist, and
+ * nothing can forget to honour one.
+ *
+ * Which is also why it is safe. The preview can only ever take the admin role
+ * away, never give it — a client who sets the cookie by hand is still a
+ * client. It is not impersonation: the owner sees the member view of their
+ * own account, never a colleague's (`/api/auth/admin/impersonate-user` stays
+ * closed in middleware, for the reasons given there).
+ *
+ * The cookie names the session that switched it on, and a different session
+ * ignores it, so a sign-out or a fresh sign-in always lands in the owner view.
+ */
+async function isPreviewing(sessionId: string): Promise<boolean> {
+  return (await cookies()).get(PREVIEW_COOKIE)?.value === sessionId;
+}
+
+/** Start the preview for the session making the request. Owner only. */
+export async function startPreview(): Promise<void> {
+  const signedIn = await signedInUser();
+  if (signedIn?.actor.role !== "admin") notFound();
+
+  await setPreviewCookie(signedIn.sessionId);
+}
+
+/**
+ * End the preview. Needs no check at all: dropping the cookie can only hand
+ * somebody back the role their account already has.
+ */
+export async function endPreview(): Promise<void> {
+  await setPreviewCookie("", 0);
+}
+
+// Cleared by writing it again with the attributes it was set with, rather
+// than `cookies().delete`, so a `Secure` cookie is matched and replaced.
+async function setPreviewCookie(value: string, maxAge?: number): Promise<void> {
+  (await cookies()).set({
+    name: PREVIEW_COOKIE,
+    value,
+    maxAge,
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    secure: (process.env.BETTER_AUTH_URL ?? "").startsWith("https://"),
+  });
+}
+
+/** The account behind the session, as it really is — no preview applied. */
+async function signedInUser(): Promise<{ actor: Actor; sessionId: string } | null> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) return null;
 
@@ -53,11 +118,14 @@ export async function currentUser(): Promise<Actor | null> {
   if (u.banned) return null;
 
   return {
-    id: u.id,
-    name: u.name,
-    email: u.email,
-    initials: u.initials ?? "??",
-    role: u.role === "admin" ? "admin" : "client",
+    actor: {
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      initials: u.initials ?? "??",
+      role: u.role === "admin" ? "admin" : "client",
+    },
+    sessionId: session.session.id,
   };
 }
 

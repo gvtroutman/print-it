@@ -76,6 +76,14 @@ export const DEVICE_SESSION_SECONDS = 60 * 60 * 24 * 400;
  */
 export const DEVICE_MARKER_COOKIE = "ppp.device";
 
+/**
+ * Marks a printer owner's browser as previewing the member view. Holds the id
+ * of the session that turned it on, and counts only while that session is the
+ * one signed in — so signing out ends the preview instead of leaving it to
+ * greet the next sign-in. See `currentUser` in `src/lib/authz.ts`.
+ */
+export const PREVIEW_COOKIE = "ppp.preview";
+
 /** How long a device link the printer owner mints stays usable. */
 export const DEVICE_LINK_TTL_MINUTES = 30;
 

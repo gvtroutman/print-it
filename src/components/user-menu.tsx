@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { authClient } from "@/lib/auth-client";
 
 /**
@@ -14,12 +14,15 @@ export function UserMenu({
   email,
   role,
   passkeyCount,
+  ownerTools,
 }: {
   name: string;
   initials: string;
   email: string;
   role: "client" | "admin";
   passkeyCount: number;
+  /** Server-rendered controls for the printer owner alone. */
+  ownerTools?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
@@ -83,6 +86,12 @@ export function UserMenu({
               </p>
             )}
           </div>
+
+          {ownerTools && (
+            <div className="mt-[13.2px] border-t-2 border-dashed border-rule pt-[13.2px]">
+              {ownerTools}
+            </div>
+          )}
 
           {/* The API console. In the account menu rather than the nav because
               it is a tool for the person, not a place the work lives — and

@@ -14,6 +14,11 @@ export type Actor = {
   email: string;
   initials: string;
   role: "client" | "admin";
+  /**
+   * Set when this is the printer owner previewing the member view. `role` is
+   * then "client", and every rule here treats them as one.
+   */
+  previewing?: true;
 };
 
 /**
