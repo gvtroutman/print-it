@@ -280,7 +280,7 @@ async function main() {
   check("the page is scoped to a client, not the admin",
         home.includes(`Private to you and ${admin.name.split(" ")[0]}`) &&
         !home.includes("Admin view") &&
-        !home.includes("Guest list") &&
+        !home.includes("/admin/invites") &&
         !home.includes("/admin/audit"));
 
   const account = await db.user.findUnique({ where: { email: AYLA } });

@@ -16,25 +16,46 @@ import { PasskeyNudge } from "@/components/passkey-nudge";
  * they assert on "there is a signed-in shell here" rather than on a piece of
  * copy that a redesign can move — which is exactly what went wrong before.
  */
-const NAV: Record<Actor["role"], Array<{ label: string; href: string }>> = {
+type NavGroup = { heading?: string; items: Array<{ label: string; href: string }> };
+
+/**
+ * The owner's menu is split in two and named plainly: the day-to-day print
+ * work first, then the setup pages that are visited once in a while. Members
+ * have few enough destinations that one unlabelled group reads fine.
+ */
+const NAV: Record<Actor["role"], NavGroup[]> = {
   client: [
-    { label: "The rail", href: "/board" },
-    { label: "Order up", href: "/upload" },
-    { label: "My orders", href: "/me" },
-    { label: "Feature requests", href: "/frr" },
+    {
+      items: [
+        { label: "The rail", href: "/board" },
+        { label: "Order up", href: "/upload" },
+        { label: "My orders", href: "/me" },
+        { label: "Feature requests", href: "/frr" },
+      ],
+    },
   ],
   admin: [
-    { label: "The pass", href: "/queue" },
-    { label: "The rail", href: "/board" },
-    { label: "The books", href: "/me" },
-    { label: "Materials", href: "/admin/catalog" },
-    { label: "By person", href: "/admin/prints" },
-    // The board, not the triage queue: the owner wants to see everything that
-    // has been asked for, and triage is one button away on that page.
-    { label: "Feature requests", href: "/frr" },
-    { label: "Benefits", href: "/admin/benefits" },
-    { label: "Guest list", href: "/admin/invites" },
-    { label: "Audit", href: "/admin/audit" },
+    {
+      heading: "Prints",
+      items: [
+        { label: "To do", href: "/queue" },
+        { label: "Board", href: "/board" },
+        { label: "All orders", href: "/me" },
+        { label: "By person", href: "/admin/prints" },
+        // The board, not the triage queue: the owner wants to see everything
+        // that has been asked for, and triage is one button away on that page.
+        { label: "Feature requests", href: "/frr" },
+      ],
+    },
+    {
+      heading: "Setup",
+      items: [
+        { label: "Materials", href: "/admin/catalog" },
+        { label: "Benefits", href: "/admin/benefits" },
+        { label: "Members", href: "/admin/invites" },
+        { label: "Audit log", href: "/admin/audit" },
+      ],
+    },
   ],
 };
 
@@ -95,24 +116,43 @@ export async function AppHeader({
             </div>
           </div>
 
-          <nav className="mt-[11px] flex flex-wrap items-center gap-[6px]">
-            {NAV[user.role].map((item) => {
-              const current = item.href === active;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-current={current ? "page" : undefined}
-                  className={`rounded-chip border-2 px-[13px] py-[8px] font-mono text-[12.5px] font-bold uppercase tracking-[0.08em] transition-colors sm:px-[15px] sm:py-[7px] ${
-                    current
-                      ? "border-ink bg-sun text-ink"
-                      : "border-transparent text-cream hover:border-ink hover:bg-cream-2 hover:text-ink"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
+          <nav className="mt-[11px] flex flex-wrap items-center gap-x-[22px] gap-y-[8px]">
+            {NAV[user.role].map((group, i) => (
+              <div
+                key={group.heading ?? i}
+                role={group.heading ? "group" : undefined}
+                aria-label={group.heading}
+                className={`flex flex-wrap items-center gap-[6px] ${
+                  i > 0 ? "border-l-2 border-ink-2 pl-[22px]" : ""
+                }`}
+              >
+                {group.heading && (
+                  <span
+                    aria-hidden
+                    className="mr-[4px] font-mono text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink-3"
+                  >
+                    {group.heading}
+                  </span>
+                )}
+                {group.items.map((item) => {
+                  const current = item.href === active;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      aria-current={current ? "page" : undefined}
+                      className={`rounded-chip border-2 px-[13px] py-[8px] font-mono text-[12.5px] font-bold uppercase tracking-[0.08em] transition-colors sm:px-[15px] sm:py-[7px] ${
+                        current
+                          ? "border-ink bg-sun text-ink"
+                          : "border-transparent text-cream hover:border-ink hover:bg-cream-2 hover:text-ink"
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            ))}
           </nav>
         </div>
       </div>

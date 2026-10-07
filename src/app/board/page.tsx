@@ -126,7 +126,7 @@ export default async function BoardPage({
         <p className="m-0 mt-[17.6px] font-mono text-[11px] uppercase tracking-[0.05em] text-ink-3">
           The rail carries what is still moving.{" "}
           <Link href="/me" className="underline underline-offset-2 hover:text-cherry-dk">
-            {isAdmin ? "The books" : "My orders"}
+            {isAdmin ? "All orders" : "My orders"}
           </Link>{" "}
           has everything, declined included.
         </p>
