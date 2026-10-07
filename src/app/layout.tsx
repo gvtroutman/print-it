@@ -2,9 +2,6 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 
-import { SourceLink } from "@/components/source-link";
-import { sourceUrl } from "@/lib/runtime";
-
 /*
  * Four faces, each with a job, which is how a real diner sign works: a script
  * logotype, fat slab for the shouting, a workhorse for the reading, and a
@@ -73,11 +70,9 @@ export default function RootLayout({
     >
       <body className="plate flex min-h-screen flex-col bg-cream text-ink antialiased">
         <div className="flex-1">{children}</div>
-        {/* AGPL-3.0 section 13 wants the source offer in front of people using
-            the app over a network. In the root layout it reaches every page,
-            signed in or not, and is resolved server-side so a fork can point
-            it at its own source with SOURCE_URL. */}
-        <SourceLink href={sourceUrl()} />
+        {/* This deployment shows no "Source · AGPL-3.0" footer. That was the
+            app's AGPL-3.0 section 13 source offer; the operator removed it
+            knowing it is a licence term for a modified instance. */}
       </body>
     </html>
   );

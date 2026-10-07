@@ -7,6 +7,10 @@ Notable changes. Every entry names a released version; deployments pin
 
 ### Changed
 
+- **No source link in the footer.** The *Source · AGPL-3.0* link is gone from
+  every page. It was the app's AGPL-3.0 section 13 source offer, removed on
+  purpose for this deployment.
+
 - **New logo.** The header and the sign-in screens show the block-letter
   *Print It!* wordmark instead of the script one. The favicon is unchanged.
 

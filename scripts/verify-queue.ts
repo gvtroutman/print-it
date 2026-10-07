@@ -764,14 +764,7 @@ async function main() {
         clientIpFrom(hdr({ "cf-connecting-ip": `  ${REAL}  ` }), "cloudflare") === REAL);
 
   // ------------------------------------------------------------------
-  section("the AGPL source offer, and the brand mark");
-
-  const anonPage = await (await new Browser().go(`${APP}/signin`)).text();
-  check("the source offer reaches signed-out visitors",
-        anonPage.includes("Source · AGPL-3.0"),
-        "AGPL section 13 wants it in front of anyone using the app over a network");
-  check("and signed-in ones",
-        (await (await ruben.go(`${APP}/board`)).text()).includes("Source · AGPL-3.0"));
+  section("the brand mark");
 
   const iconRes = await new Browser().raw(`${APP}/icon.svg`);
   check("the favicon is served, not redirected to sign-in",
