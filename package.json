@@ -16,7 +16,7 @@
   "type": "module",
   "scripts": {
     "predev": "npm run vendor:swagger",
-    "dev": "next dev",
+    "dev": "node --env-file-if-exists=.env.local node_modules/next/dist/bin/next dev",
     "prebuild": "npm run vendor:swagger",
     "build": "prisma generate && next build",
     "start": "next start",
