@@ -42,7 +42,7 @@ export function EditColorInline({
         <input type="hidden" name="id" value={id} />
         <div className="flex flex-wrap items-end gap-[7px]">
           <div className="min-w-[150px] flex-1">
-            <Label htmlFor={`edit-color-${id}`}>Colour name</Label>
+            <Label htmlFor={`edit-color-${id}`}>Color name</Label>
             <Input id={`edit-color-${id}`} name="name" defaultValue={name} required maxLength={40} />
           </div>
           <div className="w-[115px]">
@@ -62,13 +62,13 @@ export function EditColorInline({
           {mode !== "whatever" && (
             <>
               <label className="block text-center font-mono text-[9.5px] font-bold uppercase text-ink-3">
-                {mode === "gradient" ? "From" : "Colour"}
-                <input aria-label={`Colour value for ${name}`} name="hex" type="color" defaultValue={matches[0] ?? hex} className="mt-[3px] block h-[45px] w-[50px] cursor-pointer rounded-card border-[3px] border-ink bg-porcelain p-[3px]" />
+                {mode === "gradient" ? "From" : "Color"}
+                <input aria-label={`Color value for ${name}`} name="hex" type="color" defaultValue={matches[0] ?? hex} className="mt-[3px] block h-[45px] w-[50px] cursor-pointer rounded-card border-[3px] border-ink bg-porcelain p-[3px]" />
               </label>
               {mode === "gradient" && (
                 <label className="block text-center font-mono text-[9.5px] font-bold uppercase text-ink-3">
                   To
-                  <input aria-label={`Second gradient colour for ${name}`} name="hexTo" type="color" defaultValue={matches[1] ?? hex} className="mt-[3px] block h-[45px] w-[50px] cursor-pointer rounded-card border-[3px] border-ink bg-porcelain p-[3px]" />
+                  <input aria-label={`Second gradient color for ${name}`} name="hexTo" type="color" defaultValue={matches[1] ?? hex} className="mt-[3px] block h-[45px] w-[50px] cursor-pointer rounded-card border-[3px] border-ink bg-porcelain p-[3px]" />
                 </label>
               )}
             </>

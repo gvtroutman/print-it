@@ -52,7 +52,7 @@ export async function checkWish(raw: Record<string, unknown>): Promise<CheckedWi
 
   const selection = await availableSelection(wish.material, wish.colorName);
   if (!selection) {
-    throw problem(400, "That material and colour combination is no longer available.");
+    throw problem(400, "That material and color combination is no longer available.");
   }
 
   // The tip is owner-managed data, so the list — not a compile-time enum — is

@@ -83,7 +83,7 @@ export default async function PrintAgainPage({
         ) : (
           <div className="max-w-[780px]">
             <Notice tone="warn">
-              The printer owner has not listed any available material and colour combinations yet.
+              The printer owner has not listed any available material and color combinations yet.
             </Notice>
           </div>
         )}

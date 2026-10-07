@@ -66,9 +66,9 @@ export default async function CatalogPage({
       <AppHeader user={admin} active="/admin/catalog" />
       <main className="mx-auto w-full max-w-[1180px] px-[26.4px] pb-[80px] pt-[35.2px]">
         <Kicker>Admin · what is on the shelf</Kicker>
-        <h1 className="m-0 mb-[13.2px] text-[46px] leading-[0.98] text-ink">Materials &amp; colours</h1>
+        <h1 className="m-0 mb-[13.2px] text-[46px] leading-[0.98] text-ink">Materials &amp; colors</h1>
         <p className="m-0 mb-[22px] max-w-[680px] text-[16.5px] leading-[1.5] text-ink-2 text-pretty">
-          Offer only combinations you can actually print today. Use the arrows to set the order shown on the request form. Turning something off hides it temporarily; removing it deletes the catalog entry and its colours. Old tickets are unchanged either way.
+          Offer only combinations you can actually print today. Use the arrows to set the order shown on the request form. Turning something off hides it temporarily; removing it deletes the catalog entry and its colors. Old tickets are unchanged either way.
         </p>
 
         {params.toast && <div className="mb-[17.6px] max-w-[780px]"><Notice tone="good">{params.toast}</Notice></div>}
@@ -136,7 +136,7 @@ export default async function CatalogPage({
                     <RemoveColorButton id={color.id} name={color.name} materialName={material.name} />
                   </div>
                 ))}
-                {material.colors.length === 0 && <p className="font-mono text-[11.5px] uppercase text-ink-3">No colours yet. This material will stay off the order form.</p>}
+                {material.colors.length === 0 && <p className="font-mono text-[11.5px] uppercase text-ink-3">No colors yet. This material will stay off the order form.</p>}
               </div>
 
               <AddColorForm materialId={material.id} />

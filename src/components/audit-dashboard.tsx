@@ -237,7 +237,7 @@ export function AuditDashboard({
             </div>
 
             <p className="m-0 mb-[6px] mt-[13.2px] font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-3">
-              Colour
+              Color
             </p>
             <div className="flex flex-col gap-[7px]">
               {mix.colors.slice(0, 5).map((c) => (

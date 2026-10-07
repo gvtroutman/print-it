@@ -108,17 +108,17 @@ const STORY_SCHEMA = {
       properties: {
         name: {
           type: "string",
-          description: "The owner-managed colour label, snapshotted when the request was made.",
+          description: "The owner-managed color label, snapshotted when the request was made.",
         },
         hex: {
           type: "string",
           examples: ["#4a5d78"],
-          description: "One representative colour — what the 3D viewer paints the model with.",
+          description: "One representative color — what the 3D viewer paints the model with.",
         },
         style: {
           type: "string",
           examples: ["#4a5d78", "linear-gradient(135deg, #e4322f, #f6c945)"],
-          description: "The swatch as a CSS background: a colour or a linear-gradient.",
+          description: "The swatch as a CSS background: a color or a linear-gradient.",
         },
         mode: { type: "string", enum: [...COLOR_MODES] },
       },
@@ -695,7 +695,7 @@ export async function buildOpenApiDocument() {
             "uploaded. The body is the wish and **every field is optional**: " +
             "what is left out is carried over from the old ticket, so `{}` " +
             "repeats it exactly. What is sent is held to the rules an upload " +
-            "is — the material and colour must be in `GET /api/catalog` today, " +
+            "is — the material and color must be in `GET /api/catalog` today, " +
             "and the tip must be a benefit on offer. The old ticket is not changed.",
           parameters: [storyIdParam],
           requestBody: {
@@ -714,7 +714,7 @@ export async function buildOpenApiDocument() {
             "400": errorResponse("A field did not parse."),
             "403": errorResponse("Only the person who asked for it can print it again."),
             "404": errorResponse("No such ticket, or not one you may see."),
-            "409": errorResponse("The material, colour or benefit is not on offer any more."),
+            "409": errorResponse("The material, color or benefit is not on offer any more."),
             ...COMMON_ERRORS,
           },
         },
@@ -782,13 +782,13 @@ export async function buildOpenApiDocument() {
           tags: ["stories"],
           summary: "What can be asked for right now",
           description:
-            "The materials on the shelf and the colours each comes in, in the " +
+            "The materials on the shelf and the colors each comes in, in the " +
             "printer owner's order. `POST /api/upload` accepts exactly these " +
             "pairs and checks again when the upload arrives, so a pair that was " +
             "retired in between is refused with 400. Retired entries are not listed.",
           responses: {
             "200": {
-              description: "Only materials that have at least one colour on offer.",
+              description: "Only materials that have at least one color on offer.",
               content: {
                 "application/json": {
                   schema: {

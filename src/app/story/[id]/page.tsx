@@ -153,7 +153,7 @@ export default async function StoryPage({
                 <Fact label="Quantity">{quantityText(story.quantity)}</Fact>
                 <Fact label="Priority">{PRIORITY_CHIP[story.priority]?.label ?? story.priority}</Fact>
                 <Fact label="Material">{story.material}</Fact>
-                <Fact label="Colour wish">
+                <Fact label="Color wish">
                   <span className="flex items-center gap-[8.8px]">
                     <ColorSwatch
                       mode={story.colorMode}

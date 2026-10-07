@@ -75,7 +75,7 @@ export const WishSchema = z.object({
   // the database in the upload route. These bounds keep hostile form values
   // small before that query runs.
   material: z.string().trim().min(1, "Pick a material.").max(40),
-  colorName: z.string().trim().min(1, "Pick a colour.").max(40),
+  colorName: z.string().trim().min(1, "Pick a color.").max(40),
   quantity: QuantitySchema,
   // Optional on the wire, so a client written before priority existed still
   // files a request — it comes out `medium`, which is what it would have meant.

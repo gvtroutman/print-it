@@ -7,7 +7,7 @@ export function RemoveMaterialButton({ id, name }: { id: string; name: string })
     <form
       action={removeMaterialAction}
       onSubmit={(event) => {
-        if (!window.confirm(`Remove ${name} and all of its colours? Old tickets will be kept.`)) {
+        if (!window.confirm(`Remove ${name} and all of its colors? Old tickets will be kept.`)) {
           event.preventDefault();
         }
       }}

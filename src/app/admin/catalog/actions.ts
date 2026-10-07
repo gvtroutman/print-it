@@ -24,15 +24,15 @@ const Mode = z.enum(COLOR_MODES);
 
 function colorInput(formData: FormData) {
   const parsedName = Name.safeParse(formData.get("name"));
-  if (!parsedName.success) back("error", "Give the colour a name between 1 and 40 characters.");
+  if (!parsedName.success) back("error", "Give the color a name between 1 and 40 characters.");
   const name = parsedName.data;
   const parsedMode = Mode.safeParse(formData.get("mode"));
   if (!parsedMode.success) back("error", "Choose a valid swatch type.");
   const mode = parsedMode.data;
   const parsedHex = mode === "whatever" ? null : Hex.safeParse(formData.get("hex"));
   const parsedHexTo = mode !== "gradient" ? null : Hex.safeParse(formData.get("hexTo"));
-  if (parsedHex && !parsedHex.success) back("error", "Choose a valid colour.");
-  if (parsedHexTo && !parsedHexTo.success) back("error", "Choose a valid second gradient colour.");
+  if (parsedHex && !parsedHex.success) back("error", "Choose a valid color.");
+  if (parsedHexTo && !parsedHexTo.success) back("error", "Choose a valid second gradient color.");
   const hex = mode === "whatever" ? WHATEVER_HEX : parsedHex!.data;
   const style = mode === "whatever"
     ? WHATEVER_STYLE
@@ -67,7 +67,7 @@ export async function addMaterialAction(formData: FormData): Promise<void> {
   await record({ action: "catalog.material_added", actor: admin, subject: parsed.data });
   revalidatePath("/admin/catalog");
   revalidatePath("/upload");
-  back("toast", `${parsed.data} added. Give it at least one colour to offer it.`);
+  back("toast", `${parsed.data} added. Give it at least one color to offer it.`);
 }
 
 export async function toggleMaterialAction(formData: FormData): Promise<void> {
@@ -131,7 +131,7 @@ export async function removeMaterialAction(formData: FormData): Promise<void> {
   });
   revalidatePath("/admin/catalog");
   revalidatePath("/upload");
-  back("toast", `${material.name} and its colours were removed. Old tickets are unchanged.`);
+  back("toast", `${material.name} and its colors were removed. Old tickets are unchanged.`);
 }
 
 export async function moveMaterialAction(formData: FormData): Promise<void> {
@@ -182,7 +182,7 @@ export async function addColorAction(formData: FormData): Promise<void> {
       data: { materialId, name, hex, style, mode, sortOrder },
     });
   } catch (error) {
-    if (duplicate(error)) back("error", `${material.name} already has a colour named ${name}.`);
+    if (duplicate(error)) back("error", `${material.name} already has a color named ${name}.`);
     throw error;
   }
   await record({
@@ -204,11 +204,11 @@ export async function editColorAction(formData: FormData): Promise<void> {
     where: { id },
     include: { material: { select: { name: true } } },
   });
-  if (!color) back("error", "That colour no longer exists.");
+  if (!color) back("error", "That color no longer exists.");
   try {
     await db.catalogColor.update({ where: { id }, data: { name, hex, style, mode } });
   } catch (error) {
-    if (duplicate(error)) back("error", `${color.material.name} already has a colour named ${name}.`);
+    if (duplicate(error)) back("error", `${color.material.name} already has a color named ${name}.`);
     throw error;
   }
   await record({
@@ -229,7 +229,7 @@ export async function toggleColorAction(formData: FormData): Promise<void> {
     where: { id },
     include: { material: { select: { name: true } } },
   });
-  if (!color) back("error", "That colour no longer exists.");
+  if (!color) back("error", "That color no longer exists.");
   const updated = await db.catalogColor.update({
     where: { id },
     data: { active: !color.active },
@@ -252,7 +252,7 @@ export async function removeColorAction(formData: FormData): Promise<void> {
     where: { id },
     include: { material: { select: { name: true } } },
   });
-  if (!color) back("error", "That colour no longer exists.");
+  if (!color) back("error", "That color no longer exists.");
   await db.catalogColor.delete({ where: { id } });
   await record({
     action: "catalog.color_removed",
@@ -275,7 +275,7 @@ export async function moveColorAction(formData: FormData): Promise<void> {
     where: { id },
     select: { materialId: true, material: { select: { name: true } } },
   });
-  if (!selected) back("error", "That colour no longer exists.");
+  if (!selected) back("error", "That color no longer exists.");
   const colors = await db.catalogColor.findMany({
     where: { materialId: selected.materialId },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
@@ -283,7 +283,7 @@ export async function moveColorAction(formData: FormData): Promise<void> {
   });
   const from = colors.findIndex((color) => color.id === id);
   const to = parsedDirection.data === "up" ? from - 1 : from + 1;
-  if (from < 0 || to < 0 || to >= colors.length) back("error", "That colour is already at the end of the list.");
+  if (from < 0 || to < 0 || to >= colors.length) back("error", "That color is already at the end of the list.");
   [colors[from], colors[to]] = [colors[to], colors[from]];
   await db.$transaction(
     colors.map((color, sortOrder) => db.catalogColor.update({

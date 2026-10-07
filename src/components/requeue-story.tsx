@@ -52,7 +52,7 @@ export function RequeueStory({
       </Link>
       <p className="m-0 mt-[6px] font-mono text-[11px] leading-[1.5] text-ink-3">
         Opens a fresh request from the same file — no re-upload. You can change
-        the material, colour, quantity and settings first.
+        the material, color, quantity and settings first.
       </p>
     </div>
   );
