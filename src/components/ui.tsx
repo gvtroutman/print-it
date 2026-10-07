@@ -3,7 +3,8 @@ import type { ComponentProps, ReactNode } from "react";
 import { PRIORITY_CHIP } from "@/lib/catalog";
 
 /**
- * The neon logotype. The printer mark and a script wordmark — the sign over the door.
+ * The neon logotype. A script wordmark on its own — the sign over the door.
+ * The printer mark lives only in the favicon (src/app/icon.svg).
  *
  * `lit` runs the warm-up flicker once on load. Off by default so it fires on
  * the sign-in and claim screens only, where it is the first thing you see;
@@ -11,17 +12,7 @@ import { PRIORITY_CHIP } from "@/lib/catalog";
  */
 export function Brand({ size = 34, lit = false }: { size?: number; lit?: boolean }) {
   return (
-    <span className="flex items-center gap-[13.2px]">
-      {/* The same file as the favicon, so the two cannot drift apart. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/icon.svg"
-        alt=""
-        aria-hidden
-        width={size}
-        height={size}
-        className="flex-none"
-      />
+    <span className="flex items-center">
       <span
         className={`font-script leading-none text-cherry-dk ${lit ? "ppp-neon" : ""}`}
         style={{ fontSize: size * 0.62 }}

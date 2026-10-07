@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Print It!">
   <!--
-    The brand mark, also drawn by <Brand> in src/components/ui.tsx: a 3D
+    The favicon (the in-app <Brand> is the wordmark alone): a 3D
     printer on a cream disc with the heavy ink keyline this design language
-    uses everywhere. The disc is what keeps the black printer readable on the
-    ink header bar and on dark browser tabs.
+    uses everywhere. The disc is what keeps the black printer readable on
+    dark browser tabs.
 
     Printer glyph: "3d printer" from Flaticon (flaticon.com/free-icon/18221504),
     embedded so the mark stays one self-contained file.
