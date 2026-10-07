@@ -8,17 +8,21 @@ import { PRIORITY_CHIP } from "@/lib/catalog";
  *
  * A PNG in /public rather than an import, so the sign-in screen can show it:
  * middleware lets `.png` through without a session. `size` is the height the
- * old script wordmark was set at; the image runs a little shorter than that,
- * because its letters are all capitals and fill the whole line.
+ * old script wordmark was set at. The letters arch, so they fill only about
+ * half the image's height; the image is drawn taller than `size` to keep them
+ * at roughly the old wordmark's width.
+ *
+ * Each version of the artwork gets its own filename, so a cached copy of the
+ * last one — in a browser or at Cloudflare — can never stand in for it.
  *
  * `lit` runs the warm-up flicker once on load. Off by default so it fires on
  * the sign-in and claim screens only, where it is the first thing you see;
  * anywhere else it would be a tic.
  */
-const WORDMARK = { src: "/print-it-wordmark.png", width: 759, height: 126 };
+const WORDMARK = { src: "/print-it-wordmark-arched.png", width: 834, height: 191 };
 
 export function Brand({ size = 34, lit = false }: { size?: number; lit?: boolean }) {
-  const height = Math.round(size * 0.8);
+  const height = Math.round(size * 1.1);
   return (
     <span className="flex items-center">
       {/* eslint-disable-next-line @next/next/no-img-element -- a fixed-size
@@ -28,7 +32,7 @@ export function Brand({ size = 34, lit = false }: { size?: number; lit?: boolean
         alt="Print It!"
         width={Math.round((height * WORDMARK.width) / WORDMARK.height)}
         height={height}
-        className={`block ${lit ? "ppp-neon" : ""}`}
+        className={`logo-shadow block ${lit ? "ppp-neon" : ""}`}
       />
     </span>
   );

@@ -148,6 +148,16 @@
   background-size: 2400px 600px;
 }
 
+/*
+ * The wordmark's shadow: a tight one where the letters meet the paper and a
+ * soft wider one under that, so they read as cut-outs lifted off the kraft.
+ * `drop-shadow` follows the letters' alpha, not the image's box.
+ */
+.logo-shadow {
+  filter: drop-shadow(1px 2px 1px rgba(34, 26, 20, 0.45))
+    drop-shadow(2px 6px 6px rgba(34, 26, 20, 0.25));
+}
+
 /* The checkerboard floor, as a trim strip. */
 .checker {
   background-image:
