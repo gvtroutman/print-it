@@ -11,10 +11,10 @@ import { PasskeyNudge } from "@/components/passkey-nudge";
 /**
  * The sign over the counter, on every screen.
  *
- * Dark ground, lit wordmark, chrome trim, and a checkerboard hairline where it
- * meets the room. `data-authenticated` is a stable hook for the test suites so
- * they assert on "there is a signed-in shell here" rather than on a piece of
- * copy that a redesign can move — which is exactly what went wrong before.
+ * Dark ground and a lit wordmark. `data-authenticated` is a stable hook for
+ * the test suites so they assert on "there is a signed-in shell here" rather
+ * than on a piece of copy that a redesign can move — which is exactly what
+ * went wrong before.
  */
 type NavGroup = { heading?: string; items: Array<{ label: string; href: string }> };
 
@@ -156,10 +156,6 @@ export async function AppHeader({
           </nav>
         </div>
       </div>
-
-      {/* Chrome trim, then the checkerboard floor line. */}
-      <div className="h-[5px] bg-chrome" aria-hidden />
-      <div className="checker h-[8px] border-b-[3px] border-ink" aria-hidden />
 
       {/* Members have no password to be tired of typing — their device is
           their sign-in — so the nudge is for the printer owner alone. */}
