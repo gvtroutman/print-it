@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { markAllRead, markRead } from "@/app/actions/notifications";
 
@@ -127,6 +128,19 @@ export function ActivityMenu({
                 </span>
               </button>
             ))}
+          </div>
+
+          {/* History lives here rather than in the nav: it is where the
+              activity ends up once a print leaves the rail. */}
+          <div className="mt-[8.8px] border-t-2 border-ink pt-[8.8px]">
+            <Link
+              href="/history"
+              onClick={() => setOpen(false)}
+              className="flex items-center justify-between rounded-card border-2 border-transparent px-[13.2px] py-[8px] font-mono text-[12px] font-bold uppercase tracking-[0.08em] text-ink hover:border-ink hover:bg-cream-2"
+            >
+              History
+              <span aria-hidden>&rarr;</span>
+            </Link>
           </div>
         </div>
       )}
