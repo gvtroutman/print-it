@@ -129,6 +129,25 @@
   );
 }
 
+/*
+ * Wrinkled kraft paper, for the header. Drawn by an SVG filter rather than
+ * shipped as a photo: low-frequency ridged ('turbulence') noise, lit from the
+ * top left, gives the broad folds and crease lines of paper that has been
+ * crumpled and smoothed out again; a faint fine noise over it is the fibre.
+ * Large and soft on purpose — small, busy wrinkles fought the nav labels. No request and no file, and
+ * `img-src data:` in the CSP already covers it. The flat colour underneath is
+ * what shows if the filter cannot render.
+ *
+ * Kept light enough for ink text: #221a14 on the flat tone is about 6:1.
+ */
+.kraft {
+  background-color: #c49a6c;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='2400' height='600'%3E%3Cfilter id='p' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='turbulence' baseFrequency='0.0028 0.0045' numOctaves='4' seed='11' result='n'/%3E%3CfeDiffuseLighting in='n' surfaceScale='7' diffuseConstant='1.12' lighting-color='%23f0c48c' result='l'%3E%3CfeDistantLight azimuth='225' elevation='48'/%3E%3C/feDiffuseLighting%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' seed='3' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0.33 0 0 0 0 0.2 0 0 0 0 0.08 0.3 0 0 0 -0.1' result='f'/%3E%3CfeComposite in='f' in2='l' operator='over'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)'/%3E%3C/svg%3E");
+  /* A wide tile, so the folds are large and the repeat never shows in a
+     header this short. */
+  background-size: 2400px 600px;
+}
+
 /* The checkerboard floor, as a trim strip. */
 .checker {
   background-image:

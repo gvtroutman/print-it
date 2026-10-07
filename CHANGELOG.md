@@ -7,6 +7,9 @@ Notable changes. Every entry names a released version; deployments pin
 
 ### Changed
 
+- **The header is wrinkled kraft paper** instead of black, with the navigation
+  in ink to match. The texture is drawn in CSS, so it costs no download.
+
 - **No source link in the footer.** The *Source · AGPL-3.0* link is gone from
   every page. It was the app's AGPL-3.0 section 13 source offer, removed on
   purpose for this deployment.
