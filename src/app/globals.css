@@ -150,8 +150,8 @@
  * `drop-shadow` follows the letters' alpha, not the image's box.
  */
 .logo-shadow {
-  filter: drop-shadow(1px 2px 1px rgba(34, 26, 20, 0.45))
-    drop-shadow(2px 6px 6px rgba(34, 26, 20, 0.25));
+  filter: drop-shadow(1px 2px 1px rgba(34, 26, 20, 0.6))
+    drop-shadow(2px 7px 7px rgba(34, 26, 20, 0.35));
 }
 
 /* The checkerboard floor, as a trim strip. */

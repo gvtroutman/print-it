@@ -75,7 +75,7 @@ export function MobileMenu({
       </button>
 
       {open && (
-        <div className="ppp-in absolute left-0 top-[50px] z-50 max-h-[70dvh] w-[300px] max-w-[calc(100vw-32px)] overflow-y-auto rounded-panel border-[3px] border-ink bg-porcelain p-[17.6px] shadow-stamp-lg">
+        <div className="ppp-in absolute left-1/2 top-[50px] -translate-x-1/2 z-50 max-h-[70dvh] w-[300px] max-w-[calc(100vw-32px)] overflow-y-auto rounded-panel border-[3px] border-ink bg-porcelain p-[17.6px] shadow-stamp-lg">
           <nav className="flex flex-col gap-[13.2px]">
             {nav.map((group, i) => (
               <div

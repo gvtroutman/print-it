@@ -164,10 +164,13 @@ export async function AppHeader({
         </div>
       </div>
 
-      {/* The phone's second bar: the hamburger (tabs and account) on the
-          left, activity on the right. Above `sm` both live in the band. */}
+      {/* The phone's second bar: the hamburger (tabs and account) centred
+          under the wordmark, activity on the right. The empty first column
+          balances the last so the hamburger sits on the true centre. Above
+          `sm` both live in the band. */}
       <div className="border-b-[3px] border-ink bg-cream-2 sm:hidden">
-        <div className="flex items-center justify-between px-[16px] py-[8.8px]">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center px-[16px] py-[8.8px]">
+          <span aria-hidden />
           <MobileMenu
             nav={NAV[user.role]}
             active={active}
@@ -178,11 +181,13 @@ export async function AppHeader({
             passkeyCount={passkeyCount}
             ownerTools={user.role === "admin" ? <StartPreview /> : undefined}
           />
-          <ActivityMenu
-            items={items}
-            unread={unread}
-            title={user.role === "admin" ? "New from the group" : "Updates on your prints"}
-          />
+          <div className="justify-self-end">
+            <ActivityMenu
+              items={items}
+              unread={unread}
+              title={user.role === "admin" ? "New from the group" : "Updates on your prints"}
+            />
+          </div>
         </div>
       </div>
 
