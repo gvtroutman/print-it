@@ -141,6 +141,20 @@
   background-color: var(--color-porcelain);
 }
 
+/*
+ * Kraft paper — what the counter wraps orders in — behind the header.
+ *
+ * The photo does not tile, so it is scaled to cover and centred; on a bar
+ * this short that shows a band of creases across the middle of the sheet.
+ * The flat colour is the paper's own average, there while the image loads.
+ * Bundled from src/app/textures rather than served from /public: Next emits
+ * it under /_next/static, which middleware skips, so it is cached like the
+ * rest of the build instead of passing the session check on every load.
+ */
+.kraft {
+  background: #c9aa7c url("./textures/kraft-paper.jpg") center / cover no-repeat;
+}
+
 /* The build plate: a faint grid under everything, like the print bed. */
 .plate {
   background-image:

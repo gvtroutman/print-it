@@ -11,7 +11,9 @@ import { PasskeyNudge } from "@/components/passkey-nudge";
 /**
  * The sign over the counter, on every screen.
  *
- * Dark ground and a lit wordmark. `data-authenticated` is a stable hook for
+ * Kraft paper, ink lettering and the wordmark in cherry. Only the bare sheet
+ * is dark enough to be a ground: the nav is ink and its group labels ink-2,
+ * because ink-3 on kraft is under 2:1. `data-authenticated` is a stable hook for
  * the test suites so they assert on "there is a signed-in shell here" rather
  * than on a piece of copy that a redesign can move — which is exactly what
  * went wrong before.
@@ -87,17 +89,14 @@ export async function AppHeader({
 
   return (
     <header data-authenticated="true" className="sticky top-0 z-40">
-      <div className="layers border-b-[3px] border-ink bg-ink">
+      <div className="kraft border-b-[3px] border-ink">
         {/* Keep identity and account controls on a stable top row. Navigation
             has its own wrapping row, so adding destinations cannot push the
             activity or profile menus away from the wordmark. */}
         <div className="mx-auto max-w-[1180px] px-[16px] py-[11px] sm:px-[26.4px] sm:py-[13.2px]">
           <div className="flex items-center gap-[16px] lg:gap-[22px]">
             <Link href={user.role === "admin" ? "/queue" : "/board"} aria-label="Print It!, home">
-              {/* On the dark bar the script reads cream, not cherry. */}
-              <span className="[&_span]:text-cream">
-                <Brand size={34} />
-              </span>
+              <Brand size={34} />
             </Link>
 
             <div className="ml-auto flex items-center gap-[8.8px] sm:gap-[13.2px]">
@@ -123,13 +122,13 @@ export async function AppHeader({
                 role={group.heading ? "group" : undefined}
                 aria-label={group.heading}
                 className={`flex flex-wrap items-center gap-[6px] ${
-                  i > 0 ? "border-l-2 border-ink-2 pl-[22px]" : ""
+                  i > 0 ? "border-l-2 border-ink pl-[22px]" : ""
                 }`}
               >
                 {group.heading && (
                   <span
                     aria-hidden
-                    className="mr-[4px] font-mono text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink-3"
+                    className="mr-[4px] font-mono text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink-2"
                   >
                     {group.heading}
                   </span>
@@ -144,7 +143,7 @@ export async function AppHeader({
                       className={`rounded-chip border-2 px-[13px] py-[8px] font-mono text-[12.5px] font-bold uppercase tracking-[0.08em] transition-colors sm:px-[15px] sm:py-[7px] ${
                         current
                           ? "border-ink bg-sun text-ink"
-                          : "border-transparent text-cream hover:border-ink hover:bg-cream-2 hover:text-ink"
+                          : "border-transparent text-ink hover:border-ink hover:bg-cream-2"
                       }`}
                     >
                       {item.label}
