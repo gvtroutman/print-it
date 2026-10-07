@@ -3,22 +3,33 @@ import type { ComponentProps, ReactNode } from "react";
 import { PRIORITY_CHIP } from "@/lib/catalog";
 
 /**
- * The neon logotype. A script wordmark on its own — the sign over the door.
- * The printer mark lives only in the favicon (src/app/icon.svg).
+ * The logotype: the block-letter wordmark on its own — the sign over the
+ * door. The printer mark lives only in the favicon (src/app/icon.svg).
+ *
+ * A PNG in /public rather than an import, so the sign-in screen can show it:
+ * middleware lets `.png` through without a session. `size` is the height the
+ * old script wordmark was set at; the image runs a little shorter than that,
+ * because its letters are all capitals and fill the whole line.
  *
  * `lit` runs the warm-up flicker once on load. Off by default so it fires on
  * the sign-in and claim screens only, where it is the first thing you see;
  * anywhere else it would be a tic.
  */
+const WORDMARK = { src: "/print-it-wordmark.png", width: 759, height: 126 };
+
 export function Brand({ size = 34, lit = false }: { size?: number; lit?: boolean }) {
+  const height = Math.round(size * 0.8);
   return (
     <span className="flex items-center">
-      <span
-        className={`font-script leading-none text-cherry-dk ${lit ? "ppp-neon" : ""}`}
-        style={{ fontSize: size * 0.62 }}
-      >
-        Print It!
-      </span>
+      {/* eslint-disable-next-line @next/next/no-img-element -- a fixed-size
+          static file; next/image would add a resize round trip for nothing */}
+      <img
+        src={WORDMARK.src}
+        alt="Print It!"
+        width={Math.round((height * WORDMARK.width) / WORDMARK.height)}
+        height={height}
+        className={`block ${lit ? "ppp-neon" : ""}`}
+      />
     </span>
   );
 }
@@ -40,7 +51,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center px-[26.4px] py-[35.2px]">
       <div className="mb-[26.4px]">
-        <Brand size={40} lit />
+        <Brand size={56} lit />
       </div>
       <div className="w-full max-w-[520px] overflow-hidden rounded-panel border-[3px] border-ink bg-porcelain shadow-stamp-lg">
         <div className="layers border-b-[3px] border-ink bg-aqua px-[26.4px] py-[13.2px]">

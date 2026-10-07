@@ -7,6 +7,9 @@ Notable changes. Every entry names a released version; deployments pin
 
 ### Changed
 
+- **New logo.** The header and the sign-in screens show the block-letter
+  *Print It!* wordmark instead of the script one. The favicon is unchanged.
+
 - **Members no longer have a password.** The invitation link asks for a name
   and nothing else, and the browser it was opened in stays signed in for up to
   four hundred days, the longest a browser keeps a cookie. Names are unique,

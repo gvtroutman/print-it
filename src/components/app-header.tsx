@@ -95,10 +95,7 @@ export async function AppHeader({
         <div className="mx-auto max-w-[1180px] px-[16px] py-[11px] sm:px-[26.4px] sm:py-[13.2px]">
           <div className="flex items-center gap-[16px] lg:gap-[22px]">
             <Link href={user.role === "admin" ? "/queue" : "/board"} aria-label="Print It!, home">
-              {/* On the dark bar the script reads cream, not cherry. */}
-              <span className="[&_span]:text-cream">
-                <Brand size={34} />
-              </span>
+              <Brand size={34} />
             </Link>
 
             <div className="ml-auto flex items-center gap-[8.8px] sm:gap-[13.2px]">
