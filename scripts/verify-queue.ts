@@ -730,9 +730,9 @@ async function main() {
         (iconRes.headers.get("content-type") ?? "").includes("svg"),
         `status ${iconRes.status} type ${iconRes.headers.get("content-type")}`);
   const iconSvg = await iconRes.text();
-  const fills = [...iconSvg.matchAll(/fill="([^"]+)"/g)].map((m) => m[1]);
-  check("and paints the cherry mark, not the old teal disc",
-        fills.includes("#e4322f") && !fills.includes("#12645f"), fills.join(","));
+  check("and paints the printer mark, not the old cherry disc",
+        iconSvg.includes("data:image/png;base64,") && !iconSvg.includes("#e4322f"),
+        iconSvg.slice(0, 200));
 
   await db.user.deleteMany({ where: { email: "goner@office.example" } });
 
