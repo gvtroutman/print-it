@@ -93,7 +93,64 @@ export const MAX_REQUEST_BYTES = Math.ceil(MAX_UPLOAD_BYTES * 1.2);
  */
 export const VIEWER_MAX_BYTES = 50 * 1024 * 1024;
 
-export const ACCEPTED_EXTENSIONS = [".stl", ".3mf"] as const;
+/**
+ * The 3D formats an order's model may be in.
+ *
+ * STL and 3MF are what slicers were built around; OBJ, PLY and AMF are the
+ * other mesh formats every slicer opens; STEP is what CAD tools export when
+ * asked for something exact; GLB and glTF are what scanners, phones and most
+ * modelling apps hand out. Every one is checked against its bytes on the
+ * server, not trusted from its name — see `inspectModel` in models.ts.
+ */
+export const ACCEPTED_EXTENSIONS = [
+  ".stl", ".3mf", ".obj", ".ply", ".amf", ".step", ".stp", ".glb", ".gltf",
+] as const;
+
+/**
+ * The ones the browser can draw. STEP is a description of solids, not a mesh,
+ * and turning it into triangles takes a CAD kernel — megabytes of WebAssembly
+ * for a preview. It is accepted, stored and downloadable; it is not spun.
+ */
+export const PREVIEWABLE_EXTENSIONS = [
+  ".stl", ".3mf", ".obj", ".ply", ".amf", ".glb", ".gltf",
+] as const;
+
+/** Photos sent with an order — where it goes, what it fixes, what it should look like. */
+export const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp", ".gif"] as const;
+
+/** Short clips, for when a photo does not show how something moves or fits. */
+export const VIDEO_EXTENSIONS = [".mp4", ".m4v", ".mov", ".webm"] as const;
+
+export type FileKind = "model" | "image" | "video";
+
+/**
+ * How many files one order may carry, the main model included. The bytes are
+ * bounded by `MAX_UPLOAD_BYTES` across all of them; this bounds the rows.
+ */
+export const MAX_FILES_PER_ORDER = 12;
+
+/** How many links one order may carry. */
+export const MAX_LINKS_PER_ORDER = 10;
+
+export function extensionOf(filename: string): string {
+  const dot = filename.lastIndexOf(".");
+  return dot < 0 ? "" : filename.slice(dot).toLowerCase();
+}
+
+/**
+ * What a file claims to be, from its name. A claim only: the server confirms
+ * it against the bytes before anything is stored.
+ */
+export function kindOf(filename: string): FileKind | null {
+  const ext = extensionOf(filename);
+  if ((ACCEPTED_EXTENSIONS as readonly string[]).includes(ext)) return "model";
+  if ((IMAGE_EXTENSIONS as readonly string[]).includes(ext)) return "image";
+  if ((VIDEO_EXTENSIONS as readonly string[]).includes(ext)) return "video";
+  return null;
+}
+
+/** "STL, 3MF, OBJ, PLY, AMF, STEP, STP, GLB, GLTF" */
+export const MODEL_FORMATS_TEXT = ACCEPTED_EXTENSIONS.map((e) => e.slice(1).toUpperCase()).join(", ");
 
 /** Bytes as a person would say them. Shared so the form and the API agree. */
 export function formatBytes(n: number): string {

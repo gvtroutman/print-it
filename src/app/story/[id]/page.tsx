@@ -10,7 +10,8 @@ import { AppHeader } from "@/components/app-header";
 import { Fact, Notice, StatusChip } from "@/components/ui";
 import { AdminActions } from "@/components/admin-actions";
 import { Conversation } from "@/components/conversation";
-import { ModelViewer } from "@/components/model-viewer";
+import { OrderMedia, type MediaItem } from "@/components/order-media";
+import { displayLink } from "@/lib/links";
 import { OpenInSlicer } from "@/components/open-in-slicer";
 import { DownloadModel } from "@/components/download-model";
 import { Toast } from "@/components/toast";
@@ -54,6 +55,33 @@ export default async function StoryPage({
     (user.role === "admin" || story.uploader.id === user.id) &&
     story.status !== "Done" && story.status !== "Declined";
 
+  // The main model first, then everything else in the order it was added.
+  const media: MediaItem[] = [
+    {
+      key: "main",
+      kind: "model",
+      filename: story.filename,
+      fileSize: story.fileSize,
+      dims: story.dims,
+      src: `/api/models/${story.id}`,
+      downloadHref: null,
+    },
+    ...story.attachments.map((a) => {
+      const src = `/api/stories/${story.id}/attachments/${a.id}`;
+      return {
+        key: a.id,
+        kind: a.kind,
+        filename: a.filename,
+        fileSize: a.fileSize,
+        dims: a.dims,
+        src,
+        downloadHref: `${src}?download=1`,
+      };
+    }),
+  ];
+  // Re-checked here rather than trusted from the column: these become hrefs.
+  const links = story.links.flatMap((l) => displayLink(l) ?? []);
+
   return (
     <>
       <AppHeader user={user} active="/board" />
@@ -69,13 +97,7 @@ export default async function StoryPage({
         <div className="mt-[13.2px] grid grid-cols-[repeat(auto-fit,minmax(330px,1fr))] items-start gap-[26.4px]">
           {/* ---------- left: the file ---------- */}
           <div>
-            <ModelViewer
-              storyId={story.id}
-              filename={story.filename}
-              colorHex={story.colorHex}
-              dims={story.dims}
-              fileSize={story.fileSize}
-            />
+            <OrderMedia colorHex={story.colorHex} items={media} />
 
             {/* Both measured from the file itself. Nothing inferred. */}
             <div className="mt-[13.2px] flex flex-wrap gap-[8px]">
@@ -145,6 +167,30 @@ export default async function StoryPage({
               <p className="m-0 mb-[22px] text-[16px] leading-[1.55] text-ink-2 text-pretty">
                 {story.note}
               </p>
+            )}
+
+            {/* Links the requester sent along. Typed by a person, so they open
+                in a new tab with no referrer and no window handle back. */}
+            {links.length > 0 && (
+              <div className="mb-[22px]">
+                <div className="mb-[6px] font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-ink-3">
+                  Links sent with it
+                </div>
+                <ul className="m-0 flex list-none flex-col gap-[6px] p-0">
+                  {links.map((link) => (
+                    <li key={link.href}>
+                      <a
+                        href={link.href}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="break-all font-mono text-[13.5px] font-bold text-ink-2 underline underline-offset-4 hover:text-cherry-dk"
+                      >
+                        {link.label} ↗
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
 
             <div className="rounded-panel border-[3px] border-ink bg-porcelain p-[22px] shadow-stamp">

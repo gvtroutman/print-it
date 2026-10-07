@@ -8,7 +8,10 @@ import { WishSchema, type Wish } from "@/lib/catalog";
 import { availableSelection } from "@/lib/catalog-data";
 import { activeBenefitLabels } from "@/lib/benefits";
 import { REJECTION_COPY, extensionOf, inspectModel, safeFilename } from "@/lib/models";
-import { MIME_FOR, ensureStorageRoot, putModel, storageKeyFor } from "@/lib/storage";
+import { MEDIA_REJECTION_COPY, inspectMedia } from "@/lib/media";
+import { parseLinks } from "@/lib/links";
+import { kindOf, type FileKind } from "@/lib/upload-limits";
+import { MIME_FOR, deleteModel, ensureStorageRoot, putModel, storageKeyFor } from "@/lib/storage";
 import { StoryProblem } from "@/lib/stories";
 import type { ImportSource } from "@/lib/import-source";
 
@@ -34,6 +37,8 @@ const problem = (status: number, message: string) => new StoryProblem(status, me
 export type CheckedWish = {
   wish: Wish;
   selection: NonNullable<Awaited<ReturnType<typeof availableSelection>>>;
+  /** Cleaned, http(s) only, no repeats — see src/lib/links.ts. */
+  links: string[];
 };
 
 /**
@@ -65,11 +70,79 @@ export async function checkWish(raw: Record<string, unknown>): Promise<CheckedWi
     throw problem(400, "That is not a benefit on offer — pick one from the list.");
   }
 
-  return { wish, selection };
+  let links: string[];
+  try {
+    links = parseLinks(Array.isArray(raw.links) ? raw.links : []);
+  } catch (error) {
+    throw problem(400, error instanceof Error ? error.message : "Check the links.");
+  }
+
+  return { wish, selection, links };
 }
 
 /** Where a model came from, when it did not come from the requester's disk. */
 export type Origin = { source: ImportSource; url: string };
+
+/** A file sent with the order besides its main model, as it arrived. */
+export type Incoming = { name: string; bytes: Uint8Array };
+
+type Checked = {
+  filename: string;
+  kind: FileKind;
+  mimeType: string;
+  dims: string | null;
+  key: string;
+  bytes: Uint8Array;
+};
+
+/**
+ * One attachment, held to the same evidence-over-names rule as the model: a
+ * photo has to be a photo in its bytes, another model has to parse. Refusals
+ * name the file, because with several in an order "that file" is not enough.
+ */
+async function checkAttachment(actor: Actor, incoming: Incoming): Promise<Checked> {
+  const filename = safeFilename(incoming.name);
+  const kind = kindOf(filename);
+  const extension = extensionOf(filename);
+
+  let refusal: { reason: string; copy: string } | null = null;
+  let checked: Checked | null = null;
+
+  if (kind === "model") {
+    const inspection = inspectModel(filename, incoming.bytes);
+    if (inspection.ok) {
+      checked = {
+        filename, kind, bytes: incoming.bytes, dims: inspection.dims,
+        mimeType: MIME_FOR[extension] ?? "application/octet-stream",
+        key: storageKeyFor(extension),
+      };
+    } else {
+      refusal = { reason: inspection.reason, copy: REJECTION_COPY[inspection.reason] };
+    }
+  } else if (kind === "image" || kind === "video") {
+    const inspection = inspectMedia(filename, incoming.bytes);
+    if (inspection.ok) {
+      checked = {
+        filename, kind: inspection.kind, bytes: incoming.bytes, dims: null,
+        mimeType: inspection.mimeType,
+        key: storageKeyFor(extension, "media"),
+      };
+    } else {
+      refusal = { reason: inspection.reason, copy: MEDIA_REJECTION_COPY[inspection.reason] };
+    }
+  } else {
+    refusal = { reason: "bad_extension", copy: "That is not a 3D model, photo or video this app takes." };
+  }
+
+  if (checked) return checked;
+  await record({
+    action: "upload.rejected",
+    actor,
+    subject: filename,
+    detail: { reason: refusal!.reason, bytes: incoming.bytes.length, attachment: true },
+  });
+  throw problem(422, `${filename}: ${refusal!.copy}`);
+}
 
 let storageReady: Promise<void> | null = null;
 
@@ -81,10 +154,11 @@ let storageReady: Promise<void> | null = null;
  */
 export async function openRequest(
   actor: Actor,
-  { wish, selection }: CheckedWish,
+  { wish, selection, links }: CheckedWish,
   rawName: string,
   bytes: Uint8Array,
   origin?: Origin,
+  attachments: Incoming[] = [],
 ) {
   const filename = safeFilename(rawName);
 
@@ -108,20 +182,37 @@ export async function openRequest(
     throw problem(422, REJECTION_COPY[inspection.reason]);
   }
 
+  // Every attachment is checked before anything is written, so one bad photo
+  // refuses the order whole rather than leaving half of it on the disk.
+  const extras: Checked[] = [];
+  for (const incoming of attachments) extras.push(await checkAttachment(actor, incoming));
+
   const extension = extensionOf(filename);
   const key = storageKeyFor(extension);
 
+  const written: string[] = [];
+  const removeWritten = async () => {
+    for (const k of written) await deleteModel(k).catch(() => undefined);
+  };
   try {
     storageReady ??= ensureStorageRoot();
     await storageReady;
+    // Noted before each write, not after: a write can fail after its file is
+    // already in place, and removing a key that was never written is a no-op.
+    written.push(key);
     await putModel(key, bytes);
+    for (const extra of extras) {
+      written.push(extra.key);
+      await putModel(extra.key, extra.bytes);
+    }
   } catch (error) {
     storageReady = null; // let the next attempt retry creating the directory
     console.error("[intake] storage write failed", error);
+    await removeWritten();
     throw problem(502, "The file could not be stored. Try again in a moment.");
   }
 
-  const title = wish.title || filename.replace(/\.(stl|3mf)$/i, "");
+  const title = wish.title || filename.replace(/\.[^.]+$/, "");
 
   let story;
   try {
@@ -146,10 +237,24 @@ export async function openRequest(
         storageKey: key,
         dims: inspection.dims,
         sourceUrl: origin?.url ?? null,
+        links,
+        attachments: {
+          create: extras.map((extra, i) => ({
+            kind: extra.kind,
+            filename: extra.filename,
+            fileSize: extra.bytes.length,
+            mimeType: extra.mimeType,
+            storageKey: extra.key,
+            dims: extra.dims,
+            sortOrder: i,
+          })),
+        },
       },
     });
   } catch (error) {
     console.error("[intake] story insert failed", error);
+    // No row points at them, so nothing ever would read them again.
+    await removeWritten();
     throw problem(500, "The request could not be saved. Try again.");
   }
 
@@ -178,6 +283,8 @@ export async function openRequest(
       dims: inspection.dims,
       material: wish.material,
       quantity: wish.quantity,
+      ...(extras.length ? { attachments: extras.map((e) => `${e.kind}:${e.filename}`) } : {}),
+      ...(links.length ? { links: links.length } : {}),
       ...(origin ? { source: origin.source, sourceUrl: origin.url } : {}),
     },
   });

@@ -17,14 +17,16 @@ import {
   MAX_INFLATED_BYTES,
   MAX_TRIANGLES,
   MAX_UPLOAD_BYTES,
+  MODEL_FORMATS_TEXT,
+  extensionOf,
   formatBytes,
 } from "@/lib/upload-limits";
 
 /** Re-exported so existing callers keep one import to reach for. */
-export { ACCEPTED_EXTENSIONS, formatBytes };
+export { ACCEPTED_EXTENSIONS, extensionOf, formatBytes };
 export const MAX_BYTES = MAX_UPLOAD_BYTES;
 
-export type ModelFormat = "stl" | "3mf";
+export type ModelFormat = "stl" | "3mf" | "obj" | "ply" | "amf" | "step" | "glb" | "gltf";
 
 export type Rejection =
   | "empty"
@@ -32,25 +34,33 @@ export type Rejection =
   | "bad_extension"
   | "not_a_model"
   | "corrupt"
-  | "no_geometry";
+  | "no_geometry"
+  | "external_refs";
 
 export const REJECTION_COPY: Record<Rejection, string> = {
   empty: "That file is empty.",
   too_large: `That file is over ${formatBytes(MAX_UPLOAD_BYTES)}.`,
-  bad_extension: "Only .stl and .3mf files can be printed here.",
+  bad_extension: `3D models can be ${MODEL_FORMATS_TEXT}.`,
   not_a_model:
-    "That does not look like an STL or 3MF inside, whatever it is named.",
+    "That does not look like the 3D format its name says it is.",
   corrupt: "That file is damaged — it could not be read all the way through.",
   no_geometry: "There is no geometry in that file.",
+  external_refs:
+    "That .gltf points at other files kept next to it. Export it as a single .glb and send that.",
 };
 
 export type Measured = {
   format: ModelFormat;
-  triangles: number;
-  /** Bounding box in millimetres. */
-  size: { x: number; y: number; z: number };
+  /** Null where the format does not carry triangles (STEP is solids). */
+  triangles: number | null;
+  /**
+   * Bounding box in millimetres, or null where it cannot be measured honestly:
+   * STEP needs a CAD kernel to know its extent, and glTF is in metres placed by
+   * a tree of transforms. "Dimensions unknown" beats a wrong number.
+   */
+  size: { x: number; y: number; z: number } | null;
   /** "78 × 40 × 22 mm" */
-  dims: string;
+  dims: string | null;
 };
 
 export type Inspection =
@@ -91,11 +101,6 @@ function isAsciiStl(bytes: Uint8Array): boolean {
     .toLowerCase();
   // Both markers required: "solid" alone is too weak a signal.
   return head.startsWith("solid") && head.includes("facet normal");
-}
-
-export function extensionOf(filename: string): string {
-  const dot = filename.lastIndexOf(".");
-  return dot < 0 ? "" : filename.slice(dot).toLowerCase();
 }
 
 // ---------------------------------------------------------------------------
@@ -374,6 +379,281 @@ function measure3mf(bytes: Uint8Array): { box: Box; triangles: number } | null {
   return placed > 0 ? { box, triangles } : null;
 }
 
+// --- OBJ ---------------------------------------------------------------------
+//
+// Wavefront OBJ is text: `v x y z` lines for vertices, `f a b c …` for faces,
+// in whatever unit the exporter liked — slicers read it as millimetres, and so
+// does this. A face of n corners is n − 2 triangles once a slicer fans it.
+
+function measureObj(bytes: Uint8Array): { box: Box; triangles: number } | null {
+  // A Wavefront file is text throughout; a NUL near the start means it is not.
+  if (bytes.subarray(0, 8192).includes(0)) return null;
+  const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  const box = emptyBox();
+  let triangles = 0;
+  const line = /^[ \t]*(v|f)[ \t]+([^\r\n]*)/gm;
+  let m: RegExpExecArray | null;
+  while ((m = line.exec(text)) !== null) {
+    const fields = m[2]!.trim().split(/\s+/);
+    if (m[1] === "v") {
+      expand(box, parseFloat(fields[0]!), parseFloat(fields[1]!), parseFloat(fields[2]!));
+    } else if (fields.length >= 3) {
+      triangles += fields.length - 2;
+      if (triangles > MAX_TRIANGLES) throw new Error("implausibly many faces");
+    }
+  }
+  return { box, triangles };
+}
+
+// --- PLY ---------------------------------------------------------------------
+//
+// An ASCII header naming each element and its properties, then the elements in
+// that order, as text or packed binary. The vertex element's x/y/z bound the
+// mesh; the face element's count is its size. A PLY with no faces is a point
+// cloud — a scan, not something a slicer can print — and is refused.
+
+type PlyProp = { name: string; type: string; list?: { count: string; item: string } };
+type PlyElement = { name: string; count: number; props: PlyProp[] };
+
+function plyRead(view: DataView, offset: number, type: string, le: boolean): [number, number] {
+  switch (type) {
+    case "char": case "int8": return [view.getInt8(offset), 1];
+    case "uchar": case "uint8": return [view.getUint8(offset), 1];
+    case "short": case "int16": return [view.getInt16(offset, le), 2];
+    case "ushort": case "uint16": return [view.getUint16(offset, le), 2];
+    case "int": case "int32": return [view.getInt32(offset, le), 4];
+    case "uint": case "uint32": return [view.getUint32(offset, le), 4];
+    case "float": case "float32": return [view.getFloat32(offset, le), 4];
+    case "double": case "float64": return [view.getFloat64(offset, le), 8];
+  }
+  throw new Error(`unknown PLY type ${type}`);
+}
+
+function measurePly(bytes: Uint8Array): { box: Box; triangles: number } | null {
+  // latin1 so that header characters and bytes line up one to one.
+  const head = new TextDecoder("latin1").decode(bytes.subarray(0, Math.min(bytes.length, 64 * 1024)));
+  const end = head.indexOf("end_header");
+  if (!/^ply\r?\n/.test(head) || end < 0) return null;
+  let bodyStart = end + "end_header".length;
+  if (head[bodyStart] === "\r") bodyStart++;
+  if (head[bodyStart] === "\n") bodyStart++;
+
+  let format = "";
+  const elements: PlyElement[] = [];
+  for (const raw of head.slice(0, end).split(/\r?\n/)) {
+    const parts = raw.trim().split(/\s+/);
+    if (parts[0] === "format") format = parts[1] ?? "";
+    else if (parts[0] === "element") {
+      elements.push({ name: parts[1] ?? "", count: Number(parts[2]), props: [] });
+    } else if (parts[0] === "property") {
+      const element = elements[elements.length - 1];
+      if (!element) return null;
+      element.props.push(
+        parts[1] === "list"
+          ? { name: parts[4] ?? "", type: "list", list: { count: parts[2] ?? "", item: parts[3] ?? "" } }
+          : { name: parts[2] ?? "", type: parts[1] ?? "" },
+      );
+    }
+  }
+
+  const vertex = elements.find((e) => e.name === "vertex");
+  const face = elements.find((e) => e.name === "face");
+  if (!vertex || !Number.isInteger(vertex.count) || vertex.count < 0) return null;
+  const triangles = face && Number.isInteger(face.count) && face.count > 0 ? face.count : 0;
+  if (triangles > MAX_TRIANGLES) throw new Error("implausibly many faces");
+  const axes = ["x", "y", "z"].map((axis) => vertex.props.findIndex((p) => p.name === axis));
+  if (axes.some((i) => i < 0)) return null;
+
+  const box = emptyBox();
+  const point = [0, 0, 0];
+
+  if (format === "ascii") {
+    const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes.subarray(bodyStart));
+    let pos = 0;
+    const nextLine = () => {
+      if (pos >= text.length) throw new Error("PLY body ends early");
+      const nl = text.indexOf("\n", pos);
+      const row = text.slice(pos, nl < 0 ? text.length : nl);
+      pos = nl < 0 ? text.length : nl + 1;
+      return row;
+    };
+    // One instance per line, so whatever precedes the vertices is skipped by
+    // counting lines.
+    for (const element of elements) {
+      if (element === vertex) break;
+      for (let i = 0; i < element.count; i++) nextLine();
+    }
+    for (let i = 0; i < vertex.count; i++) {
+      const fields = nextLine().trim().split(/\s+/);
+      expand(box, parseFloat(fields[axes[0]!]!), parseFloat(fields[axes[1]!]!), parseFloat(fields[axes[2]!]!));
+    }
+    return { box, triangles };
+  }
+
+  if (format !== "binary_little_endian" && format !== "binary_big_endian") return null;
+  const le = format === "binary_little_endian";
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  // A read past the end throws a RangeError, which the caller reports as a
+  // damaged file — so a header that claims more than the body holds is safe.
+  let offset = bodyStart;
+  for (const element of elements) {
+    const isVertex = element === vertex;
+    // Nothing to read means nothing to skip — and no loop over a count the
+    // header made up.
+    if (element.props.length === 0) continue;
+    for (let i = 0; i < element.count; i++) {
+      element.props.forEach((prop, p) => {
+        if (prop.list) {
+          const [n, size] = plyRead(view, offset, prop.list.count, le);
+          offset += size;
+          for (let j = 0; j < n; j++) offset += plyRead(view, offset, prop.list.item, le)[1];
+          return;
+        }
+        const [value, size] = plyRead(view, offset, prop.type, le);
+        offset += size;
+        if (isVertex) {
+          const axis = axes.indexOf(p);
+          if (axis >= 0) point[axis] = value;
+        }
+      });
+      if (isVertex) expand(box, point[0]!, point[1]!, point[2]!);
+    }
+    if (isVertex) break;
+  }
+  return { box, triangles };
+}
+
+// --- AMF ---------------------------------------------------------------------
+//
+// XML, optionally zipped, with a unit on the root element like 3MF. Measured
+// as the union of its vertices; constellations (instanced placements) are
+// rare in practice and are not walked, so such a file measures loosely.
+
+function amfXml(bytes: Uint8Array): string | null {
+  const isAmf = (xml: string) => /<amf\b/i.test(xml.slice(0, 4096));
+  if (startsWith(bytes, ZIP_MAGIC)) {
+    let files: Record<string, Uint8Array>;
+    try {
+      let inflated = 0;
+      files = unzipSync(bytes, {
+        filter: (file) => {
+          inflated += file.originalSize ?? 0;
+          if (inflated > MAX_INFLATED_BYTES) throw new Error("archive inflates to an implausible size");
+          return true;
+        },
+      });
+    } catch {
+      return null;
+    }
+    for (const data of Object.values(files)) {
+      const xml = new TextDecoder("utf-8", { fatal: false }).decode(data);
+      if (isAmf(xml)) return xml;
+    }
+    return null;
+  }
+  const xml = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  return isAmf(xml) ? xml : null;
+}
+
+function measureAmf(xml: string): { box: Box; triangles: number } {
+  const unit = /<amf\b[^>]*\bunit\s*=\s*"([^"]+)"/i.exec(xml)?.[1]?.toLowerCase();
+  const scale = UNIT_TO_MM[unit ?? "millimeter"] ?? 1;
+  const box = emptyBox();
+  const coords = /<coordinates>([\s\S]*?)<\/coordinates>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = coords.exec(xml)) !== null) {
+    const axis = (name: string) => parseFloat(new RegExp(`<${name}>\\s*([^<]+)</${name}>`, "i").exec(m![1]!)?.[1] ?? "");
+    expand(box, axis("x") * scale, axis("y") * scale, axis("z") * scale);
+  }
+  let triangles = 0;
+  const tri = /<triangle\b/gi;
+  while (tri.exec(xml) !== null) triangles++;
+  return { box, triangles };
+}
+
+// --- STEP --------------------------------------------------------------------
+//
+// ISO 10303-21 exchange files open with their own name. Measuring one means
+// tessellating B-rep solids, which takes a CAD kernel, so it is only
+// recognised here — the slicer that opens it does the rest.
+
+function isStep(bytes: Uint8Array): boolean {
+  const head = new TextDecoder("utf-8", { fatal: false })
+    .decode(bytes.subarray(0, 1024))
+    .replace(/^﻿/, "")
+    .trimStart();
+  return head.startsWith("ISO-10303-21");
+}
+
+// --- glTF / GLB --------------------------------------------------------------
+//
+// glTF is JSON describing meshes, with the geometry in buffers; GLB is the same
+// JSON and one buffer packed into a single binary. Only self-contained files
+// are accepted: a .gltf that names buffers or textures by relative path is one
+// file of several, and the rest did not come with it.
+
+type GltfJson = {
+  asset?: { version?: unknown };
+  meshes?: unknown;
+  accessors?: unknown;
+  buffers?: unknown;
+  images?: unknown;
+};
+
+const GLB_MAGIC = [0x67, 0x6c, 0x54, 0x46]; // "glTF"
+const GLB_JSON_CHUNK = 0x4e4f534a; // "JSON"
+
+function gltfJsonFromGlb(bytes: Uint8Array): GltfJson | null {
+  if (bytes.length < 20 || !startsWith(bytes, GLB_MAGIC)) return null;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (view.getUint32(4, true) !== 2 || view.getUint32(8, true) !== bytes.length) return null;
+  const chunkLength = view.getUint32(12, true);
+  if (view.getUint32(16, true) !== GLB_JSON_CHUNK || 20 + chunkLength > bytes.length) return null;
+  try {
+    return JSON.parse(new TextDecoder("utf-8").decode(bytes.subarray(20, 20 + chunkLength))) as GltfJson;
+  } catch {
+    return null;
+  }
+}
+
+function gltfJsonFromText(bytes: Uint8Array): GltfJson | null {
+  const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes).replace(/^﻿/, "");
+  if (!text.trimStart().startsWith("{")) return null;
+  try {
+    return JSON.parse(text) as GltfJson;
+  } catch {
+    return null;
+  }
+}
+
+const list = (value: unknown): Record<string, unknown>[] =>
+  Array.isArray(value) ? value.filter((v): v is Record<string, unknown> => !!v && typeof v === "object") : [];
+
+function checkGltf(json: GltfJson): { triangles: number } | "external_refs" | null {
+  if (typeof json !== "object" || json === null) return null;
+  if (String(json.asset?.version ?? "").split(".")[0] !== "2") return null;
+
+  const external = (uri: unknown) => typeof uri === "string" && !uri.startsWith("data:");
+  if (list(json.buffers).some((b) => external(b.uri)) || list(json.images).some((i) => external(i.uri))) {
+    return "external_refs";
+  }
+
+  const accessors = list(json.accessors);
+  let triangles = 0;
+  for (const mesh of list(json.meshes)) {
+    for (const primitive of list(mesh.primitives)) {
+      const mode = typeof primitive.mode === "number" ? primitive.mode : 4;
+      // Points and lines (modes 0–3) are not surfaces anything can print.
+      if (mode < 4) continue;
+      const attributes = (primitive.attributes ?? {}) as Record<string, unknown>;
+      const index = typeof primitive.indices === "number" ? primitive.indices : attributes.POSITION;
+      const count = typeof index === "number" ? Number(accessors[index]?.count ?? 0) : 0;
+      triangles += mode === 4 ? Math.floor(count / 3) : Math.max(0, count - 2);
+    }
+  }
+  return { triangles };
+}
+
 // ---------------------------------------------------------------------------
 // Presentation
 // ---------------------------------------------------------------------------
@@ -419,27 +699,64 @@ export function inspectModel(filename: string, bytes: Uint8Array): Inspection {
   let measured: { box: Box; triangles: number } | null;
 
   try {
-    if (isBinaryStl(bytes)) {
-      format = "stl";
-      measured = measureBinaryStl(bytes);
-    } else if (isAsciiStl(bytes)) {
-      format = "stl";
-      measured = measureAsciiStl(bytes);
-    } else if (startsWith(bytes, ZIP_MAGIC)) {
-      format = "3mf";
-      measured = measure3mf(bytes);
-      if (!measured) return { ok: false, reason: "not_a_model" };
-    } else {
-      return { ok: false, reason: "not_a_model" };
+    switch (ext) {
+      case ".stl":
+      case ".3mf": {
+        if (isBinaryStl(bytes)) {
+          format = "stl";
+          measured = measureBinaryStl(bytes);
+        } else if (isAsciiStl(bytes)) {
+          format = "stl";
+          measured = measureAsciiStl(bytes);
+        } else if (startsWith(bytes, ZIP_MAGIC)) {
+          format = "3mf";
+          measured = measure3mf(bytes);
+          if (!measured) return { ok: false, reason: "not_a_model" };
+        } else {
+          return { ok: false, reason: "not_a_model" };
+        }
+        // The name has to agree with the bytes: a .3mf that is really an STL
+        // is a sign something is wrong, even if both are printable.
+        if ((ext === ".stl") !== (format === "stl")) {
+          return { ok: false, reason: "not_a_model" };
+        }
+        break;
+      }
+      case ".obj":
+        format = "obj";
+        measured = measureObj(bytes);
+        if (!measured) return { ok: false, reason: "not_a_model" };
+        break;
+      case ".ply":
+        format = "ply";
+        measured = measurePly(bytes);
+        if (!measured) return { ok: false, reason: "not_a_model" };
+        break;
+      case ".amf": {
+        format = "amf";
+        const xml = amfXml(bytes);
+        if (!xml) return { ok: false, reason: "not_a_model" };
+        measured = measureAmf(xml);
+        break;
+      }
+      case ".step":
+      case ".stp":
+        if (!isStep(bytes)) return { ok: false, reason: "not_a_model" };
+        return { ok: true, format: "step", triangles: null, size: null, dims: null };
+      case ".glb":
+      case ".gltf": {
+        const json = ext === ".glb" ? gltfJsonFromGlb(bytes) : gltfJsonFromText(bytes);
+        const checked = json ? checkGltf(json) : null;
+        if (!checked) return { ok: false, reason: "not_a_model" };
+        if (checked === "external_refs") return { ok: false, reason: "external_refs" };
+        if (checked.triangles === 0) return { ok: false, reason: "no_geometry" };
+        return { ok: true, format: ext === ".glb" ? "glb" : "gltf", triangles: checked.triangles, size: null, dims: null };
+      }
+      default:
+        return { ok: false, reason: "bad_extension" };
     }
   } catch {
     return { ok: false, reason: "corrupt" };
-  }
-
-  // The name has to agree with the bytes: a .3mf that is really an STL is a
-  // sign something is wrong, even if both are printable.
-  if ((ext === ".stl") !== (format === "stl")) {
-    return { ok: false, reason: "not_a_model" };
   }
 
   if (!measured || measured.triangles === 0) {

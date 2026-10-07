@@ -5,7 +5,7 @@ import type { Actor } from "@/lib/scope";
 import { checkWish, openRequest } from "@/lib/intake";
 import { MAX_BYTES, REJECTION_COPY } from "@/lib/models";
 import { StoryProblem } from "@/lib/stories";
-import { MAX_REQUEST_BYTES } from "@/lib/upload-limits";
+import { MAX_FILES_PER_ORDER, MAX_REQUEST_BYTES, formatBytes } from "@/lib/upload-limits";
 import { BUSY_COPY, acquireSlot, releaseSlot } from "@/lib/upload-slots";
 
 /**
@@ -65,8 +65,20 @@ async function handleUpload(request: Request, user: Actor) {
   }
 
   const file = form.get("file");
-  if (!(file instanceof File)) return bad(400, "No file was attached.");
+  if (!(file instanceof File)) return bad(400, "Add a 3D model — that is the part that gets printed.");
   if (file.size > MAX_BYTES) return bad(413, REJECTION_COPY.too_large);
+
+  // Everything else that came with it: more parts, photos, videos. The cap is
+  // on the whole order, not each file, because what it protects is memory and
+  // the whole body is held at once.
+  const extras = form.getAll("attachments").filter((v): v is File => v instanceof File);
+  if (extras.length + 1 > MAX_FILES_PER_ORDER) {
+    return bad(413, `Up to ${MAX_FILES_PER_ORDER} files per order, the model included.`);
+  }
+  const total = extras.reduce((sum, f) => sum + f.size, file.size);
+  if (total > MAX_BYTES) {
+    return bad(413, `Those files come to ${formatBytes(total)} — an order can carry ${formatBytes(MAX_BYTES)} in all.`);
+  }
 
   const checked = await checkWish({
     title: form.get("title") ?? "",
@@ -77,8 +89,12 @@ async function handleUpload(request: Request, user: Actor) {
     tip: form.get("tip"),
     note: form.get("note") ?? "",
     printSettings: form.get("printSettings") ?? "",
+    links: form.getAll("links"),
   });
 
   const bytes = new Uint8Array(await file.arrayBuffer());
-  return NextResponse.json(await openRequest(user, checked, file.name, bytes));
+  const attachments = await Promise.all(
+    extras.map(async (f) => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })),
+  );
+  return NextResponse.json(await openRequest(user, checked, file.name, bytes, undefined, attachments));
 }

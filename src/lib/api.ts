@@ -5,6 +5,7 @@ import { currentUser } from "@/lib/authz";
 import { storyRef, type Actor } from "@/lib/scope";
 import { StoryProblem, type CommentRow, type StoryRow } from "@/lib/stories";
 import { trustedSourceLink } from "@/lib/import-source";
+import { displayLink } from "@/lib/links";
 import type { Prisma } from "@prisma/client";
 
 /**
@@ -194,6 +195,19 @@ export function storyResource(story: StoryRow) {
       dims: story.dims,
       url: `/api/models/${story.id}`,
     },
+    // Everything else sent with the order. Same proxied, scoped route idea as
+    // the model: the url is the app's, never a storage path.
+    attachments: story.attachments.map((a) => ({
+      id: a.id,
+      kind: a.kind,
+      filename: a.filename,
+      size: a.fileSize,
+      mimeType: a.mimeType,
+      dims: a.dims,
+      url: `/api/stories/${story.id}/attachments/${a.id}`,
+    })),
+    // Re-checked on the way out: a link is followed by whoever reads this.
+    links: story.links.flatMap((l) => displayLink(l)?.href ?? []),
     // Where the model was imported from, or null for an upload. Passed through
     // `trustedSourceLink` rather than emitted raw: it is a link somebody will
     // follow, so it leaves only if it is one this app could have written.

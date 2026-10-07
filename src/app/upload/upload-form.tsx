@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import {
@@ -16,9 +16,27 @@ import {
 // is why these three used to be copied into this file by hand.
 import {
   ACCEPTED_EXTENSIONS,
+  IMAGE_EXTENSIONS,
+  MAX_FILES_PER_ORDER,
+  MAX_LINKS_PER_ORDER,
   MAX_UPLOAD_BYTES,
+  MODEL_FORMATS_TEXT,
+  VIDEO_EXTENSIONS,
+  extensionOf,
   formatBytes,
+  kindOf,
+  type FileKind,
 } from "@/lib/upload-limits";
+import { parseLink } from "@/lib/links";
+
+/** What the file picker offers: every model, photo and video type. */
+const PICKER_ACCEPT = [...ACCEPTED_EXTENSIONS, ...IMAGE_EXTENSIONS, ...VIDEO_EXTENSIONS].join(",");
+
+const KIND_BADGE: Record<FileKind, { label: string; className: string }> = {
+  model: { label: "3D", className: "bg-aqua text-ink" },
+  image: { label: "Photo", className: "bg-sun text-ink" },
+  video: { label: "Video", className: "bg-ink text-cream" },
+};
 
 /** One owner-managed tip option, passed from the server (see upload/page.tsx). */
 type Benefit = { label: string; preferred: boolean };
@@ -151,11 +169,22 @@ export function UploadForm({
       ].filter((x): x is string => x !== null)
     : [];
 
-  const [file, setFile] = useState<File | null>(null);
+  // Everything picked for the order, in the order it was added. The first 3D
+  // file is the main model — the one the slicer link and a reprint use — and
+  // the rest ride along as attachments.
+  const [files, setFiles] = useState<File[]>([]);
   const [dragging, setDragging] = useState(false);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [link, setLink] = useState("");
   const [linked, setLinked] = useState<Linked>({ kind: "idle" });
+  // Reference links sent with the order — not the import link above.
+  const [links, setLinks] = useState<string[]>([]);
+  const [linkDraft, setLinkDraft] = useState("");
+  const [linkError, setLinkError] = useState<string | null>(null);
+
+  const primary = files.find((f) => kindOf(f.name) === "model") ?? null;
+  const extras = files.filter((f) => f !== primary);
+  const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
 
   const [title, setTitle] = useState(again?.title ?? "");
   const [material, setMaterial] = useState<string>(initialMaterial.name);
@@ -178,29 +207,53 @@ export function UploadForm({
    * Client-side checks are for fast feedback only — the server re-runs all of
    * them against the actual bytes and is the one that decides.
    */
-  const accept = useCallback((picked: File | null) => {
+  function accept(picked: File[]) {
     setPhase({ kind: "idle" });
-    if (!picked) return setFile(null);
+    if (inputRef.current) inputRef.current.value = "";
+    if (picked.length === 0) return;
 
-    const ext = picked.name.slice(picked.name.lastIndexOf(".")).toLowerCase();
-    if (!(ACCEPTED_EXTENSIONS as readonly string[]).includes(ext)) {
-      setFile(null);
-      return setPhase({
-        kind: "error",
-        message: "Only .stl and .3mf files can be printed here.",
-      });
+    const next = [...files];
+    const refused: string[] = [];
+    let total = totalBytes;
+    let addedModel = false;
+    for (const f of picked) {
+      // The same file dropped twice is one file.
+      if (next.some((n) => n.name === f.name && n.size === f.size)) continue;
+      const kind = kindOf(f.name);
+      if (!kind) {
+        refused.push(`${f.name} is not a 3D model, photo or video this takes.`);
+      } else if (next.length >= MAX_FILES_PER_ORDER) {
+        refused.push(`Up to ${MAX_FILES_PER_ORDER} files per order — ${f.name} was left out.`);
+      } else if (total + f.size > MAX_UPLOAD_BYTES) {
+        refused.push(`${f.name} would take the order past ${formatBytes(MAX_UPLOAD_BYTES)}.`);
+      } else {
+        next.push(f);
+        total += f.size;
+        if (kind === "model") addedModel = true;
+      }
     }
-    if (picked.size > MAX_UPLOAD_BYTES) {
-      setFile(null);
-      return setPhase({
-        kind: "error",
-        message: `That file is ${formatBytes(picked.size)} — the limit is ${formatBytes(MAX_UPLOAD_BYTES)}.`,
-      });
+    setFiles(next);
+    // One main model per ticket: a model from disk replaces one picked from a link.
+    if (addedModel) setLinked({ kind: "idle" });
+    if (refused.length > 0) setPhase({ kind: "error", message: refused.join(" ") });
+  }
+
+  function removeFile(target: File) {
+    setPhase({ kind: "idle" });
+    setFiles((current) => current.filter((f) => f !== target));
+  }
+
+  function addLink() {
+    const parsed = parseLink(linkDraft);
+    if (!parsed.ok) return setLinkError(parsed.error);
+    if (links.includes(parsed.href)) return setLinkError("That link is already on the order.");
+    if (links.length >= MAX_LINKS_PER_ORDER) {
+      return setLinkError(`Up to ${MAX_LINKS_PER_ORDER} links per order.`);
     }
-    setFile(picked);
-    // One model per ticket: a file from disk replaces a file picked from a link.
-    setLinked({ kind: "idle" });
-  }, []);
+    setLinks([...links, parsed.href]);
+    setLinkDraft("");
+    setLinkError(null);
+  }
 
   const sourceNames = importSources.map((s) => SOURCE_LABEL[s]).join(" or ");
   const picked =
@@ -237,7 +290,8 @@ export function UploadForm({
       const listing = body as Listing;
       // A model with exactly one printable file needs no choosing.
       const only = listing.files.length === 1 && !listing.files[0]!.tooLarge ? listing.files[0]!.id : null;
-      setFile(null);
+      // The imported file becomes the model; any picked from disk give way.
+      setFiles((current) => current.filter((f) => kindOf(f.name) !== "model"));
       if (inputRef.current) inputRef.current.value = "";
       setLinked({ kind: "listed", url, listing, fileId: only });
       // A model's files are called things like `body_v2_final.stl`; the model
@@ -262,7 +316,7 @@ export function UploadForm({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          url, fileId, title, material, colorName: color, quantity, priority, tip, note, printSettings,
+          url, fileId, title, material, colorName: color, quantity, priority, tip, note, printSettings, links,
         }),
       });
       const body = await res.json().catch(() => ({}));
@@ -280,7 +334,7 @@ export function UploadForm({
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
     setDragging(false);
-    accept(e.dataTransfer.files?.[0] ?? null);
+    accept(Array.from(e.dataTransfer.files ?? []));
   }
 
   /**
@@ -314,11 +368,25 @@ export function UploadForm({
     // actually being sent rather than a half-typed draft.
     setQuantityDraft(null);
     if (again) return void sendAgain(again);
-    if (linked.kind === "listed" && picked) return void sendImport(linked.url, picked.id);
-    if (!file) return;
+    if (linked.kind === "listed" && picked) {
+      // An import is fetched by the server from two ids; there is no upload
+      // for files from this disk to travel in.
+      if (files.length > 0) {
+        return setPhase({
+          kind: "error",
+          message:
+            "Photos and videos can't come along with an imported model yet. Remove them, " +
+            "or download the model and drop it here with them.",
+        });
+      }
+      return void sendImport(linked.url, picked.id);
+    }
+    if (!primary) return;
 
     const body = new FormData();
-    body.set("file", file);
+    body.set("file", primary);
+    for (const extra of extras) body.append("attachments", extra);
+    for (const l of links) body.append("links", l);
     body.set("title", title);
     body.set("material", material);
     body.set("colorName", color);
@@ -438,24 +506,25 @@ export function UploadForm({
         <input
           ref={inputRef}
           type="file"
-          accept=".stl,.3mf,model/stl,model/3mf"
+          multiple
+          accept={PICKER_ACCEPT}
           className="sr-only"
           disabled={busy}
-          onChange={(e) => accept(e.target.files?.[0] ?? null)}
+          onChange={(e) => accept(Array.from(e.target.files ?? []))}
         />
         <span
           aria-hidden
           className="mx-auto mb-[13.2px] block h-[56px] w-[56px] rounded-full border-[3px] border-ink bg-aqua"
         />
         <span className="block font-display text-[19px] text-ink">
-          {file ? file.name : "Drop your .stl or .3mf here"}
+          {files.length > 0 ? "Drop more, or click to add" : "Drop your 3D model here — and any photos or videos"}
         </span>
         <span className="mt-[6px] block font-mono text-[12px] uppercase tracking-[0.04em] text-ink-3">
           {busy && !picked
             ? `Uploading… ${phase.percent}%`
-            : file
-              ? `${formatBytes(file.size)} · checked on the server when you send it`
-              : `or click to choose a file · ${formatBytes(MAX_UPLOAD_BYTES)} max`}
+            : files.length > 0
+              ? `${formatBytes(totalBytes)} of ${formatBytes(MAX_UPLOAD_BYTES)} · checked on the server when you send it`
+              : `or click to choose · ${MODEL_FORMATS_TEXT} · photos · videos · ${formatBytes(MAX_UPLOAD_BYTES)} in all`}
         </span>
 
         {busy && !picked && (
@@ -467,6 +536,118 @@ export function UploadForm({
           </span>
         )}
       </label>}
+
+      {/* ---- what is on the order so far. Outside the <label>, so a remove
+           button does not also open the file picker. ---- */}
+      {!again && files.length > 0 && (
+        <ul aria-label="Files on this order" className="m-0 mt-[13.2px] flex list-none flex-col gap-[6px] p-0">
+          {files.map((f) => {
+            const kind = kindOf(f.name) ?? "model";
+            const badge = KIND_BADGE[kind];
+            return (
+              <li
+                key={`${f.name}:${f.size}`}
+                className="flex items-center gap-[11px] rounded-card border-[3px] border-ink bg-porcelain px-[11px] py-[7px]"
+              >
+                <FileThumb file={f} kind={kind} />
+                <span
+                  className={`flex-none rounded-chip border-2 border-ink px-[7px] py-[1px] font-mono text-[10.5px] font-bold uppercase tracking-[0.06em] ${badge.className}`}
+                >
+                  {badge.label}
+                </span>
+                <span className="min-w-0 flex-1 break-words text-[14.5px] font-bold text-ink">
+                  {f.name}
+                  {f === primary && (
+                    <span className="ml-[8px] font-mono text-[10.5px] font-bold uppercase tracking-[0.06em] text-cherry-dk">
+                      main model
+                    </span>
+                  )}
+                </span>
+                <span className="flex-none font-mono text-[12px] text-ink-3">{formatBytes(f.size)}</span>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => removeFile(f)}
+                  aria-label={`Remove ${f.name}`}
+                  className="flex-none cursor-pointer rounded-chip border-2 border-ink bg-cream px-[8px] py-[1px] font-mono text-[13px] font-bold text-ink hover:bg-cherry hover:text-cream disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  ✕
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {!again && files.length > 0 && !primary && linked.kind !== "listed" && (
+        <p className="m-0 mt-[8.8px] font-mono text-[11.5px] uppercase tracking-[0.04em] text-cherry-dk">
+          Add a 3D model too — photos and videos go with a model, not instead of one.
+        </p>
+      )}
+
+      {/* ---- links that explain the job ---- */}
+      {!again && (
+        <div className="mt-[17.6px]">
+          <Label htmlFor="order-link">Links (optional)</Label>
+          <div className="flex flex-wrap gap-[8.8px]">
+            <input
+              id="order-link"
+              type="url"
+              inputMode="url"
+              value={linkDraft}
+              disabled={busy}
+              onChange={(e) => {
+                setLinkDraft(e.target.value);
+                setLinkError(null);
+              }}
+              // Enter adds the link; it does not send the order.
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                addLink();
+              }}
+              placeholder="https://… the product it fits, a video, a forum post"
+              className="min-w-[240px] flex-1 rounded-card border-[3px] border-ink bg-porcelain px-[15px] py-[12px] text-[16px] text-ink placeholder:text-ink-3"
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={busy || !linkDraft.trim() || links.length >= MAX_LINKS_PER_ORDER}
+              onClick={addLink}
+            >
+              Add link
+            </Button>
+          </div>
+          {linkError && (
+            <p role="alert" className="m-0 mt-[6px] font-mono text-[11.5px] uppercase tracking-[0.04em] text-cherry-dk">
+              {linkError}
+            </p>
+          )}
+          {links.length > 0 && (
+            <ul aria-label="Links on this order" className="m-0 mt-[8.8px] flex list-none flex-col gap-[6px] p-0">
+              {links.map((l) => (
+                <li
+                  key={l}
+                  className="flex items-center gap-[11px] rounded-card border-[3px] border-ink bg-porcelain px-[11px] py-[7px]"
+                >
+                  <span className="min-w-0 flex-1 break-all font-mono text-[13px] text-ink">{l}</span>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setLinks(links.filter((x) => x !== l))}
+                    aria-label={`Remove ${l}`}
+                    className="flex-none cursor-pointer rounded-chip border-2 border-ink bg-cream px-[8px] py-[1px] font-mono text-[13px] font-bold text-ink hover:bg-cherry hover:text-cream disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="m-0 mt-[6px] font-mono text-[11px] uppercase tracking-[0.04em] text-ink-3">
+            Anything that shows {owner} what it is for · up to {MAX_LINKS_PER_ORDER}
+          </p>
+        </div>
+      )}
 
       {/* ---- or a link (only where the instance has switched importing on) ---- */}
       {!again && importSources.length > 0 && (
@@ -517,7 +698,7 @@ export function UploadForm({
 
               {linked.listing.files.length === 0 ? (
                 <p className="m-0 mt-[13.2px] text-[15px] text-ink-2">
-                  There is no .stl or .3mf in that model, so there is nothing here to print.
+                  There is no 3D file this app takes in that model, so there is nothing here to print.
                 </p>
               ) : (
                 <div
@@ -780,7 +961,7 @@ export function UploadForm({
 
       {/* ---- actions ---- */}
       <div className="mt-[26.4px] flex flex-wrap items-center gap-[13.2px]">
-        <Button type="submit" disabled={(!file && !again && !picked) || busy} className="px-[30px]">
+        <Button type="submit" disabled={(!primary && !again && !picked) || busy} className="px-[30px]">
           {busy
             ? again ? "Sending…" : picked ? "Fetching it…" : `Sending… ${phase.percent}%`
             : again ? `Send it to ${owner} again` : `Send it to ${owner}`}
@@ -792,10 +973,42 @@ export function UploadForm({
         >
           Cancel
         </Button>
-        {!file && !again && !picked && (
-          <span className="font-mono text-[11.5px] uppercase tracking-[0.06em] text-ink-3">Pick a file to continue.</span>
+        {!primary && !again && !picked && (
+          <span className="font-mono text-[11.5px] uppercase tracking-[0.06em] text-ink-3">Add a 3D model to continue.</span>
         )}
       </div>
     </form>
+  );
+}
+
+/**
+ * A photo's own pixels, or a glyph for anything else. The object URL is the
+ * browser's handle on a file already in memory — `img-src blob:` allows it —
+ * and is released when the row goes, or it would hold the file until the tab
+ * closed.
+ */
+function FileThumb({ file, kind }: { file: File; kind: FileKind }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (kind !== "image") return;
+    const made = URL.createObjectURL(file);
+    setUrl(made);
+    return () => URL.revokeObjectURL(made);
+  }, [file, kind]);
+
+  return (
+    <span
+      aria-hidden
+      className="flex h-[40px] w-[40px] flex-none items-center justify-center overflow-hidden rounded-[6px] border-2 border-ink bg-cream-2 font-mono text-[9.5px] font-bold uppercase text-ink-2"
+    >
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="" className="h-full w-full object-cover" />
+      ) : kind === "video" ? (
+        <span className="text-[16px] leading-none">▶</span>
+      ) : (
+        extensionOf(file.name).slice(1, 5)
+      )}
+    </span>
   );
 }

@@ -103,6 +103,11 @@ export async function getStoryOr404(storyId: number, actor: Actor) {
           author: { select: { id: true, name: true, initials: true, role: true } },
         },
       },
+      // No storageKey: the page links to the scoped route, never the disk.
+      attachments: {
+        orderBy: { sortOrder: "asc" },
+        select: { id: true, kind: true, filename: true, fileSize: true, dims: true },
+      },
     },
   });
   if (!story) notFound();
