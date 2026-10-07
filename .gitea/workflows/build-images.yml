@@ -59,3 +59,15 @@ jobs:
           docker push "$IMAGE:$SHORT"
           docker push "$IMAGE:latest"
           docker logout localhost:3002
+
+      # The runner builds on the NAS's own Docker daemon, whose disk is small.
+      # Every build leaves the previous :latest untagged plus a SHA-tagged copy
+      # and its build cache; six builds in one afternoon filled the disk. The
+      # SHA tag lives on in the registry, so drop it locally, then clear
+      # untagged images (never one a container still uses) and day-old cache.
+      - name: Clean up
+        if: always()
+        run: |
+          docker rmi "$IMAGE:$SHORT" || true
+          docker image prune -f
+          docker builder prune -f --filter until=24h
