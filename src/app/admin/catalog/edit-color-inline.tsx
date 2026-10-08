@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { ColorSwatch } from "@/components/color-swatch";
+import { FilamentSpool } from "@/components/color-swatch";
 import { Button, Input, Label } from "@/components/ui";
 import type { ColorMode } from "@/lib/catalog";
 import { editColorAction } from "./actions";
@@ -31,7 +31,7 @@ export function EditColorInline({
         className="flex cursor-pointer list-none items-center gap-[11px] rounded-card text-left hover:bg-aqua-wash focus-visible:bg-aqua-wash [&::-webkit-details-marker]:hidden"
         aria-label={`Edit ${name} for ${materialName}`}
       >
-        <ColorSwatch mode={colorMode} style={colorStyle} className="h-[34px] w-[34px] flex-none rounded-full border-[3px] border-ink" />
+        <FilamentSpool mode={colorMode} style={colorStyle} className="h-[34px] w-[24px] flex-none" />
         <span className="min-w-0 flex-1">
           <span className="block font-bold text-ink">{name}</span>
           <span className="block truncate font-mono text-[10.5px] text-ink-3" title={colorStyle}>{colorStyle}</span>

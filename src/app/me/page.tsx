@@ -7,7 +7,7 @@ import { formatBytes } from "@/lib/models";
 import { relativeTime } from "@/lib/catalog";
 import { AppHeader } from "@/components/app-header";
 import { Kicker, StatusChip } from "@/components/ui";
-import { ColorSwatch } from "@/components/color-swatch";
+import { FilamentSpool } from "@/components/color-swatch";
 import { Toast } from "@/components/toast";
 
 import type { StoryStatus } from "@prisma/client";
@@ -154,10 +154,10 @@ export default async function ProfilePage({
                   i < stories.length - 1 ? "border-b-2 border-dashed border-rule" : ""
                 } ${story.status === "Declined" ? "bg-cream-2" : ""}`}
               >
-                <ColorSwatch
+                <FilamentSpool
                   mode={story.colorMode}
                   style={story.colorStyle ?? story.colorHex}
-                  className="h-[40px] w-[40px] flex-none rounded-full border-[3px] border-ink"
+                  className="h-[40px] w-[28px] flex-none"
                 />
                 <div className="min-w-[180px] flex-[1_1_240px]">
                   <Link

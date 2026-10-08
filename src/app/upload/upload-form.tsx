@@ -39,7 +39,7 @@ const KIND_BADGE: Record<FileKind, { label: string; className: string }> = {
 
 import { SOURCE_LABEL, identifySource, type ImportSource } from "@/lib/import-source";
 import { Button, Label, Notice } from "@/components/ui";
-import { ColorSwatch } from "@/components/color-swatch";
+import { FilamentSpool } from "@/components/color-swatch";
 
 /**
  * An old ticket being printed again. When this is given the form has no
@@ -861,12 +861,10 @@ export function UploadForm({
                 onClick={() => setColor(c.name)}
                 className="flex w-[80px] cursor-pointer flex-col items-center gap-[7px] border-0 bg-transparent p-0"
               >
-                <ColorSwatch
+                <FilamentSpool
                   mode={c.mode}
                   style={c.style}
-                  className={`h-[48px] w-[48px] rounded-full border-[3px] border-ink transition-transform ${
-                    active ? "scale-110 ring-[4px] ring-cherry-dk ring-offset-2 ring-offset-cream" : ""
-                  }`}
+                  className="h-[72px] w-[50px]"
                 />
                 <span
                   className={`font-mono text-[11px] font-bold uppercase tracking-[0.04em] ${

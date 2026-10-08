@@ -9,7 +9,7 @@ import { AppHeader } from "@/components/app-header";
 import { AdminActions } from "@/components/admin-actions";
 import { Kicker, Notice, StatusChip, PriorityChip } from "@/components/ui";
 import { Toast } from "@/components/toast";
-import { ColorSwatch } from "@/components/color-swatch";
+import { FilamentSpool } from "@/components/color-swatch";
 
 export const dynamic = "force-dynamic";
 
@@ -135,10 +135,10 @@ export default async function QueuePage({
                   i < working.length - 1 ? "border-b-2 border-dashed border-rule" : ""
                 }`}
               >
-                <ColorSwatch
+                <FilamentSpool
                   mode={story.colorMode}
                   style={story.colorStyle ?? story.colorHex}
-                  className="h-[40px] w-[40px] flex-none rounded-full border-[3px] border-ink"
+                  className="h-[40px] w-[28px] flex-none"
                 />
                 <div className="min-w-[180px] flex-[1_1_240px]">
                   <Link
