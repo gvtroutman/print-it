@@ -9,7 +9,7 @@ import { sourceUrl } from "@/lib/runtime";
  *
  * A route handler rather than a page, deliberately. Swagger UI ships a large
  * stylesheet that expects to own the document, and the app's root layout owns
- * this one — four self-hosted webfonts, a diner palette and a paper texture.
+ * this one — four self-hosted webfonts, a bright palette and a paper texture.
  * Rendering one inside the other means two design systems arguing in every
  * cell of every table. Serving a plain document sidesteps that, and it is also
  * honest: this page is a tool for reading the API, not part of the product's

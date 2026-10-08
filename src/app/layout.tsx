@@ -4,8 +4,8 @@ import "./globals.css";
 
 /*
  * Four faces, each with a job: a script logotype, a rounded face for the
- * headings, a workhorse for the reading, and a typewriter for anything that
- * behaves like a docket.
+ * headings, a workhorse for the reading, and a friendly sans for anything
+ * that behaves like a ticket label.
  *
  * Loaded from ./fonts rather than `next/font/google`, which downloads them at
  * build time and so made every image build depend on fonts.googleapis.com
@@ -50,13 +50,17 @@ const archivo = localFont({
   display: "swap",
 });
 
-/** Order tickets, refs, filenames, dimensions — anything typed on a docket. */
-const courier = localFont({
-  src: [
-    { path: "./fonts/courier-prime-400.woff2", weight: "400", style: "normal" },
-    { path: "./fonts/courier-prime-700.woff2", weight: "700", style: "normal" },
-  ],
-  variable: "--font-courier",
+/**
+ * Order tickets, refs, filenames, dimensions — the small bold labels. Rubik's
+ * softened corners keep them playful next to the rounded headings, and it has
+ * tabular figures so refs still line up. It replaced Courier Prime.
+ *
+ * One variable file covers 400–700, like Archivo.
+ */
+const rubik = localFont({
+  src: "./fonts/rubik-400-700.woff2",
+  weight: "400 700",
+  variable: "--font-rubik",
   display: "swap",
 });
 
@@ -72,7 +76,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${script.variable} ${rounded.variable} ${archivo.variable} ${courier.variable}`}
+      className={`${script.variable} ${rounded.variable} ${archivo.variable} ${rubik.variable}`}
     >
       <body className="plate flex min-h-screen flex-col bg-cream text-ink antialiased">
         <div className="flex-1">{children}</div>

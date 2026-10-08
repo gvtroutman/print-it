@@ -1,21 +1,19 @@
 @import "tailwindcss";
 
 /*
- * Pretty Please Print — the counter at a 1950s diner, run by a 3D printer.
- *
- * The two worlds meet in more places than they have any right to. A short-order
- * rail with tickets clipped along it IS a kanban board. Tipping the person who
- * makes your thing is already in the product. And the signature texture of an
- * extruded print — fine horizontal layer lines — is the same striation as the
- * chrome trim on a diner counter. That rhyme is the whole design.
+ * Pretty Please Print — fun and play. A 3D printer is a machine for making
+ * toys, and the app should feel like one: bright colours, thick outlines,
+ * shapes that look cut out of paper and stuck down, buttons that squash when
+ * you press them. Asking for a print should feel like a treat, not a form.
  *
  * Colour rule, and it is also the accessible rule: bright fills carry DARK ink.
- * Enamel signage worked that way because it had to be read from a moving car.
- * The single exception is the cherry-dark fill, which carries cream.
+ * Loud colour with dark ink on top is how toy packaging stays readable, and it
+ * keeps every fill above contrast minimums. The single exception is the
+ * cherry-dark fill, which carries cream.
  */
 
 @theme {
-  /* --- the counter: creams, porcelain, warm black --- */
+  /* --- the paper: creams, porcelain, warm black --- */
   --color-cream: #fff6e9;
   --color-cream-2: #f6e7ce;
   --color-cream-3: #eddaba;
@@ -24,18 +22,18 @@
   --color-ink-2: #55483e;
   --color-ink-3: #8a7a6c;
 
-  /* --- neon sign red. cherry for accents, cherry-dk for anything
+  /* --- cherry red. cherry for accents, cherry-dk for anything
          carrying light text (white on plain cherry is only 4.0:1) --- */
   --color-cherry: #e4322f;
   --color-cherry-dk: #b7231f;
   --color-cherry-wash: #fce0dc;
 
-  /* --- turquoise vinyl booth --- */
+  /* --- aqua --- */
   --color-aqua: #14b3ae;
   --color-aqua-dk: #0a807c;
   --color-aqua-wash: #d3f2f0;
 
-  /* --- mustard / sunburst: the griddle, the in-progress state --- */
+  /* --- sunshine yellow: the in-progress state --- */
   --color-sun: #f5b227;
   --color-sun-dk: #8a5f08;
   --color-sun-wash: #fdeecb;
@@ -45,7 +43,7 @@
   --color-mint-dk: #1c7049;
   --color-mint-wash: #d8f0e3;
 
-  /* --- chrome trim --- */
+  /* --- chrome: the quiet greys --- */
   --color-chrome: #cdd4d9;
   --color-chrome-dk: #98a3ab;
 
@@ -65,8 +63,8 @@
   --radius-panel: 16px;
 
   /*
-   * Hard offset shadows, no blur. A blurred shadow reads as glass or paper;
-   * an offset block reads as a die-cut enamel sign, which is the reference.
+   * Hard offset shadows, no blur. A blurred shadow reads as glass; an offset
+   * block reads as a chunky cut-out sticker, which is the reference.
    */
   --shadow-stamp: 3px 3px 0 var(--color-ink);
   --shadow-stamp-lg: 5px 5px 0 var(--color-ink);
@@ -81,7 +79,8 @@
     system-ui, sans-serif;
   --font-script: var(--font-script), var(--font-nunito), cursive;
   --font-sans: var(--font-archivo), system-ui, sans-serif;
-  --font-mono: var(--font-courier), ui-monospace, monospace;
+  /* Named mono for history — it was Courier Prime — but it's a sans now. */
+  --font-mono: var(--font-rubik), var(--font-archivo), system-ui, sans-serif;
 }
 
 @layer base {
@@ -93,6 +92,11 @@
     color: var(--color-ink);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+  }
+
+  /* Refs and dimensions still line up in columns without a monospace face. */
+  .font-mono {
+    font-variant-numeric: tabular-nums;
   }
 
   ::selection {
@@ -117,13 +121,12 @@
 }
 
 /* ---------------------------------------------------------------------------
-   Textures. Each is doing double duty across the two worlds.
+   Textures.
    --------------------------------------------------------------------------- */
 
 /*
- * Layer lines. On a print these are the extruded strata; on a diner counter
- * they are the ridges in the chrome fascia. 4px pitch reads as texture rather
- * than stripes at normal viewing distance.
+ * Layer lines — the extruded strata on a real print. 4px pitch reads as
+ * texture rather than stripes at normal viewing distance.
  */
 .layers {
   background-image: repeating-linear-gradient(
@@ -176,7 +179,7 @@
     drop-shadow(2px 7px 7px rgba(34, 26, 20, 0.35));
 }
 
-/* The checkerboard floor, as a trim strip. */
+/* A checkerboard, like a game board, as a trim strip. */
 .checker {
   background-image:
     linear-gradient(45deg, var(--color-ink) 25%, transparent 25%),
@@ -196,7 +199,7 @@
   background-size: 22px 22px;
 }
 
-/* Atomic starburst — the Formica boomerang motif, used once, on the hero. */
+/* A starburst, used once, on the hero. */
 .starburst {
   background-image: repeating-conic-gradient(
     from 0deg at 50% 50%,
@@ -206,8 +209,9 @@
 }
 
 /*
- * A ticket torn off the rail. The notches are the perforation, punched with
- * radial gradients so the card keeps a square silhouette against any ground.
+ * A tear-off ticket, like a raffle stub. The notches are the perforation,
+ * punched with radial gradients so the card keeps a square silhouette against
+ * any ground.
  */
 .ticket {
   position: relative;
@@ -258,8 +262,8 @@
   }
 }
 
-/* The neon sign warming up — two quick flickers, then steady. Runs once on
-   load and never again, so it reads as a sign coming on rather than a fault. */
+/* A light switching on — two quick flickers, then steady. Runs once on load
+   and never again, so it reads as something coming on rather than a fault. */
 @keyframes ppp-neon {
   0%,
   18%,
@@ -297,7 +301,7 @@
   animation: ppp-extrude 260ms ease-out;
 }
 
-/* A pressed enamel button sinks onto its own shadow. */
+/* A pressed button squashes onto its own shadow. */
 .stamp {
   box-shadow: var(--shadow-stamp);
   transition:

@@ -102,8 +102,8 @@ type ButtonProps = ComponentProps<"button"> & {
 };
 
 /**
- * Enamel sign buttons: heavy keyline, hard offset shadow, and they sink onto
- * that shadow when pressed.
+ * Chunky cut-out buttons: heavy keyline, hard offset shadow, and they squash
+ * onto that shadow when pressed.
  *
  * Cherry-dark rather than plain cherry for the filled variant — white on
  * #E4322F is 4.0:1, which fails at button-label sizes. The darker fill clears

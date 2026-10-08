@@ -20,8 +20,7 @@ files through `next/font/local`, which is why the CSP can keep font-src at
   pacifico-400.woff2          the script logotype
   nunito-800.woff2            headings where Arial Rounded isn't installed
   archivo-100-900.woff2       body text — one variable file covers 400/500/600/700
-  courier-prime-400.woff2     dockets: refs, filenames, dimensions
-  courier-prime-700.woff2     the same, bold
+  rubik-400-700.woff2         labels: refs, filenames, dimensions — one variable file
 
 Latin subset only, which is what the app asked Google for before. To refresh
 them, take the woff2 the Google Fonts CSS API serves for the latin block of each
@@ -37,7 +36,7 @@ permits redistribution provided this notice travels with the files.
 Pacifico — Copyright 2018 The Pacifico Project Authors (https://github.com/googlefonts/Pacifico)
 Nunito — Copyright 2014 The Nunito Project Authors (https://github.com/googlefonts/nunito)
 Archivo — Copyright 2020 The Archivo Project Authors (https://github.com/Omnibus-Type/Archivo)
-Courier Prime — Copyright 2015 The Courier Prime Project Authors (https://github.com/quoteunquoteapps/CourierPrime).
+Rubik — Copyright 2015 The Rubik Project Authors (https://github.com/googlefonts/rubik)
 --------------------------------------------------------------------------------
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.

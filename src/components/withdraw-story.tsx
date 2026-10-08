@@ -14,7 +14,7 @@ import { withdrawStory } from "@/app/actions/stories";
  * moves a ticket along or marks it; this removes it, the conversation with it,
  * and the uploaded geometry from storage.
  *
- * The trigger is a *button*, in the same enamel shape as Decline and Flag in
+ * The trigger is a *button*, in the same chunky shape as Decline and Flag in
  * `admin-actions.tsx`. It used to be drawn with a transparent border and muted
  * text, growing an outline only on hover — which meant it read as a caption
  * rather than a control, and read as one directly above "Print again", which

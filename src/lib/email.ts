@@ -76,7 +76,7 @@ export async function sendMail(mail: Mail): Promise<boolean> {
 //
 // Email is a hostile rendering target: Outlook runs the Word engine, Gmail
 // strips <style> and background-image, and almost nothing loads a webfont. So
-// none of the diner treatment here leans on gradients, box-shadow, flexbox or
+// none of the playful treatment here leans on gradients, box-shadow, flexbox or
 // Alfa Slab One — the character comes from what survives everywhere: heavy
 // solid borders, bright fills, and a checkerboard built from real table cells.
 //
@@ -97,7 +97,7 @@ const SUN = "#f5b227";
 
 const SANS = "Archivo,'Helvetica Neue',Helvetica,Arial,sans-serif";
 const SLAB = "Georgia,'Times New Roman',serif";
-const MONO = "'Courier New',Courier,monospace";
+const MONO = "Rubik,'Helvetica Neue',Helvetica,Arial,sans-serif";
 
 const esc = (s: string) =>
   s.replace(/[&<>"']/g, (c) =>
