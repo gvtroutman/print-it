@@ -93,45 +93,130 @@ type Linked =
   | { kind: "looking" }
   | { kind: "listed"; url: string; listing: Listing; fileId: string | null };
 
-/** Segmented control. Handoff §3: track #eaecee, 3px inset, 6px options. */
-function Segmented<T extends string | number>({
+/**
+ * A single-choice dropdown: the chosen option and a chevron, opening onto the
+ * other options stacked beneath it. A listbox rather than a native `<select>`
+ * so the open list wears the same chunky outline as the rest of the form.
+ * Arrow keys, Home/End, Enter/Space and Escape work as they do on a select.
+ */
+function Dropdown({
+  id,
   options,
   value,
   onChange,
-  mono = false,
-  label,
 }: {
-  options: readonly T[];
-  value: T;
-  onChange: (v: T) => void;
-  mono?: boolean;
-  label: string;
+  id: string;
+  options: readonly string[];
+  value: string;
+  onChange: (v: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(() => Math.max(0, options.indexOf(value)));
+  const wrap = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const listId = `${id}-list`;
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [open]);
+
+  function show() {
+    setActive(Math.max(0, options.indexOf(value)));
+    setOpen(true);
+  }
+
+  function pick(index: number) {
+    const option = options[index];
+    if (option !== undefined) onChange(option);
+    setOpen(false);
+    trigger.current?.focus();
+  }
+
+  function onKeyDown(e: React.KeyboardEvent) {
+    const last = options.length - 1;
+    const move = (next: number) => {
+      e.preventDefault();
+      if (!open) show();
+      else setActive(Math.min(last, Math.max(0, next)));
+    };
+    switch (e.key) {
+      case "ArrowDown": return move(active + 1);
+      case "ArrowUp": return move(active - 1);
+      case "Home": return move(0);
+      case "End": return move(last);
+      case "Enter":
+      case " ":
+        e.preventDefault();
+        return open ? pick(active) : show();
+      case "Escape":
+        if (open) {
+          e.preventDefault();
+          setOpen(false);
+        }
+        return;
+      case "Tab":
+        setOpen(false);
+    }
+  }
+
   return (
-    <div
-      role="radiogroup"
-      aria-label={label}
-      className="flex flex-wrap gap-[6px]"
-    >
-      {options.map((option) => {
-        const active = option === value;
-        return (
-          <button
-            key={String(option)}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            onClick={() => onChange(option)}
-            className={`flex-1 cursor-pointer rounded-chip border-[3px] border-ink px-[10px] py-[8px] font-mono text-[12.5px] font-bold uppercase tracking-[0.06em] transition-colors ${
-              active
-                ? "bg-cherry-dk text-cream"
-                : "bg-porcelain text-ink hover:bg-sun"
-            }`}
-          >
-            {option}
-          </button>
-        );
-      })}
+    <div ref={wrap} className="relative">
+      <button
+        ref={trigger}
+        id={id}
+        type="button"
+        role="combobox"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-activedescendant={open ? `${listId}-${active}` : undefined}
+        onClick={() => (open ? setOpen(false) : show())}
+        onKeyDown={onKeyDown}
+        className={`flex w-full cursor-pointer items-center justify-between gap-[10px] border-[3px] border-ink bg-porcelain px-[15px] py-[12px] text-left text-[16px] font-bold text-ink hover:bg-sun ${
+          open ? "rounded-t-card" : "rounded-card"
+        }`}
+      >
+        <span className="truncate">{value}</span>
+        <svg
+          aria-hidden
+          viewBox="0 0 20 12"
+          className={`h-[10px] w-[18px] shrink-0 transition-transform ${open ? "" : "rotate-180"}`}
+        >
+          <path d="M2 10 10 2l8 8" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+
+      <ul
+        id={listId}
+        role="listbox"
+        aria-labelledby={id}
+        hidden={!open}
+        className="absolute inset-x-0 top-full z-40 m-0 max-h-[280px] list-none overflow-y-auto rounded-b-card border-[3px] border-t-0 border-ink bg-cream-2 p-0 shadow-stamp"
+      >
+        {options.map((option, index) => {
+          const selected = option === value;
+          return (
+            <li
+              key={option}
+              id={`${listId}-${index}`}
+              role="option"
+              aria-selected={selected}
+              onPointerEnter={() => setActive(index)}
+              onClick={() => pick(index)}
+              className={`cursor-pointer border-t-2 border-ink/25 px-[15px] py-[11px] text-[16px] first:border-t-0 ${
+                index === active ? "bg-sun text-ink" : "text-ink-2"
+              } ${selected ? "font-bold" : ""}`}
+            >
+              {option}
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
@@ -772,8 +857,8 @@ export function UploadForm({
         </div>
         <div>
           <Label htmlFor="material">Material</Label>
-          <Segmented
-            label="Material"
+          <Dropdown
+            id="material"
             options={catalog.map((item) => item.name)}
             value={material}
             onChange={chooseMaterial}
