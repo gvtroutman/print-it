@@ -772,77 +772,6 @@ export function UploadForm({
         </div>
       </div>
 
-      {/* ---- amount ---- */}
-      <div className="mt-[22px]">
-        <Label htmlFor="quantity">Amount</Label>
-        <div className="inline-flex items-stretch overflow-hidden rounded-chip border-[3px] border-ink bg-porcelain">
-          <button
-            type="button"
-            onClick={() => stepQuantity(-1)}
-            disabled={quantity <= 1}
-            aria-label="One fewer"
-            className="w-[44px] cursor-pointer border-0 bg-transparent font-mono text-[20px] font-bold text-ink hover:bg-sun disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-          >
-            −
-          </button>
-          <input
-            id="quantity"
-            type="number"
-            inputMode="numeric"
-            min={1}
-            max={MAX_QUANTITY}
-            value={quantityDraft ?? quantity}
-            onChange={(e) => {
-              setQuantityDraft(e.target.value);
-              // Only a whole number of at least one becomes the quantity. The
-              // upper limit is left to the server, whose refusal says who to ask.
-              const n = Number(e.target.value);
-              if (Number.isInteger(n) && n >= 1) setQuantity(n);
-            }}
-            // Leaving the box settles it: whatever is not a quantity gives way
-            // to the last one that was.
-            onBlur={() => setQuantityDraft(null)}
-            className="w-[64px] appearance-none border-x-[3px] border-y-0 border-ink bg-porcelain px-[6px] py-[8px] text-center font-mono text-[16px] font-bold tabular-nums text-ink [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-          />
-          <button
-            type="button"
-            onClick={() => stepQuantity(1)}
-            disabled={quantity >= MAX_QUANTITY}
-            aria-label="One more"
-            className="w-[44px] cursor-pointer border-0 bg-transparent font-mono text-[20px] font-bold text-ink hover:bg-sun disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-          >
-            +
-          </button>
-        </div>
-      </div>
-
-      {/* ---- priority ---- */}
-      <div className="mt-[22px] max-w-[420px]">
-        <Label htmlFor="priority">How much does it matter?</Label>
-        <div role="radiogroup" aria-label="Priority" className="flex flex-wrap gap-[6px]">
-          {STORY_PRIORITIES.map((p) => {
-            const active = p === priority;
-            return (
-              <button
-                key={p}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => setPriority(p)}
-                className={`flex-1 cursor-pointer rounded-chip border-[3px] border-ink px-[10px] py-[8px] font-mono text-[12.5px] font-bold uppercase tracking-[0.06em] transition-colors ${
-                  active ? "bg-cherry-dk text-cream" : "bg-porcelain text-ink hover:bg-sun"
-                }`}
-              >
-                {PRIORITY_CHIP[p]?.label ?? p}
-              </button>
-            );
-          })}
-        </div>
-        <p className="m-0 mt-[8.8px] font-mono text-[11.5px] uppercase tracking-[0.04em] text-ink-3">
-          {owner} sees the urgent ones first. You can change it later.
-        </p>
-      </div>
-
       {/* ---- colour ---- */}
       <fieldset className="mt-[22px] border-0 p-0">
         <legend className="mb-[8.8px] font-mono text-[12px] font-bold uppercase tracking-[0.1em] text-ink-2">
@@ -882,6 +811,33 @@ export function UploadForm({
         </p>
       </fieldset>
 
+      {/* ---- priority ---- */}
+      <div className="mt-[22px] max-w-[420px]">
+        <Label htmlFor="priority">How much does it matter?</Label>
+        <div role="radiogroup" aria-label="Priority" className="flex flex-wrap gap-[6px]">
+          {STORY_PRIORITIES.map((p) => {
+            const active = p === priority;
+            return (
+              <button
+                key={p}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => setPriority(p)}
+                className={`flex-1 cursor-pointer rounded-chip border-[3px] border-ink px-[10px] py-[8px] font-mono text-[12.5px] font-bold uppercase tracking-[0.06em] transition-colors ${
+                  active ? "bg-cherry-dk text-cream" : "bg-porcelain text-ink hover:bg-sun"
+                }`}
+              >
+                {PRIORITY_CHIP[p]?.label ?? p}
+              </button>
+            );
+          })}
+        </div>
+        <p className="m-0 mt-[8.8px] font-mono text-[11.5px] uppercase tracking-[0.04em] text-ink-3">
+          {owner} sees the urgent ones first. You can change it later.
+        </p>
+      </div>
+
       {/* ---- note ---- */}
       <div className="mt-[22px]">
         {/* Named, not "he" — the printer owner is a role anyone can hold. */}
@@ -898,7 +854,50 @@ export function UploadForm({
       </div>
 
       {/* ---- actions ---- */}
-      <div className="mt-[26.4px] flex flex-wrap items-center gap-[13.2px]">
+      <div className="mt-[26.4px] flex flex-wrap items-end gap-[13.2px]">
+        {/* Amount sits by the send button: the last thing settled before it goes. */}
+        <div>
+          <Label htmlFor="quantity">Amount</Label>
+          <div className="inline-flex items-stretch overflow-hidden rounded-chip border-[3px] border-ink bg-porcelain">
+            <button
+              type="button"
+              onClick={() => stepQuantity(-1)}
+              disabled={quantity <= 1}
+              aria-label="One fewer"
+              className="w-[44px] cursor-pointer border-0 bg-transparent font-mono text-[20px] font-bold text-ink hover:bg-sun disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              −
+            </button>
+            <input
+              id="quantity"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={MAX_QUANTITY}
+              value={quantityDraft ?? quantity}
+              onChange={(e) => {
+                setQuantityDraft(e.target.value);
+                // Only a whole number of at least one becomes the quantity. The
+                // upper limit is left to the server, whose refusal says who to ask.
+                const n = Number(e.target.value);
+                if (Number.isInteger(n) && n >= 1) setQuantity(n);
+              }}
+              // Leaving the box settles it: whatever is not a quantity gives way
+              // to the last one that was.
+              onBlur={() => setQuantityDraft(null)}
+              className="w-[64px] appearance-none border-x-[3px] border-y-0 border-ink bg-porcelain px-[6px] py-[13px] text-center font-mono text-[16px] font-bold tabular-nums text-ink [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+            <button
+              type="button"
+              onClick={() => stepQuantity(1)}
+              disabled={quantity >= MAX_QUANTITY}
+              aria-label="One more"
+              className="w-[44px] cursor-pointer border-0 bg-transparent font-mono text-[20px] font-bold text-ink hover:bg-sun disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              +
+            </button>
+          </div>
+        </div>
         <Button type="submit" disabled={!hasSomething || busy} className="px-[30px]">
           {busy
             ? again ? "Sending…" : picked ? "Fetching it…" : `Sending… ${phase.percent}%`
