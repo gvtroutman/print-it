@@ -1,4 +1,5 @@
-# Build images and publish them to this Gitea's own package registry.
+# Build images, publish them to this Gitea's own package registry, and deploy
+# them to the stack on the NAS.
 #
 # This is the Gitea counterpart of .github/workflows/release-images.yml.
 # Because this .gitea/workflows directory exists, Gitea runs only the
@@ -6,15 +7,20 @@
 #
 # Two machines, two runners:
 #   - `pc`: a runner on the workstation, which does the build. A build that
-#     took six minutes on the NAS's four cores takes a minute or two there,
-#     which is the difference between iterating and waiting. It pushes to the
-#     NAS's registry over the LAN.
+#     took six minutes on the NAS's four cores takes a minute or two there.
+#     It pushes to the NAS's registry over the LAN.
 #   - `ubuntu-latest`: the runner on the NAS itself, which shares the NAS's
-#     Docker daemon and disk. It pins the compose file and pulls the new
-#     images, so they are already on the NAS when the stack is redeployed.
+#     Docker daemon and disk. It pulls the new images and swaps them in
+#     (deploy/nas-deploy.sh): migrator first while the old app keeps serving,
+#     then the app, which has to answer its health endpoint or the previous
+#     image goes back. A service whose image did not change is left alone.
 #
-# A push made while the workstation is off waits in the queue and builds when
-# it comes back.
+# The registry stays on the NAS, so the stack never depends on the
+# workstation: only a new build does. A push made while the workstation is
+# off waits in the queue and builds when it comes back.
+#
+# Rolling back by hand: .gitea/workflows/rollback.yml, with any earlier
+# commit's short SHA. Every build stays in the registry under its SHA.
 #
 # One-time setup:
 #   - the NAS runner, on the same box as Gitea, with the Docker socket
@@ -30,21 +36,26 @@ name: Build images
 on:
   push:
     branches: [main]
+    # Nothing in these reaches an image (see .dockerignore), so a push that
+    # only touches them has nothing to build or deploy.
     paths-ignore:
-      - "docs/traffic/**"
+      - "docs/**"
+      - "**.md"
+      - ".github/**"
   workflow_dispatch:
 
 concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  REGISTRY: 192.168.40.13:3002
+  OWNER: ${{ github.repository_owner }}
+
 jobs:
-  # Both images in one job, built side by side: the migrator shares nothing
-  # with the app past the base image.
   images:
     runs-on: pc
     env:
-      REGISTRY: 192.168.40.13:3002
       # The build cache (npm downloads, Next's compiler cache, unchanged
       # layers) is what makes a build fast. The workstation has room for a
       # generous one; the cap only stops it growing without end.
@@ -52,89 +63,66 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The migrator's log is held back and printed after, so the two do not
-      # interleave. Both builds are always waited for, so a failed app build
-      # cannot leave the migrator running past the step.
-      - name: Build
-        run: |
-          set -euo pipefail
-          short="${GITHUB_SHA::7}"
-          repo="$REGISTRY/${{ github.repository_owner }}"
-          echo "REPO=$repo" >> "$GITHUB_ENV"
-          echo "SHORT=$short" >> "$GITHUB_ENV"
-
-          docker build --progress=plain --target migrator \
-            -t "$repo/ppp-migrate:$short" -t "$repo/ppp-migrate:latest" . \
-            > migrate-build.log 2>&1 &
-          migrate=$!
-
-          app=0
-          docker build --target runner \
-            -t "$repo/ppp-app:$short" -t "$repo/ppp-app:latest" . || app=$?
-          migrate_status=0
-          wait "$migrate" || migrate_status=$?
-
-          echo "::group::ppp-migrate build"
-          cat migrate-build.log
-          echo "::endgroup::"
-          echo "ppp-app: exit $app, ppp-migrate: exit $migrate_status"
-          [ "$app" = 0 ] && [ "$migrate_status" = 0 ]
-
-      - name: Push
+      - name: Build and push
         env:
           REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
         run: |
-          set -euo pipefail
-          echo "$REGISTRY_TOKEN" | docker login "$REGISTRY" -u "${{ github.repository_owner }}" --password-stdin
-          pids=""
-          for name in ppp-app ppp-migrate; do
-            ( docker push -q "$REPO/$name:$SHORT" && docker push -q "$REPO/$name:latest" ) &
-            pids="$pids $!"
-          done
-          failed=0
-          for pid in $pids; do wait "$pid" || failed=1; done
-          docker logout "$REGISTRY"
-          [ "$failed" = 0 ]
+          export TAG="${GITHUB_SHA::7}" EXTRA_TAG=latest LABEL=build
+          deploy/build-push.sh
 
       # The images live on in the registry; only the build cache is worth
       # keeping here.
       - name: Clean up
         if: always()
         run: |
-          if [ -n "${SHORT:-}" ]; then
-            docker rmi "$REPO/ppp-app:$SHORT" "$REPO/ppp-migrate:$SHORT" || true
-          fi
+          short="${GITHUB_SHA::7}"
+          docker rmi "$REGISTRY/$OWNER/ppp-app:$short" "$REGISTRY/$OWNER/ppp-migrate:$short" || true
           docker image prune -f
           docker builder prune -af --keep-storage "$CACHE_CAP" || true
 
-  # On the NAS: point the ZimaOS compose file at the images just pushed and
-  # pull them, so a redeploy starts at once instead of downloading first.
-  # Redeploying the stack is still a separate step.
-  #
-  # The NAS addresses its own registry as localhost:3002, which is how the
-  # compose file names the images; it is the same registry the workstation
-  # pushed to.
-  deploy-prep:
+  deploy:
     needs: images
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     env:
       REPO: localhost:3002/${{ github.repository_owner }}
-      STACK_DIR: /DATA/AppData/print-it
-      COMPOSE_FILE: docker-compose.zimaos.yml
+      # The record copy of the compose file, which this job keeps pinned
+      # alongside the live one.
+      RECORD_DIR: /DATA/AppData/print-it
+      RECORD_FILE: docker-compose.zimaos.yml
+      # ZimaOS's own copy, the one the stack actually runs from and the
+      # dashboard shows. Editing it here keeps the dashboard truthful.
+      STACK_DIR: /var/lib/casaos/apps/compose-65c2260ca510a529
+      PROJECT: compose-65c2260ca510a529
     steps:
-      # The job's Docker is the host's, so a bind mount reaches the NAS's own
-      # disk. --mount (not -v) refuses a missing source instead of quietly
-      # creating an empty directory, so a moved file fails the run loudly.
-      - name: Pin both images to this commit
+      - uses: actions/checkout@v4
+
+      # What is running now, from the file the stack runs from: the image
+      # kept back for a quick rollback, whatever happens next.
+      - name: Note the running build
+        run: |
+          prev=$(docker run --rm --mount "type=bind,source=$STACK_DIR,target=/stack,readonly" alpine:3 \
+            sed -nE "s#^ *image: *$REPO/ppp-app:([0-9a-f]{7}) *\$#\1#p" /stack/docker-compose.yml | head -n 1)
+          echo "running: ${prev:-unknown}"
+          echo "PREV=$prev" >> "$GITHUB_ENV"
+
+      - name: Deploy
+        env:
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+        run: |
+          export TAG="${GITHUB_SHA::7}" STRATEGY=incremental
+          deploy/nas.sh
+
+      # The record copy follows only a deploy that succeeded, so it always
+      # names what is running. --mount (not -v) refuses a missing source
+      # instead of quietly creating an empty directory.
+      - name: Pin the record copy
         run: |
           set -euo pipefail
           short="${GITHUB_SHA::7}"
-          # Rewrite through a temp file and cat it back, rather than sed -i,
-          # so the file keeps its owner and mode and stays editable over SMB.
           docker run --rm \
-            --mount "type=bind,source=$STACK_DIR,target=/stack" \
-            -e REPO="$REPO" -e SHORT="$short" -e FILE="/stack/$COMPOSE_FILE" \
+            --mount "type=bind,source=$RECORD_DIR,target=/stack" \
+            -e REPO="$REPO" -e SHORT="$short" -e FILE="/stack/$RECORD_FILE" \
             alpine:3 sh -euc '
               sed -E "s#(image: *$REPO/ppp-(app|migrate)):[A-Za-z0-9._-]+#\1:$SHORT#" "$FILE" > /tmp/compose.yml
               n=$(grep -cE "image: *$REPO/ppp-(app|migrate):$SHORT\$" /tmp/compose.yml || true)
@@ -143,29 +131,19 @@ jobs:
                 exit 1
               fi
               cat /tmp/compose.yml > "$FILE"
-              grep -E "image: *$REPO/" "$FILE"
             '
 
-      - name: Pull onto the NAS
-        env:
-          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
-        run: |
-          set -euo pipefail
-          short="${GITHUB_SHA::7}"
-          echo "$REGISTRY_TOKEN" | docker login localhost:3002 -u "${{ github.repository_owner }}" --password-stdin
-          docker pull -q "$REPO/ppp-app:$short"
-          docker pull -q "$REPO/ppp-migrate:$short"
-          docker logout localhost:3002
-
-      # The NAS disk is small and also holds the live database and uploads,
-      # so every older ppp image goes, except one a container still uses
-      # (docker rmi refuses those). Nothing else on the NAS is touched.
+      # The NAS disk is small and also holds the live database and uploads.
+      # Keep the running build and the one before it, so a rollback to the
+      # last good build starts without a pull; every older SHA-tagged ppp
+      # image goes (docker rmi refuses one a container still uses). Only
+      # 7-hex SHA tags are touched, never a benchmark's or anything else.
       - name: Drop older images
         if: always()
         run: |
           short="${GITHUB_SHA::7}"
-          docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' \
-            | awk -v repo="$REPO" -v keep="$short" \
-                '$1 ~ "^" repo "/ppp-(app|migrate):" && $1 !~ ":" keep "$" { print $1 }' \
-            | xargs -r docker rmi 2>/dev/null || true
+          docker images --format '{{.Repository}}:{{.Tag}}' \
+            | grep -E "^$REPO/ppp-(app|migrate):[0-9a-f]{7}\$" \
+            | grep -vE ":($short|${PREV:-none})\$" \
+            | xargs -r docker rmi 2> /dev/null || true
           docker image prune -f

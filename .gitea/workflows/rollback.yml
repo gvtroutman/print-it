@@ -1,0 +1,68 @@
+# Put an earlier build back on the NAS: Actions → Roll back → Run workflow,
+# with the 7-character SHA of the commit to return to (any build pushed by
+# build-images.yml; they all stay in the registry under their SHA).
+#
+# The same deploy as a push to main, pointed at an older tag: the NAS pulls
+# it if it no longer holds it, and the app has to answer before the job
+# passes.
+#
+# The older migrator is not run: migrations only go forward, and an older
+# Prisma CLI looking at a database with migrations it has never heard of is
+# not something to find out about mid-rollback. The schema stays where the
+# newest deploy left it and the older app runs against it. Fine for additive
+# migrations, which is what this project writes; a build from before a
+# destructive one cannot come back this way.
+name: Roll back
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Short SHA (7 characters) of the build to deploy"
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      OWNER: ${{ github.repository_owner }}
+      REPO: localhost:3002/${{ github.repository_owner }}
+      RECORD_DIR: /DATA/AppData/print-it
+      RECORD_FILE: docker-compose.zimaos.yml
+      STACK_DIR: /var/lib/casaos/apps/compose-65c2260ca510a529
+      PROJECT: compose-65c2260ca510a529
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          if ! printf '%s' "$TAG" | grep -qE '^[0-9a-f]{7}$'; then
+            echo "expected a 7-character short SHA, got '$TAG'" >&2
+            exit 1
+          fi
+
+      - name: Deploy
+        env:
+          TAG: ${{ inputs.tag }}
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+        run: STRATEGY=incremental SKIP_MIGRATE=1 deploy/nas.sh
+
+      - name: Pin the record copy
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --mount "type=bind,source=$RECORD_DIR,target=/stack" \
+            -e REPO="$REPO" -e SHORT="$TAG" -e FILE="/stack/$RECORD_FILE" \
+            alpine:3 sh -euc '
+              sed -E "s#(image: *$REPO/ppp-(app|migrate)):[A-Za-z0-9._-]+#\1:$SHORT#" "$FILE" > /tmp/compose.yml
+              n=$(grep -cE "image: *$REPO/ppp-(app|migrate):$SHORT\$" /tmp/compose.yml || true)
+              if [ "$n" != 2 ]; then
+                echo "expected 2 images pinned to $SHORT, found $n; $FILE left unchanged" >&2
+                exit 1
+              fi
+              cat /tmp/compose.yml > "$FILE"
+            '
