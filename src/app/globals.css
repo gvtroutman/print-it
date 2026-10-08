@@ -89,7 +89,7 @@
   body {
     margin: 0;
     padding: 0;
-    background-color: var(--color-sun-wash);
+    background-color: var(--color-cream);
     color: var(--color-ink);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
@@ -192,11 +192,11 @@
   background-color: var(--color-porcelain);
 }
 
-/* The build plate: a faint dot grid under everything, like the print bed. */
+/* The build plate: a sky-blue dot grid under everything, like the print bed. */
 .plate {
   background-image: radial-gradient(
     circle,
-    rgba(34, 26, 20, 0.14) 1.2px,
+    var(--color-sun) 1.2px,
     transparent 1.6px
   );
   background-size: 22px 22px;
