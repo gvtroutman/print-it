@@ -290,6 +290,44 @@
   }
 }
 
+/* The dropzone's Necker cube: a wireframe turning on its vertical axis. No
+   perspective on purpose — drawn orthographic, either square can be the front,
+   so it seems to flip direction as you watch. */
+@keyframes ppp-necker {
+  to {
+    transform: rotateY(360deg);
+  }
+}
+
+.ppp-necker {
+  --s: 30px;
+  --b: 2.5px;
+  position: relative;
+  width: var(--s);
+  height: var(--s);
+  transform-style: preserve-3d;
+  transform: rotateX(-24deg);
+}
+.ppp-necker > span {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  animation: ppp-necker 9s linear infinite;
+}
+/* Each face is the square grown by half a line on every side, so its border
+   sits centred on the cube's true edge and neighbouring faces' lines meet. */
+.ppp-necker > span > span {
+  position: absolute;
+  inset: calc(var(--b) / -2);
+  border: var(--b) solid var(--color-ink);
+}
+.ppp-necker > span > span:nth-child(1) { transform: translateZ(calc(var(--s) / 2)); }
+.ppp-necker > span > span:nth-child(2) { transform: rotateY(180deg) translateZ(calc(var(--s) / 2)); }
+.ppp-necker > span > span:nth-child(3) { transform: rotateY(90deg) translateZ(calc(var(--s) / 2)); }
+.ppp-necker > span > span:nth-child(4) { transform: rotateY(-90deg) translateZ(calc(var(--s) / 2)); }
+.ppp-necker > span > span:nth-child(5) { transform: rotateX(90deg) translateZ(calc(var(--s) / 2)); }
+.ppp-necker > span > span:nth-child(6) { transform: rotateX(-90deg) translateZ(calc(var(--s) / 2)); }
+
 .ppp-in {
   animation: ppp-in 180ms ease-out;
 }
@@ -325,8 +363,13 @@
   .ppp-in,
   .ppp-toast,
   .ppp-neon,
-  .ppp-extrude {
+  .ppp-extrude,
+  .ppp-necker > span {
     animation: none;
+  }
+  /* Parked at a three-quarter turn, so it still reads as a cube. */
+  .ppp-necker > span {
+    transform: rotateY(35deg);
   }
   .stamp,
   .stamp:hover,

@@ -520,10 +520,18 @@ export function UploadForm({
           disabled={busy}
           onChange={(e) => accept(Array.from(e.target.files ?? []))}
         />
-        <span
-          aria-hidden
-          className="mx-auto mb-[13.2px] block h-[56px] w-[56px] rounded-full border-[3px] border-ink bg-aqua"
-        />
+        <span aria-hidden className="mx-auto mb-[13.2px] flex h-[56px] w-[56px] items-center justify-center">
+          <span className="ppp-necker">
+            <span>
+              <span />
+              <span />
+              <span />
+              <span />
+              <span />
+              <span />
+            </span>
+          </span>
+        </span>
         <span className="block font-display text-[19px] text-ink">
           {files.length > 0 ? "Drop more, or click to add" : "Drop a 3D model, photos or videos here (optional)"}
         </span>
