@@ -520,7 +520,7 @@ export function UploadForm({
           disabled={busy}
           onChange={(e) => accept(Array.from(e.target.files ?? []))}
         />
-        <span aria-hidden className="mx-auto mb-[13.2px] flex h-[56px] w-[56px] items-center justify-center">
+        <span aria-hidden className="mx-auto mb-[13.2px] flex h-[80px] w-[80px] items-center justify-center">
           <span className="ppp-necker">
             <span>
               <span />

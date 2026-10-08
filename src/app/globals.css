@@ -300,8 +300,8 @@
 }
 
 .ppp-necker {
-  --s: 30px;
-  --b: 2.5px;
+  --s: 48px;
+  --b: 3px;
   position: relative;
   width: var(--s);
   height: var(--s);
@@ -312,14 +312,14 @@
   position: absolute;
   inset: 0;
   transform-style: preserve-3d;
-  animation: ppp-necker 9s linear infinite;
+  animation: ppp-necker 16s linear infinite;
 }
 /* Each face is the square grown by half a line on every side, so its border
    sits centred on the cube's true edge and neighbouring faces' lines meet. */
 .ppp-necker > span > span {
   position: absolute;
   inset: calc(var(--b) / -2);
-  border: var(--b) solid var(--color-ink);
+  border: var(--b) solid var(--color-sun);
 }
 .ppp-necker > span > span:nth-child(1) { transform: translateZ(calc(var(--s) / 2)); }
 .ppp-necker > span > span:nth-child(2) { transform: rotateY(180deg) translateZ(calc(var(--s) / 2)); }
