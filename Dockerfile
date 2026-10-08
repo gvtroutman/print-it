@@ -42,7 +42,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # Next keeps its compiler cache in .next/cache. A cache mount carries it from
 # one build to the next (compiling takes over two minutes from cold on the NAS)
 # and leaves it out of every image.
-RUN --mount=type=cache,target=/app/.next/cache npm run build
+#
+# The standalone bundle's traced node_modules moves out beside it, so the
+# runner can copy dependencies and application code as separate layers.
+RUN --mount=type=cache,target=/app/.next/cache npm run build \
+ && mv .next/standalone/node_modules .next/standalone-modules
 
 # ---------------------------------------------------------------------------
 # Runs once per deploy, before the app starts.
@@ -50,10 +54,7 @@ RUN --mount=type=cache,target=/app/.next/cache npm run build
 # Built from scratch rather than FROM builder: it needs the Prisma CLI and the
 # seed, not the compiled app or the test toolchain. Inheriting the build stage
 # would ship well over a gigabyte to apply one migration.
-FROM node:22-alpine AS migrator
-WORKDIR /app
-RUN apk add --no-cache openssl libc6-compat
-
+#
 # Exactly three packages, not the whole dependency tree: the seed imports
 # @prisma/client and nothing else, and installing the app's manifest here
 # would drag in Next and sharp just to apply a migration.
@@ -62,12 +63,17 @@ RUN apk add --no-cache openssl libc6-compat
 # because the root package.json's `overrides` have to come across. Without
 # them the Prisma CLI pulls a vulnerable deepmerge-ts through @prisma/config
 # — which is a HIGH that only shows up when you scan the published image.
-# Versions are read from the real manifest so nothing can drift. The cache
-# mount is the same npm download cache the builder uses.
+# Versions are read from the real manifest so nothing can drift.
+#
+# Generated in a stage of its own and copied across, so the install below is
+# keyed on the generated manifest rather than the whole package.json: a new
+# app dependency, a script or a version bump leaves the migrator's layers,
+# and so its image, exactly as they were.
+FROM node:22-alpine AS migrator-manifest
 COPY package.json /tmp/package.json
-RUN --mount=type=cache,target=/root/.npm node -e "\
+RUN mkdir /out && node -e "\
       const p = require('/tmp/package.json'); \
-      require('fs').writeFileSync('package.json', JSON.stringify({ \
+      require('fs').writeFileSync('/out/package.json', JSON.stringify({ \
         name: 'ppp-migrate', private: true, \
         dependencies: { \
           prisma: p.devDependencies.prisma, \
@@ -76,11 +82,22 @@ RUN --mount=type=cache,target=/root/.npm node -e "\
         }, \
         overrides: p.overrides ?? {}, \
       }, null, 2)); \
-    " \
- && npm install --ignore-scripts --no-audit --no-fund
+    "
 
+FROM node:22-alpine AS migrator
+WORKDIR /app
+RUN apk add --no-cache openssl libc6-compat
+
+# The cache mount is the same npm download cache the builder uses.
+COPY --from=migrator-manifest /out/package.json ./package.json
+RUN --mount=type=cache,target=/root/.npm npm install --ignore-scripts --no-audit --no-fund
+
+# The client is generated from the schema alone, so only the schema comes in
+# before it: a new migration or a seed change is a small layer on top rather
+# than a fresh 50 MB generate.
+COPY prisma/schema.prisma ./prisma/schema.prisma
+RUN ./node_modules/.bin/prisma generate
 COPY prisma ./prisma
-RUN npx prisma generate
 
 # npm is not a runtime dependency here either, and the copy bundled in the
 # node base image carries CVEs of its own (sigstore 3.1.0, CVE-2026-48815 —
@@ -182,25 +199,40 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-RUN addgroup --system --gid 1001 nodejs \
- && adduser  --system --uid 1001 nextjs
-
-# The standalone bundle carries its own minimal node_modules; static assets and
-# public/ are not traced into it and have to come across separately.
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-
-# Prisma's generated client and its native engine. `serverExternalPackages`
-# keeps @prisma/client out of the bundle, so it is copied in whole.
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
-
 # Nothing in the runtime shells out to npm — the CMD is `node server.js` — so
 # it is 17 MB of attack surface for no benefit. Removing it also drops the
 # vulnerable sigstore that ships inside npm's own bundled dependencies.
-# ci.yml pins this: "images ship no npm".
-RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+# ci.yml pins this: "images ship no npm". Done here, before anything from the
+# build arrives, so this layer never changes from one build to the next.
+RUN addgroup --system --gid 1001 nodejs \
+ && adduser  --system --uid 1001 nextjs \
+ && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+
+# What comes from the build is layered by how often it changes, least often
+# first. A layer whose content is unchanged is reused as it is, so it is never
+# pushed or pulled again: a page change ships the app layer, not the
+# dependencies or Prisma underneath it.
+#
+# 1. The dependencies the standalone bundle traced. These move with the
+#    lockfile.
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone-modules ./node_modules
+
+# 2. Prisma's generated client and its native engine. `serverExternalPackages`
+#    keeps @prisma/client out of the bundle, so it is copied in whole. Only
+#    @prisma/client, though: the rest of node_modules/@prisma (the engines,
+#    fetch-engine, config) belongs to the Prisma CLI, which the app never
+#    loads, and was ~40 MB of every image. These move with the schema or the
+#    Prisma version.
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma/client ./node_modules/@prisma/client
+
+# 3. public/ (not traced into the bundle), which rarely changes.
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+
+# 4. The application itself, new on every build: server code, then the
+#    browser assets, which are not traced into the bundle either.
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
 EXPOSE 3000

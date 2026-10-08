@@ -17,3 +17,16 @@ Pretty Please Print/
 # on their disk into the build context, when the version the lockfile pins is
 # the one that should ship.
 public/docs/
+# Nothing below is read by the build. Kept out of the context so that a
+# change to the docs, the CI or the deploy scripts leaves the build fully
+# cached and the images identical, instead of recompiling the app.
+docs/
+deploy/
+.gitea/
+.github/
+.githooks/
+.claude/
+CHANGELOG.md
+CONTRIBUTING.md
+Dockerfile
+docker-compose*.yml
