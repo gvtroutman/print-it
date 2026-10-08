@@ -89,7 +89,7 @@
   body {
     margin: 0;
     padding: 0;
-    background-color: var(--color-cream);
+    background-color: var(--color-sun-wash);
     color: var(--color-ink);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;

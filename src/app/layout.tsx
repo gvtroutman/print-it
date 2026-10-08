@@ -78,7 +78,7 @@ export default function RootLayout({
       lang="en"
       className={`${script.variable} ${rounded.variable} ${archivo.variable} ${rubik.variable}`}
     >
-      <body className="plate flex min-h-screen flex-col bg-cream text-ink antialiased">
+      <body className="plate flex min-h-screen flex-col bg-sun-wash text-ink antialiased">
         <div className="flex-1">{children}</div>
         {/* This deployment shows no "Source · AGPL-3.0" footer. That was the
             app's AGPL-3.0 section 13 source offer; the operator removed it
