@@ -64,6 +64,10 @@ export type Again = {
 /** The most one request may ask for; the server says the same. */
 const MAX_QUANTITY = 24;
 
+/** The round − and + either side of the amount. */
+const STEP_BUTTON =
+  "grid h-[44px] w-[44px] cursor-pointer place-items-center rounded-full border-0 bg-cream-2 text-ink transition-colors hover:bg-cream-3 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-cream-2";
+
 type Phase =
   | { kind: "idle" }
   | { kind: "uploading"; percent: number }
@@ -849,15 +853,17 @@ export function UploadForm({
         {/* Amount sits by the send button: the last thing settled before it goes. */}
         <div>
           <Label htmlFor="quantity">Amount</Label>
-          <div className="inline-flex items-stretch overflow-hidden rounded-chip border-[3px] border-ink bg-porcelain">
+          <div className="inline-flex items-center gap-[6px] py-[3px]">
             <button
               type="button"
               onClick={() => stepQuantity(-1)}
               disabled={quantity <= 1}
               aria-label="One fewer"
-              className="w-[44px] cursor-pointer border-0 bg-transparent font-mono text-[20px] font-bold text-ink hover:bg-sun disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+              className={STEP_BUTTON}
             >
-              −
+              <svg viewBox="0 0 20 20" width={18} height={18} aria-hidden="true">
+                <path d="M4 10h12" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" />
+              </svg>
             </button>
             <input
               id="quantity"
@@ -876,16 +882,18 @@ export function UploadForm({
               // Leaving the box settles it: whatever is not a quantity gives way
               // to the last one that was.
               onBlur={() => setQuantityDraft(null)}
-              className="w-[64px] appearance-none border-x-[3px] border-y-0 border-ink bg-porcelain px-[6px] py-[13px] text-center font-mono text-[16px] font-bold tabular-nums text-ink [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              className="w-[48px] appearance-none rounded-chip border-0 bg-transparent px-[4px] py-[10px] text-center font-mono text-[16px] font-bold tabular-nums text-ink [-moz-appearance:textfield] focus:bg-cream-2 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             />
             <button
               type="button"
               onClick={() => stepQuantity(1)}
               disabled={quantity >= MAX_QUANTITY}
               aria-label="One more"
-              className="w-[44px] cursor-pointer border-0 bg-transparent font-mono text-[20px] font-bold text-ink hover:bg-sun disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+              className={STEP_BUTTON}
             >
-              +
+              <svg viewBox="0 0 20 20" width={18} height={18} aria-hidden="true">
+                <path d="M4 10h12M10 4v12" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" />
+              </svg>
             </button>
           </div>
         </div>

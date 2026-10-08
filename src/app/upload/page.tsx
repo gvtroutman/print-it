@@ -1,6 +1,5 @@
 import { printerName, requireUser } from "@/lib/authz";
 import { AppHeader } from "@/components/app-header";
-import { Kicker } from "@/components/ui";
 import { Notice } from "@/components/ui";
 import { availableCatalog } from "@/lib/catalog-data";
 import { enabledSources } from "@/lib/import-source";
@@ -17,7 +16,6 @@ export default async function UploadPage() {
       <AppHeader user={user} active="/upload" />
       <main className="mx-auto w-full max-w-[1180px] px-[26.4px] pb-[80px] pt-[35.2px]">
         <div className="max-w-[780px]">
-          <Kicker>New order</Kicker>
           {/* Still a sentence someone would say out loud, which was the point
               of the original H1 and survives every rename since. */}
           <h1 className="m-0 mb-[13.2px] text-[46px] leading-[0.98] text-ink">
