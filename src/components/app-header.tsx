@@ -56,11 +56,11 @@ const NAV: Record<Actor["role"], NavGroup[]> = {
 /**
  * The sign over the counter, on every screen.
  *
- * Wrinkled kraft paper under the wordmark, with ink text on it (`.kraft` in
- * globals.css). `data-authenticated` is a stable hook for
- * the test suites so they assert on "there is a signed-in shell here" rather
- * than on a piece of copy that a redesign can move — which is exactly what
- * went wrong before.
+ * Wrinkled kraft paper under the wordmark, with ink text on it (`kraft` in
+ * globals.css on a phone, the seamless `kraft-tile` from `sm` up).
+ * `data-authenticated` is a stable hook for the test suites so they assert on
+ * "there is a signed-in shell here" rather than on a piece of copy that a
+ * redesign can move — which is exactly what went wrong before.
  */
 export async function AppHeader({
   user,
@@ -90,7 +90,7 @@ export async function AppHeader({
 
   return (
     <header data-authenticated="true" className="sticky top-0 z-40">
-      <div className="kraft border-b-[3px] border-ink">
+      <div className="kraft sm:kraft-tile border-b-[3px] border-ink">
         {/* Keep identity and account controls on a stable top row. Navigation
             has its own wrapping row, so adding destinations cannot push the
             activity or profile menus away from the wordmark. */}
