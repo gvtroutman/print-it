@@ -136,11 +136,12 @@
 }
 
 /*
- * Wrinkled kraft paper, for the header — a photo of the real thing, which
- * replaced an SVG-filter imitation. It does not tile, so it is scaled to cover
- * and centred; on a bar this short that shows a band of creases across the
- * middle of the sheet. The flat colour is the paper's own average, there while
- * the image loads. Ink text on it is about 6:1.
+ * Wrinkled kraft paper, for the header and the ground of the sign-in screens
+ * — a photo of the real thing, which replaced an SVG-filter imitation. It does
+ * not tile, so it is scaled to cover and centred; on a bar as short as the
+ * header that shows a band of creases across the middle of the sheet. The
+ * flat colour is the paper's own average, there while the image loads. Ink
+ * text on it is about 6:1.
  *
  * Bundled from src/app/textures rather than served from /public: Next emits
  * it under /_next/static, which middleware skips, so it is cached like the
