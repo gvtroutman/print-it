@@ -75,12 +75,16 @@ export function UserMenu({
  */
 export function AccountPanel({
   name,
+  initials,
   email,
   role,
   passkeyCount,
   ownerTools,
 }: {
   name: string;
+  /** Shown as an avatar beside the name. The phone menu passes it; the
+      desktop menu doesn't, because there the avatar is the button. */
+  initials?: string;
   email: string;
   role: "client" | "admin";
   passkeyCount: number;
@@ -88,11 +92,23 @@ export function AccountPanel({
 }) {
   return (
     <>
-      <p className="m-0 font-display text-[17px] text-ink">{name}</p>
-      <p className="m-0 mt-[2px] font-mono text-[11.5px] text-ink-3">{email}</p>
-      <p className="m-0 mt-[8.8px] inline-block rounded-chip border-2 border-ink bg-cream-2 px-[8px] font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink">
-        {role === "admin" ? "Printer owner" : "Invited member"}
-      </p>
+      <div className="flex items-center gap-[12px]">
+        {initials && (
+          <span
+            aria-hidden
+            className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border-[3px] border-ink bg-aqua font-mono text-[17px] font-bold text-ink"
+          >
+            {initials}
+          </span>
+        )}
+        <div className="min-w-0">
+          <p className="m-0 font-display text-[17px] text-ink">{name}</p>
+          <p className="m-0 mt-[2px] break-all font-mono text-[11.5px] text-ink-3">{email}</p>
+          <p className="m-0 mt-[8.8px] inline-block rounded-chip border-2 border-ink bg-cream-2 px-[8px] font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink">
+            {role === "admin" ? "Printer owner" : "Invited member"}
+          </p>
+        </div>
+      </div>
       {/* How you sign in. The printer owner gets a way to change it;
           a member's device is their sign-in, and there is nothing to
           change. */}

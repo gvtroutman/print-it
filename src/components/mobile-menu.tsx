@@ -59,18 +59,12 @@ export function MobileMenu({
         aria-expanded={open}
         aria-haspopup="true"
         aria-label={`Menu for ${name}`}
-        className="stamp flex h-[36px] cursor-pointer items-center gap-[8px] rounded-chip border-[3px] border-ink bg-cream pl-[12px] pr-[4px] text-ink hover:bg-sun"
+        className="stamp flex h-[36px] cursor-pointer items-center justify-center rounded-chip border-[3px] border-ink bg-cream px-[14px] text-ink hover:bg-sun"
       >
         <span aria-hidden className="flex w-[18px] flex-col gap-[3.5px]">
           <span className="h-[2.5px] rounded-full bg-ink" />
           <span className="h-[2.5px] rounded-full bg-ink" />
           <span className="h-[2.5px] rounded-full bg-ink" />
-        </span>
-        <span
-          aria-hidden
-          className="flex h-[24px] w-[24px] items-center justify-center rounded-full border-2 border-ink bg-aqua font-mono text-[10px] font-bold"
-        >
-          {initials}
         </span>
       </button>
 
@@ -117,6 +111,7 @@ export function MobileMenu({
           <div className="mt-[17.6px] border-t-2 border-ink pt-[17.6px]">
             <AccountPanel
               name={name}
+              initials={initials}
               email={email}
               role={role}
               passkeyCount={passkeyCount}
