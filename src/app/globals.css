@@ -192,11 +192,13 @@
   background-color: var(--color-porcelain);
 }
 
-/* The build plate: a faint grid under everything, like the print bed. */
+/* The build plate: a faint dot grid under everything, like the print bed. */
 .plate {
-  background-image:
-    linear-gradient(rgba(34, 26, 20, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(34, 26, 20, 0.045) 1px, transparent 1px);
+  background-image: radial-gradient(
+    circle,
+    rgba(34, 26, 20, 0.14) 1.2px,
+    transparent 1.6px
+  );
   background-size: 22px 22px;
 }
 
