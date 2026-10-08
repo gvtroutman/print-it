@@ -16,10 +16,9 @@ export const dynamic = "force-dynamic";
 /**
  * History Prints.
  *
- * The prints that have left, or are leaving, the active rail — `Delivery`,
- * `Done` and `Declined`. The rail (`/board`) is for what is still moving; this
- * is where you come to find an old job and run it again. Scoped exactly like
- * the board and `/me`: a client sees only their own, the printer owner sees
+ * The prints that have left, or are leaving, the active flow — `Delivery`,
+ * `Done` and `Declined`. This is where you come to find an old job and run it
+ * again. Scoped exactly like `/me`: a client sees only their own, the printer owner sees
  * the group.
  *
  * The whole point is re-printing without re-uploading, so every row carries a
@@ -81,7 +80,7 @@ export default async function HistoryPage({
           {isAdmin ? "Everything the group has printed" : "Your print history"}
         </h1>
         <p className="m-0 mb-[22px] max-w-[62ch] text-[15px] text-ink-2">
-          The jobs that have left the rail — delivered, done, or declined. Found the
+          The jobs that are finished — delivered, done, or declined. Found the
           one you want again? <strong>Print again</strong> opens a fresh request from
           the same file, no re-upload.
         </p>

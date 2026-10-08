@@ -102,7 +102,6 @@ export function storyIdOr400(raw: unknown): number {
 
 function refresh(id: number) {
   revalidatePath("/queue");
-  revalidatePath("/board");
   revalidatePath("/me");
   revalidatePath(`/story/${id}`);
 }

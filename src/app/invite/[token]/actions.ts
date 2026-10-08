@@ -115,6 +115,6 @@ export async function acceptInvite(
   }
 
   // `nextCookies()` has copied the session cookie into the response by now, so
-  // the board renders for the person who just arrived.
-  redirect("/board");
+  // the page renders for the person who just arrived.
+  redirect("/upload");
 }

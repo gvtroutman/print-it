@@ -5,8 +5,8 @@
  *   npm run shots            # writes to ./shots (gitignored)
  *   SHOT_DIR=/tmp/x npm run shots
  *
- * Seeds a handful of tickets first, because an empty rail says nothing about
- * whether the rail works.
+ * Seeds a handful of tickets first, because an empty list says nothing about
+ * whether the list works.
  *
  * DESTRUCTIVE: replaces stories and the demo client. Development only.
  */
@@ -64,7 +64,7 @@ async function sessionCookie(user: { id: string; email: string }): Promise<strin
 
 /**
  * A real 12-triangle STL. The seeded tickets point at storage keys that do
- * not exist, which is fine for the rail but useless for the viewer — it needs
+ * not exist, which is fine for a list but useless for the viewer — it needs
  * bytes it can actually parse.
  */
 function stlBox(x: number, y: number, z: number): Uint8Array {
@@ -83,7 +83,7 @@ function stlBox(x: number, y: number, z: number): Uint8Array {
   return buf;
 }
 
-/** One ticket per stage, so every rail colour and state is on screen at once. */
+/** One ticket per stage, so every status and state is on screen at once. */
 const SEED = [
   ["Hook for the monitor arm", "Requested", "PETG", "Slate", "#4a5d78", 1, false],
   ["Cable comb, 6 slots", "Accepted", "PLA", "Graphite", "#1b2126", 4, true],
@@ -161,8 +161,7 @@ async function main() {
     }
   }
 
-  // One declined ticket, so the profile shows what the rail deliberately
-  // does not carry.
+  // One declined ticket, so the profile shows a declined row too.
   await db.story.create({
     data: {
       title: "Bracket that was too thin", uploaderId: ayla.id, status: "Declined",
@@ -188,7 +187,6 @@ async function main() {
 
   const printing = await db.story.findFirst({ where: { status: "Printing" } });
   const pages: Array<[string, string]> = [
-    ["board", `${APP}/board`],
     ["upload", `${APP}/upload`],
     ["profile", `${APP}/me`],
     ["story", `${APP}/story/${printing!.id}`],
@@ -216,10 +214,10 @@ async function main() {
   }
   await adminCtx.close();
 
-  // Narrow, because the rail has to collapse without a media query.
+  // Narrow, because the order form has to fit a phone.
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
-  await page.goto(`${APP}/board`, { waitUntil: "networkidle2" });
-  await page.screenshot({ path: `${OUT}/board-mobile.png`, fullPage: true });
+  await page.goto(`${APP}/upload`, { waitUntil: "networkidle2" });
+  await page.screenshot({ path: `${OUT}/upload-mobile.png`, fullPage: true });
 
   await browser.close();
   console.info(`wrote ${pages.length + 4} screenshots to ${OUT}/`);

@@ -101,7 +101,7 @@ async function main() {
           (await db.session.count({ where: { userId: user.id } })) === 1);
 
     // --- the nudge: the only thing that reaches someone who skipped ---
-    await page.goto(`${APP}/board`, { waitUntil: "networkidle2" });
+    await page.goto(`${APP}/me`, { waitUntil: "networkidle2" });
     await page.waitForFunction(
       () => document.body.innerText.includes("Tired of typing"),
       { timeout: 8_000 },
@@ -135,7 +135,7 @@ async function main() {
           JSON.stringify({ counter: stored[0]?.counter, deviceType: stored[0]?.deviceType }));
 
     // The nudge has to stop once it is answered, or it becomes wallpaper.
-    await page.goto(`${APP}/board`, { waitUntil: "networkidle2" });
+    await page.goto(`${APP}/me`, { waitUntil: "networkidle2" });
     const afterEnrol = await page.evaluate(() => document.body.innerText);
     check("the prompt disappears once a passkey exists",
           !afterEnrol.includes("Tired of typing"), "still nagging after enrolment");
@@ -221,9 +221,9 @@ async function main() {
     check("and it is clipped rather than removed from layout", upload.visible,
           "zero width — sr-only clips to 1px; display:none and visibility:hidden do not focus");
 
-    await page.goto(`${APP}/board`, { waitUntil: "networkidle2" });
+    await page.goto(`${APP}/me`, { waitUntil: "networkidle2" });
     const body = await page.evaluate(() => document.body.innerText);
-    check("the app rendered for the signed-in user", body.includes("backlog") || body.includes("Backlog"),
+    check("the app rendered for the signed-in user", body.includes("Your orders"),
           body.slice(0, 160));
   } finally {
     await browser?.close();

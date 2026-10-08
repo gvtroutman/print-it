@@ -29,8 +29,8 @@ export default async function UploadPage() {
             <span className="font-mono">.3mf</span>,{" "}
             <span className="font-mono">.obj</span>,{" "}
             <span className="font-mono">.step</span> and more), photos, videos or
-            links if you have them. {owner} gets a ping, and your order
-            goes up on the rail as a ticket you can follow.
+            links if you have them. {owner} gets a ping, and you can follow
+            your order under My orders.
           </p>
         </div>
         {catalog.length > 0 ? (

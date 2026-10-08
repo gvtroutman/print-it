@@ -46,5 +46,5 @@ export async function linkDevice(_prev: DeviceState, formData: FormData): Promis
     subject: member.email,
   });
 
-  redirect("/board");
+  redirect("/upload");
 }

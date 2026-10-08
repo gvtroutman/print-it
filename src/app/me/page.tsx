@@ -8,6 +8,7 @@ import { relativeTime } from "@/lib/catalog";
 import { AppHeader } from "@/components/app-header";
 import { Kicker, StatusChip } from "@/components/ui";
 import { ColorSwatch } from "@/components/color-swatch";
+import { Toast } from "@/components/toast";
 
 import type { StoryStatus } from "@prisma/client";
 
@@ -25,20 +26,23 @@ const PRINTED: StoryStatus[] = ["Delivery", "Done"];
 /**
  * The profile. Handoff §6.
  *
- * Everything on this page is scoped by the same rule as the board: a client
+ * Everything on this page is scoped by `storyScope`: a client
  * counts and lists only their own tickets, the printer owner sees the group.
  * The handoff calls this out explicitly, and it is the easiest place to leak
  * — a stat is still a fact about someone else's data.
  *
- * This is also where declined tickets finally surface. They are deliberately
- * off the rail, which left them reachable only by URL; the whole history
- * belongs here, including the parts that did not happen.
+ * Declined tickets are listed here too: the whole history belongs here,
+ * including the parts that did not happen.
  */
 
 type Card = { value: string; label: string; skin: string };
 
-export default async function ProfilePage() {
-  const user = await requireUser("/me");
+export default async function ProfilePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ toast?: string }>;
+}) {
+  const [{ toast }, user] = await Promise.all([searchParams, requireUser("/me")]);
   const owner = await printerName();
   const isAdmin = user.role === "admin";
   const scope = storyScope(user);
@@ -180,10 +184,12 @@ export default async function ProfilePage() {
         </div>
 
         <p className="m-0 mt-[13.2px] font-mono text-[11px] uppercase tracking-[0.05em] text-ink-3">
-          Declined orders are listed here too — the rail only carries what is
-          still moving.
+          Declined orders are listed here too.
         </p>
       </main>
+
+      {/* A withdrawal lands here, since its ticket no longer exists. */}
+      {toast && <Toast>{toast}</Toast>}
     </>
   );
 }

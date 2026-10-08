@@ -322,7 +322,7 @@ export function UploadForm({
         return setPhase({ kind: "error", message: body.error ?? "That did not go through. Try again." });
       }
       const id: number | null = body.story?.id ?? null;
-      router.push(id === null ? "/board" : `/story/${id}?sent=1`);
+      router.push(id === null ? "/me" : `/story/${id}?sent=1`);
       router.refresh();
     } catch {
       setPhase({ kind: "error", message: "The connection dropped. Try again." });
@@ -353,7 +353,7 @@ export function UploadForm({
         return setPhase({ kind: "error", message: body.error ?? "That did not go through. Try again." });
       }
       const id: number | null = body.story?.id ?? null;
-      router.push(id === null ? "/board" : `/story/${id}?sent=1`);
+      router.push(id === null ? "/me" : `/story/${id}?sent=1`);
       router.refresh();
     } catch {
       setPhase({ kind: "error", message: "The connection dropped. Try again." });
@@ -418,7 +418,7 @@ export function UploadForm({
         } catch {
           /* fall back to the board rather than stranding them here */
         }
-        router.push(id === null ? "/board" : `/story/${id}?sent=1`);
+        router.push(id === null ? "/me" : `/story/${id}?sent=1`);
         router.refresh();
         return;
       }
@@ -909,7 +909,7 @@ export function UploadForm({
         <Button
           type="button"
           variant="ghost"
-          onClick={() => router.push(again ? `/story/${again.id}` : "/board")}
+          onClick={() => router.push(again ? `/story/${again.id}` : "/me")}
         >
           Cancel
         </Button>

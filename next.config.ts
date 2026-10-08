@@ -72,6 +72,11 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  // The board ("the rail") is gone; old bookmarks and links in past emails
+  // land on home, which sends each role to its own start page.
+  async redirects() {
+    return [{ source: "/board", destination: "/", permanent: false }];
+  },
 };
 
 export default nextConfig;

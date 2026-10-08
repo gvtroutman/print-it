@@ -31,8 +31,7 @@ notifications and audit trail a print goes through. It lives at **`/frr`**.
   a client gets a 404, exactly like the print queue.
 
   The nav points at the board rather than here, for both roles: the board is
-  the shared view of everything asked for, and triage is a step off it. That
-  mirrors the print track, where *The rail* and *The pass* sit side by side.
+  the shared view of everything asked for, and triage is a step off it.
 - Move a request one step at a time: **Requested → Accepted → In progress →
   Shipped → Done**, or **Decline** it (terminal, and only from `Requested`).
   Every move notifies the requester and writes an audit row.

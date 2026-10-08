@@ -1,5 +1,5 @@
 /**
- * End-to-end check of the upload → board → story loop.
+ * End-to-end check of the upload → my orders → story loop.
  *
  *   docker compose up -d && npm run build && npm start
  *   npm run verify:upload
@@ -319,20 +319,20 @@ async function main() {
   const anonUpload = await upload(anon, "sneaky.stl", binaryStl(10, 10, 10));
   check("an unauthenticated upload is refused", anonUpload.status === 401, `got ${anonUpload.status}`);
 
-  section("the board is scoped");
+  section("my orders are scoped");
 
-  const aylaBoard = await (await aylaB.go(`${APP}/board`)).text();
+  const aylaBoard = await (await aylaB.go(`${APP}/me`)).text();
   check("the uploader sees her story", aylaBoard.includes("Hook for the monitor arm"));
-  check("her card does not name her (it is always her)",
-        !aylaBoard.includes("Ayla Berg · "), "the uploader name appeared on a client's own card");
+  check("her row does not name her (it is always her)",
+        !aylaBoard.includes(" · Ayla Berg"), "the uploader name appeared on a client's own row");
 
-  const jonasBoard = await (await jonasB.go(`${APP}/board`)).text();
+  const jonasBoard = await (await jonasB.go(`${APP}/me`)).text();
   check("another client does not see it", !jonasBoard.includes("Hook for the monitor arm"));
-  check("and gets the empty state instead", jonasBoard.includes("No requests yet"));
+  check("and gets the empty state instead", jonasBoard.includes("No orders yet"));
 
-  const rubenBoard = await (await rubenB.go(`${APP}/board`)).text();
+  const rubenBoard = await (await rubenB.go(`${APP}/me`)).text();
   check("the admin sees it", rubenBoard.includes("Hook for the monitor arm"));
-  check("with the uploader named", rubenBoard.includes("Ayla Berg"));
+  check("with the uploader named", rubenBoard.includes(" · Ayla Berg"));
 
   section("story detail is scoped the same way");
 

@@ -5,10 +5,10 @@ import { featureRef } from "@/lib/scope";
 import type { FeatureRow } from "@/lib/features";
 
 /**
- * A feature request, as a ticket on the 'frr' rail — the print `StoryCard`'s
+ * A feature request, as a ticket on the 'frr' rail — the print ticket's
  * sibling. No filament stripe (there is no file); the left edge carries the
  * priority colour instead, and the category rides where the material chip does
- * on a print, so the two boards read the same at a glance.
+ * on a print order.
  *
  * `showRequester` carries the scope rule into the design, exactly as
  * `showUploader` does: a client only ever sees their own, so their name on

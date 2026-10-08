@@ -21,7 +21,7 @@ export async function addComment(formData: FormData): Promise<void> {
   const actor = await requireUser();
 
   const parsedId = IdSchema.safeParse(formData.get("storyId"));
-  if (!parsedId.success) redirect("/board");
+  if (!parsedId.success) redirect("/");
   const storyId = parsedId.data;
 
   try {
@@ -30,8 +30,8 @@ export async function addComment(formData: FormData): Promise<void> {
     if (error instanceof StoryProblem) {
       // 404 means the ticket is not theirs to see. Saying so on a page they
       // cannot reach would be a redirect into a wall, and naming it at all
-      // would confirm it exists — so they go back to their own board.
-      if (error.status === 404) redirect("/board");
+      // would confirm it exists — so they go back to their home page.
+      if (error.status === 404) redirect("/");
       back(storyId, { error: error.message });
     }
     throw error;

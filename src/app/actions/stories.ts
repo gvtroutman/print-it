@@ -107,7 +107,7 @@ export async function clearFlag(formData: FormData): Promise<void> {
  * printer owner's, which is why it takes `requireUser` — the ownership check
  * itself is the service's, and applies to the API call just the same.
  *
- * It lands on the board rather than `from`: the ticket it came from no longer
+ * It lands on their orders rather than `from`: the ticket it came from no longer
  * exists, and redirecting to a page that is now a 404 is a poor way to say
  * "that worked".
  */
@@ -116,7 +116,7 @@ export async function withdrawStory(formData: FormData): Promise<void> {
   const id = storyIdOr400(formData.get("storyId"));
   try {
     const done = await withdraw(user, id);
-    back("/board", { toast: `${done.ref} withdrawn.` });
+    back("/me", { toast: `${done.ref} withdrawn.` });
   } catch (error) {
     if (error instanceof StoryProblem) back(`/story/${id}`, { toast: error.message });
     throw error;

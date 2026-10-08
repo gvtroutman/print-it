@@ -197,21 +197,22 @@ async function main() {
   const startIdx = formIndexContaining(members, "Preview as a member");
   check("the guest list offers the preview", startIdx >= 0);
   const started = await ruben.submit(`${APP}/admin/invites`, members, startIdx, {});
-  check("starting it lands on the rail",
+  check("starting it lands on a new order",
         started.status >= 300 && started.status < 400 &&
-        (started.headers.get("location") ?? "").endsWith("/board"),
+        (started.headers.get("location") ?? "").endsWith("/upload"),
         `status ${started.status} location ${started.headers.get("location")}`);
 
-  const previewBoard = rendered(await (await ruben.go(`${APP}/board`)).text());
-  check("the rail says it is a preview", previewBoard.includes("Previewing as a member"));
-  check("with the member's navigation", previewBoard.includes("Order up") &&
-        !previewBoard.includes("Audit log"));
-  check("and the member's scope — a colleague's ticket is not on it",
-        !previewBoard.includes("Hook for the monitor arm"));
+  const previewHome = rendered(await (await ruben.go(`${APP}/upload`)).text());
+  check("the page says it is a preview", previewHome.includes("Previewing as a member"));
+  check("with the member's navigation", previewHome.includes("My orders") &&
+        !previewHome.includes("Audit log"));
+  const previewMine = rendered(await (await ruben.go(`${APP}/me`)).text());
+  check("and the member's scope — a colleague's ticket is not in their orders",
+        !previewMine.includes("Hook for the monitor arm"));
   check("admin pages answer 404 while it lasts",
         (await ruben.go(`${APP}/queue`)).status === 404 &&
         (await ruben.go(`${APP}/admin/invites`)).status === 404);
-  check("and home is the rail", (await ruben.raw(`${APP}/`)).headers.get("location")?.endsWith("/board") === true);
+  check("and home is a new order", (await ruben.raw(`${APP}/`)).headers.get("location")?.endsWith("/upload") === true);
 
   // The cookie names the session that set it. Carried into another session —
   // a later sign-in on the same browser — it must do nothing.
@@ -229,9 +230,9 @@ async function main() {
         (await client.go(`${APP}/queue`)).status === 404);
   client.jar.delete("ppp.preview");
 
-  const endIdx = formIndexContaining(previewBoard, "Back to the owner view");
+  const endIdx = formIndexContaining(previewHome, "Back to the owner view");
   check("the banner offers the way back", endIdx >= 0);
-  const ended = await ruben.submit(`${APP}/board`, previewBoard, endIdx, {});
+  const ended = await ruben.submit(`${APP}/upload`, previewHome, endIdx, {});
   check("leaving lands on the queue",
         ended.status >= 300 && ended.status < 400 &&
         (ended.headers.get("location") ?? "").endsWith("/queue"),
@@ -263,18 +264,6 @@ async function main() {
   check("submitting it is accepted", set.status >= 300 && set.status < 400, `status ${set.status}`);
   check("and the ticket's priority changed",
         (await db.story.findUnique({ where: { id: routine.id } }))?.priority === "high");
-  const board = rendered(await (await client.go(`${APP}/board`)).text());
-  const cardOf = (title: string) => {
-    const i = board.indexOf(title);
-    return i < 0 ? "" : board.slice(Math.max(0, i - 900), i);
-  };
-  check("a high ticket's card says so", />High</.test(cardOf("Routine drawer organiser")));
-  await db.story.update({ where: { id: routine.id }, data: { priority: "medium" } });
-  const boardAfter = rendered(await (await client.go(`${APP}/board`)).text());
-  const j = boardAfter.indexOf("Routine drawer organiser");
-  check("a medium one's does not",
-        j > 0 && !/>(High|Medium|Low)</.test(boardAfter.slice(Math.max(0, j - 900), j)));
-
   await db.story.update({ where: { id: routine.id }, data: { status: "Done" } });
   const done = await (await client.go(`${APP}/story/${routine.id}`)).text();
   check("a finished ticket no longer offers the control", !done.includes('name="priority"'));
@@ -564,7 +553,7 @@ async function main() {
   });
   const gonerB = await signIn(goner);
   check("the member can reach the app",
-        rendered(await (await gonerB.go(`${APP}/board`)).text()).includes("backlog"));
+        (await (await gonerB.go(`${APP}/me`)).text()).includes('data-authenticated="true"'));
   check("and holds a live session",
         (await db.session.count({ where: { userId: goner.id } })) > 0);
 
@@ -584,7 +573,7 @@ async function main() {
   check("their live sessions are revoked with it",
         (await db.session.count({ where: { userId: goner.id } })) === 0);
   check("the session they were holding stops working",
-        !rendered(await (await gonerB.go(`${APP}/board`)).text()).includes("backlog"));
+        !(await (await gonerB.go(`${APP}/me`)).text()).includes('data-authenticated="true"'));
 
   await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
   const lockedOut = await signInWithPassword(new Browser(), APP, usernameFor(goner.email));
@@ -624,16 +613,10 @@ async function main() {
           where: { action: "access.restored", subject: goner.email } })) === 1);
 
   // ------------------------------------------------------------------
-  section("Done is the end of the line, and leaves the rail");
+  section("Done is the end of the line");
 
   const shipped = await makeStory(ayla.id, "Bracket, delivered", "Done");
-  const boardHtml = rendered(await (await client.go(`${APP}/board`)).text());
-  check("a Done ticket is off the board",
-        !boardHtml.includes("Bracket, delivered"),
-        "the rail is supposed to carry only what is still moving");
-  check("but the board still draws the four live rails",
-        ["Requested", "Accepted", "Printing", "Delivery"].every((c) => boardHtml.includes(c)));
-  check("and Done is not one of them",
+  check("Done is not one of the live stages",
         BOARD.length === 4 && !(BOARD as readonly string[]).includes("Done"),
         BOARD.join(", "));
 
@@ -811,7 +794,7 @@ async function main() {
 
   // ------------------------------------------------------------------
   section("the uploader sees what happened");
-  const feed = await (await client.go(`${APP}/board`)).text();
+  const feed = await (await client.go(`${APP}/me`)).text();
   check("their Activity count is not zero", /Activity[\s\S]{0,200}[1-9]/.test(feed));
 
   console.info(

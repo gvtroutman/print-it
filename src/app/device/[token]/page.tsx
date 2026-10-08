@@ -34,7 +34,7 @@ export default async function DevicePage({ params }: { params: Promise<{ token: 
   // Already signed in as somebody on this browser: say so rather than quietly
   // swapping who they are.
   const signedIn = await currentUser();
-  if (signedIn?.id === link.user.id) redirect("/board");
+  if (signedIn?.id === link.user.id) redirect("/upload");
   const firstName = link.user.name.split(" ")[0] ?? link.user.name;
 
   return (

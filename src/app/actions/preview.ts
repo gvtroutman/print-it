@@ -9,12 +9,12 @@ import { endPreview, startPreview } from "@/lib/authz";
  * safe is written up beside `currentUser` in `src/lib/authz.ts`.
  *
  * Each lands on the other side's home rather than staying put: an admin page
- * would 404 the moment the preview starts, and the rail is where members begin.
+ * would 404 the moment the preview starts, and a new order is where members begin.
  */
 
 export async function startPreviewAction(): Promise<void> {
   await startPreview();
-  redirect("/board");
+  redirect("/upload");
 }
 
 export async function endPreviewAction(): Promise<void> {

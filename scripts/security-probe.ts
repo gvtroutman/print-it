@@ -197,7 +197,7 @@ async function main() {
   // Positive control. Without it, the three "not authenticated" probes below
   // could all pass simply because the marker was never rendered — which is
   // exactly how the previous copy-based version quietly went hollow.
-  const realPage = await (await client.go(`${APP}/board`)).text();
+  const realPage = await (await client.go(`${APP}/me`)).text();
   probe("A01-marker", "a real session does render the authenticated marker",
         isAuthenticated(realPage),
         "marker missing — every negative auth probe below is vacuous");
@@ -934,7 +934,7 @@ async function main() {
   // The other half: a target that IS same-origin has to survive intact, or the
   // guard is just a redirect to "/" wearing a costume.
   const KEPT: Array<[string, string]> = [
-    ["/board", "/board"],
+    ["/me", "/me"],
     ["/history?status=Done", "/history?status=Done"],
     ["/admin/invites", "/admin/invites"],
   ];
@@ -998,7 +998,7 @@ async function main() {
    * mid-task with a perfectly live session behind them, which is the kind of
    * failure people work around by asking for the window to be made long again.
    */
-  const nav = await fresh.raw(`${APP}/board`);
+  const nav = await fresh.raw(`${APP}/me`);
   const navMaxAge = Number(
     /max-age=(\d+)/i.exec(
       nav.headers.getSetCookie().find((c) => c.includes("ppp.session_token=")) ?? "",
@@ -1006,7 +1006,7 @@ async function main() {
   );
   probe("A07-session-slides", "a page render pushes the cookie out too",
         Math.abs(navMaxAge - SESSION_IDLE_SECONDS) <= 60,
-        `GET /board returned Max-Age=${navMaxAge}, expected ~${SESSION_IDLE_SECONDS} — ` +
+        `GET /me returned Max-Age=${navMaxAge}, expected ~${SESSION_IDLE_SECONDS} — ` +
         "restampSession() in src/middleware.ts is not firing, so the cookie " +
         "will die under an active user while their session row is still alive");
 

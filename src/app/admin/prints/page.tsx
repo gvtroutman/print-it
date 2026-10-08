@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
  * Prints by person — pick people, see everything they have uploaded.
  *
  * The owner's other views answer "what is waiting" (the queue), "where is
- * everything" (the rail) and "what finished" (history). None answers "what has
+ * everything" (all orders) and "what finished" (history). None answers "what has
  * Ayla sent me", which is the question when somebody asks after their part,
  * when deciding whose turn it is, or before taking somebody off the list.
  *

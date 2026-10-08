@@ -17,10 +17,6 @@ that: there is no multi-tenancy, no billing, and no queue theory.
 
 ## What it looks like
 
-| The rail — every request as a ticket, scoped to who may see it |
-| :-- |
-| ![The backlog board](docs/screenshots/board.png) |
-
 | A ticket, with the actual uploaded geometry | The printer owner's queue |
 | :-- | :-- |
 | ![Story detail with the 3D viewer](docs/screenshots/story.png) | ![The admin queue](docs/screenshots/queue.png) |
@@ -43,10 +39,10 @@ that: there is no multi-tenancy, no billing, and no queue theory.
   links back to the model's page. Off by default, because it makes the server
   call somebody else's — see
   [Importing from a link](docs/deployment.md#importing-from-a-link).
-- **Follow it on a board** — Requested → Accepted → Printing → Delivery, one
-  step at a time, forwards only. Or Declined, with a reason. Marking it **Done**
-  takes it off the board while keeping it in *My orders*, so the rail carries
-  only what is still moving.
+- **Follow it in *My orders*** — Requested → Accepted → Printing → Delivery
+  → Done, one step at a time, forwards only. Or Declined, with a reason.
+  Members land on a new order when they open the app; their tickets are one
+  tab away.
 - **Withdraw your own request** any time before it reaches the bed — while it
   is Requested, Accepted or Declined, but not once it is Printing. The ticket,
   the conversation and the uploaded file go with it. Plans change; unwanted
@@ -62,14 +58,14 @@ that: there is no multi-tenancy, no billing, and no queue theory.
   state. Each member on the guest list links straight to theirs.
 - **Say how much it matters** — a request carries a priority (low, medium,
   high). The printer owner's queue lists the urgent ones first, and the
-  requester or the owner can change it on the ticket while it is still on the
-  rail. It orders the queue; it does not book the printer.
+  requester or the owner can change it on the ticket while it is still
+  moving. It orders the queue; it does not book the printer.
 - **Note print settings** — an optional free-text field on a request for the
   slicer specifics that come with some files (layer height, infill, supports,
   temperatures). The printer owner sees them on the ticket, so they do not
   become a back-and-forth, and a re-print keeps them.
 - **Browse your history** — a dedicated `/history` view of the prints that have
-  left the rail (delivered, done, declined), filterable by status, material and
+  finished (delivered, done, declined), filterable by status, material and
   when, with **Print again** on every row. It is where you go to re-run an old
   job.
 - **Talk on the ticket** — a conversation thread per request, so "can you do it

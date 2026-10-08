@@ -21,7 +21,7 @@ export default async function WelcomePage() {
   const user = await requireUser("/welcome");
   // Passkeys are an accelerator for a password, and members have none: their
   // device is already their sign-in.
-  if (user.role !== "admin") redirect("/board");
+  if (user.role !== "admin") redirect("/upload");
   const ua = (await headers()).get("user-agent");
 
   return (

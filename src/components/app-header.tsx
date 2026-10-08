@@ -19,7 +19,6 @@ const NAV: Record<Actor["role"], NavGroup[]> = {
   client: [
     {
       items: [
-        { label: "The rail", href: "/board" },
         { label: "New order", href: "/upload" },
         { label: "My orders", href: "/me" },
         { label: "Feature requests", href: "/frr" },
@@ -32,7 +31,6 @@ const NAV: Record<Actor["role"], NavGroup[]> = {
       heading: "Prints",
       items: [
         { label: "To do", href: "/queue" },
-        { label: "Board", href: "/board" },
         { label: "All orders", href: "/me" },
         { label: "By person", href: "/admin/prints" },
         // The board, not the triage queue: the owner wants to see everything
@@ -101,7 +99,7 @@ export async function AppHeader({
               move to the bar below. */}
           <div className="flex items-center gap-[16px] max-sm:justify-center lg:gap-[22px]">
             <Link
-              href={user.role === "admin" ? "/queue" : "/board"}
+              href={user.role === "admin" ? "/queue" : "/upload"}
               aria-label="Print It!, home"
               className="block max-sm:w-[80%] max-sm:max-w-[389px]"
             >

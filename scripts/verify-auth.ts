@@ -272,14 +272,13 @@ async function main() {
   check("and signs her in there and then", signedIn(ayla),
         "registration did not establish a session");
 
-  // `/` redirects to the board, which is the client's home per the handoff.
+  // `/` redirects to a new order, which is the client's home.
   const home = await (await ayla.go(`${APP}/`)).text();
-  check("she lands on an authenticated page", home.includes("The backlog"));
-  // The client kicker names the printer owner directly, the admin one does
-  // not — and the admin-only nav must be absent entirely.
+  check("she lands on an authenticated page",
+        home.includes('data-authenticated="true"') && home.includes("New order"));
+  // The admin-only nav must be absent entirely.
   check("the page is scoped to a client, not the admin",
-        home.includes(`Private to you and ${admin.name.split(" ")[0]}`) &&
-        !home.includes("Admin view") &&
+        !home.includes('href="/queue"') &&
         !home.includes("/admin/invites") &&
         !home.includes("/admin/audit"));
 
@@ -317,7 +316,7 @@ async function main() {
   // view. Doing that to hers would sign her out of a device she has no
   // password to get back into.
   ayla.maxAge.clear();
-  await ayla.go(`${APP}/board`);
+  await ayla.go(`${APP}/me`);
   check("browsing a page does not cut her cookie to twenty minutes",
         ayla.maxAge.get(sessionCookie(ayla) ?? "") !== SESSION_IDLE_SECONDS,
         String(ayla.maxAge.get(sessionCookie(ayla) ?? "")));

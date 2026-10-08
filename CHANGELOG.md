@@ -23,6 +23,11 @@ Notable changes. Every entry names a released version; deployments pin
 
 ### Removed
 
+- **The rail (`/board`).** Members now land on *New order*, and follow their
+  tickets in *My orders*; the printer owner keeps *To do*, *All orders* and
+  *By person*. Old `/board` links redirect home, and a withdrawn request lands
+  in *My orders*.
+
 - **Tips.** The request form no longer asks "And what's in it for …?", the
   profile no longer counts beers owed, and the tip is gone from the queue,
   the tickets and the API (a `tip` sent to the API is ignored). The

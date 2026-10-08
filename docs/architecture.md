@@ -396,7 +396,7 @@ side:
   fields and validates the merged wish exactly as an upload's.
 - **`/history`** is a scoped read of the finished prints (`Delivery`/`Done`/
   `Declined`) through the same `storyScope`, filtered by status/material/date,
-  with the re-queue control on each row. `/board` and `/me` are untouched.
+  with the re-queue control on each row. `/me` is untouched.
 - **Tips are gone.** A request no longer offers the owner anything in return.
   `Story.tip` and the `benefit` table are still in the schema — the column so
   old tickets keep what they offered, both so a rolled-back image still works —
@@ -417,9 +417,8 @@ side:
   the same `PRIORITY_CHIP`. Set on the request form, changeable on the ticket
   by the requester or the owner, and over `POST /api/stories/{id}/priority`.
   Two deliberate differences from the feature side: it is only editable while
-  the ticket is on the rail (a finished print has nothing left to order, and
-  editing it afterwards would rewrite what was asked for), and the board card
-  marks it only when it is *not* medium, so the mark means something. The
+  the ticket is still moving (a finished print has nothing left to order, and
+  editing it afterwards would rewrite what was asked for). The
   queue's *Waiting on you* reads high first, oldest first within a priority.
 - **Prints by person** (`/admin/prints`) is the owner's answer to "what has
   this person sent me". It adds no new read: the list is `listStories` with an
@@ -489,7 +488,6 @@ src/app/
   invite/[token]/        the registration page and its server action
   set-password/          where a reset link lands; sets no session
   welcome/               passkey enrolment after registration
-  board/                 the rail: tickets still moving, scoped per role
   queue/                 the printer owner's queue, urgent first
   upload/                the request form: dropzone, wish, XHR progress
   story/[id]/            a ticket: viewer, facts, priority, conversation

@@ -173,7 +173,7 @@ export function inviteEmail(opts: {
     to: opts.to,
     subject: `${opts.inviterName} is offering to print things for you`,
     text:
-      `${opts.inviterName} added you to Pretty Please Print — drop an .stl or .3mf and it goes up on the rail as a ticket.\n\n` +
+      `${opts.inviterName} added you to Pretty Please Print — drop an .stl or .3mf and it becomes a ticket you can follow.\n\n` +
       `Claim your seat: ${opts.url}\n\n` +
       `The link works once and expires in ${opts.expiresInDays} days.`,
     html: shell(
@@ -183,7 +183,7 @@ export function inviteEmail(opts: {
          <strong>${esc(opts.inviterName)}</strong> added you to Pretty Please Print.
          Drop an <span style="font-family:${MONO}">.stl</span> or
          <span style="font-family:${MONO}">.3mf</span>, say what you&rsquo;re hoping
-         for, and it goes up on the rail as a ticket you can follow.
+         for, and it becomes a ticket you can follow.
        </p>
        ${button(opts.url, "Claim your seat")}
        <p style="margin:20px 0 0;padding:9px 13px;background:${SUN};border:2px solid ${INK};border-radius:999px;display:inline-block;font-family:${MONO};font-size:11px;font-weight:bold;letter-spacing:1px;color:${INK}">

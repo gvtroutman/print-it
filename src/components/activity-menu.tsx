@@ -131,7 +131,7 @@ export function ActivityMenu({
           </div>
 
           {/* History lives here rather than in the nav: it is where the
-              activity ends up once a print leaves the rail. */}
+              activity ends up once a print is finished. */}
           <div className="mt-[8.8px] border-t-2 border-ink pt-[8.8px]">
             <Link
               href="/history"

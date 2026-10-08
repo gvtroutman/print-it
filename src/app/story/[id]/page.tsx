@@ -91,14 +91,14 @@ export default async function StoryPage({
 
   return (
     <>
-      <AppHeader user={user} active="/board" />
+      <AppHeader user={user} active="/me" />
 
       <main className="mx-auto w-full max-w-[1180px] px-[26.4px] pb-[80px] pt-[35.2px]">
         <Link
-          href="/board"
+          href="/me"
           className="inline-block font-mono text-[12px] font-bold uppercase tracking-[0.08em] text-ink-2 underline underline-offset-4 hover:text-cherry-dk"
         >
-          ← Back to the rail
+          ← {user.role === "admin" ? "All orders" : "My orders"}
         </Link>
 
         <div className="mt-[13.2px] grid grid-cols-[repeat(auto-fit,minmax(330px,1fr))] items-start gap-[26.4px]">
