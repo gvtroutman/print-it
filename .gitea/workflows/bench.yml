@@ -1,0 +1,104 @@
+# Pipeline benchmark: four deploys in a row to a throwaway stack on the NAS,
+# timing every stage. Push any branch named bench/<something> to run it; it
+# never touches the production stack or the images main deploys.
+#
+#   s0  the pushed commit (the baseline the others are deployed over)
+#   s1  the same code again
+#   s2  plus a one-word change on a page
+#   s3  plus a dependency change
+#
+# Each build runs on the build runner (`pc`), each deploy on the NAS runner,
+# alternating, so every deploy lands on a NAS holding the previous one: the
+# position a real push is in. Timings are printed as "BENCH <scenario>
+# <metric> <value>" lines.
+#
+# Push one bench branch at a time and let it finish. The concurrency group
+# below does not stop Gitea starting a second run while the first is between
+# jobs, and while each run has a stack of its own, two runs still share the
+# build cache, so the second's builds would time cache hits.
+name: Pipeline benchmark
+
+on:
+  push:
+    branches: ["bench/**"]
+
+concurrency:
+  group: bench
+  cancel-in-progress: false
+
+env:
+  REGISTRY: 192.168.40.13:3002
+  OWNER: ${{ github.repository_owner }}
+  RUN: ${{ github.run_id }}
+  # full = what the ZimaOS dashboard does; incremental = deploy/nas-deploy.sh's
+  # own path, the one production uses.
+  STRATEGY: incremental
+
+jobs:
+  build-s0:
+    runs-on: pc
+    steps:
+      - uses: actions/checkout@v4
+      - run: deploy/bench/build.sh s0
+        env: { REGISTRY_TOKEN: "${{ secrets.REGISTRY_TOKEN }}" }
+  deploy-s0:
+    needs: build-s0
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: deploy/bench/deploy.sh s0
+        env: { REGISTRY_TOKEN: "${{ secrets.REGISTRY_TOKEN }}" }
+
+  build-s1:
+    needs: deploy-s0
+    runs-on: pc
+    steps:
+      - uses: actions/checkout@v4
+      - run: deploy/bench/build.sh s1 s0
+        env: { REGISTRY_TOKEN: "${{ secrets.REGISTRY_TOKEN }}" }
+  deploy-s1:
+    needs: build-s1
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: deploy/bench/deploy.sh s1
+        env: { REGISTRY_TOKEN: "${{ secrets.REGISTRY_TOKEN }}" }
+
+  build-s2:
+    needs: deploy-s1
+    runs-on: pc
+    steps:
+      - uses: actions/checkout@v4
+      - run: deploy/bench/build.sh s2 s1
+        env: { REGISTRY_TOKEN: "${{ secrets.REGISTRY_TOKEN }}" }
+  deploy-s2:
+    needs: build-s2
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: deploy/bench/deploy.sh s2
+        env: { REGISTRY_TOKEN: "${{ secrets.REGISTRY_TOKEN }}" }
+
+  build-s3:
+    needs: deploy-s2
+    runs-on: pc
+    steps:
+      - uses: actions/checkout@v4
+      - run: deploy/bench/build.sh s3 s2
+        env: { REGISTRY_TOKEN: "${{ secrets.REGISTRY_TOKEN }}" }
+  deploy-s3:
+    needs: build-s3
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: deploy/bench/deploy.sh s3
+        env: { REGISTRY_TOKEN: "${{ secrets.REGISTRY_TOKEN }}" }
+
+  teardown:
+    needs: [deploy-s3]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: deploy/bench/deploy.sh teardown
+        env: { REGISTRY_TOKEN: "${{ secrets.REGISTRY_TOKEN }}" }
