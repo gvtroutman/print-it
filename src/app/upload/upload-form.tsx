@@ -642,9 +642,6 @@ export function UploadForm({
               ))}
             </ul>
           )}
-          <p className="m-0 mt-[6px] font-mono text-[11px] uppercase tracking-[0.04em] text-ink-3">
-            Anything that shows {owner} what it is for · up to {MAX_LINKS_PER_ORDER}
-          </p>
         </div>
       )}
 
@@ -788,12 +785,12 @@ export function UploadForm({
                 aria-checked={active}
                 aria-label={`${c.name} filament`}
                 onClick={() => setColor(c.name)}
-                className="flex w-[80px] cursor-pointer flex-col items-center gap-[7px] border-0 bg-transparent p-0"
+                className="flex w-[110px] cursor-pointer flex-col items-center gap-[7px] border-0 bg-transparent p-0"
               >
                 <FilamentSpool
                   mode={c.mode}
                   style={c.style}
-                  className="h-[72px] w-[50px]"
+                  className="h-[144px] w-[100px]"
                 />
                 <span
                   className={`font-mono text-[11px] font-bold uppercase tracking-[0.04em] ${
@@ -806,9 +803,6 @@ export function UploadForm({
             );
           })}
         </div>
-        <p className="mt-[11px] font-mono text-[11.5px] uppercase tracking-[0.04em] text-ink-3">
-          {owner} confirms what&rsquo;s actually on the spool.
-        </p>
       </fieldset>
 
       {/* ---- priority ---- */}
@@ -833,9 +827,6 @@ export function UploadForm({
             );
           })}
         </div>
-        <p className="m-0 mt-[8.8px] font-mono text-[11.5px] uppercase tracking-[0.04em] text-ink-3">
-          {owner} sees the urgent ones first. You can change it later.
-        </p>
       </div>
 
       {/* ---- note ---- */}
@@ -910,11 +901,6 @@ export function UploadForm({
         >
           Cancel
         </Button>
-        {!hasSomething && (
-          <span className="font-mono text-[11.5px] uppercase tracking-[0.06em] text-ink-3">
-            Say what you need — a few words is enough.
-          </span>
-        )}
       </div>
     </form>
   );
