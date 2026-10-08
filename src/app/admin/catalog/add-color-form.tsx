@@ -48,10 +48,16 @@ export function AddColorForm({ materialId }: { materialId: string }) {
             <input key={mode === "funfetti" ? "clear" : "color"} aria-label="Color" name="hex" type="color" defaultValue={mode === "funfetti" ? FUNFETTI_CLEAR : "#e4322f"} className="mt-[3px] block h-[49px] w-[54px] cursor-pointer rounded-card border-[3px] border-ink bg-porcelain p-[3px]" />
           </label>
           {mode === "gradient" && (
-            <label className="block text-center font-mono text-[10px] font-bold uppercase text-ink-3">
-              To
-              <input aria-label="Second gradient color" name="hexTo" type="color" defaultValue="#2787c9" className="mt-[3px] block h-[49px] w-[54px] cursor-pointer rounded-card border-[3px] border-ink bg-porcelain p-[3px]" />
-            </label>
+            <>
+              <label className="block text-center font-mono text-[10px] font-bold uppercase text-ink-3">
+                Via
+                <input aria-label="Middle gradient color" name="hexVia" type="color" defaultValue="#f6c945" className="mt-[3px] block h-[49px] w-[54px] cursor-pointer rounded-card border-[3px] border-ink bg-porcelain p-[3px]" />
+              </label>
+              <label className="block text-center font-mono text-[10px] font-bold uppercase text-ink-3">
+                To
+                <input aria-label="Last gradient color" name="hexTo" type="color" defaultValue="#2787c9" className="mt-[3px] block h-[49px] w-[54px] cursor-pointer rounded-card border-[3px] border-ink bg-porcelain p-[3px]" />
+              </label>
+            </>
           )}
         </>
       )}

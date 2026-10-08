@@ -7,6 +7,12 @@ import { Button, Input, Label } from "@/components/ui";
 import type { ColorMode } from "@/lib/catalog";
 import { editColorAction } from "./actions";
 
+/** The colour halfway between two hexes, so a two-stop gradient keeps its look as three stops. */
+function midpoint(a: string, b: string): string {
+  const channel = (hex: string, i: number) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+  return `#${[0, 1, 2].map((i) => Math.round((channel(a, i) + channel(b, i)) / 2).toString(16).padStart(2, "0")).join("")}`;
+}
+
 export function EditColorInline({
   id,
   name,
@@ -24,6 +30,10 @@ export function EditColorInline({
 }) {
   // A funfetti style starts with its sprinkle colours; its base is the hex.
   const matches = colorMode === "funfetti" ? [hex] : (colorStyle.match(/#[0-9a-f]{6}/gi) ?? []);
+  // Older gradients have two stops; offer their midpoint as the middle one.
+  const from = matches[0] ?? hex;
+  const to = matches.at(-1) ?? hex;
+  const via = matches.length >= 3 ? matches[1] : midpoint(from, to);
   const [mode, setMode] = useState<ColorMode>(colorMode);
 
   return (
@@ -65,13 +75,19 @@ export function EditColorInline({
             <>
               <label className="block text-center font-mono text-[9.5px] font-bold uppercase text-ink-3">
                 {mode === "gradient" ? "From" : mode === "funfetti" ? "Base" : "Color"}
-                <input aria-label={`Color value for ${name}`} name="hex" type="color" defaultValue={matches[0] ?? hex} className="mt-[3px] block h-[45px] w-[50px] cursor-pointer rounded-card border-[3px] border-ink bg-porcelain p-[3px]" />
+                <input aria-label={`Color value for ${name}`} name="hex" type="color" defaultValue={from} className="mt-[3px] block h-[45px] w-[50px] cursor-pointer rounded-card border-[3px] border-ink bg-porcelain p-[3px]" />
               </label>
               {mode === "gradient" && (
-                <label className="block text-center font-mono text-[9.5px] font-bold uppercase text-ink-3">
-                  To
-                  <input aria-label={`Second gradient color for ${name}`} name="hexTo" type="color" defaultValue={matches[1] ?? hex} className="mt-[3px] block h-[45px] w-[50px] cursor-pointer rounded-card border-[3px] border-ink bg-porcelain p-[3px]" />
-                </label>
+                <>
+                  <label className="block text-center font-mono text-[9.5px] font-bold uppercase text-ink-3">
+                    Via
+                    <input aria-label={`Middle gradient color for ${name}`} name="hexVia" type="color" defaultValue={via} className="mt-[3px] block h-[45px] w-[50px] cursor-pointer rounded-card border-[3px] border-ink bg-porcelain p-[3px]" />
+                  </label>
+                  <label className="block text-center font-mono text-[9.5px] font-bold uppercase text-ink-3">
+                    To
+                    <input aria-label={`Last gradient color for ${name}`} name="hexTo" type="color" defaultValue={to} className="mt-[3px] block h-[45px] w-[50px] cursor-pointer rounded-card border-[3px] border-ink bg-porcelain p-[3px]" />
+                  </label>
+                </>
               )}
             </>
           )}

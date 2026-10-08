@@ -32,14 +32,16 @@ function colorInput(formData: FormData) {
   if (!parsedMode.success) back("error", "Choose a valid swatch type.");
   const mode = parsedMode.data;
   const parsedHex = mode === "whatever" ? null : Hex.safeParse(formData.get("hex"));
+  const parsedHexVia = mode !== "gradient" ? null : Hex.safeParse(formData.get("hexVia"));
   const parsedHexTo = mode !== "gradient" ? null : Hex.safeParse(formData.get("hexTo"));
   if (parsedHex && !parsedHex.success) back("error", "Choose a valid color.");
-  if (parsedHexTo && !parsedHexTo.success) back("error", "Choose a valid second gradient color.");
+  if (parsedHexVia && !parsedHexVia.success) back("error", "Choose a valid middle gradient color.");
+  if (parsedHexTo && !parsedHexTo.success) back("error", "Choose a valid last gradient color.");
   const hex = mode === "whatever" ? WHATEVER_HEX : parsedHex!.data;
   const style = mode === "whatever"
     ? WHATEVER_STYLE
     : mode === "gradient"
-      ? `linear-gradient(135deg, ${hex}, ${parsedHexTo!.data})`
+      ? `linear-gradient(135deg, ${hex}, ${parsedHexVia!.data}, ${parsedHexTo!.data})`
       : mode === "funfetti"
         ? funfettiStyle(hex)
         : hex;

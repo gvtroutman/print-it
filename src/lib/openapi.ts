@@ -117,7 +117,7 @@ const STORY_SCHEMA = {
         },
         style: {
           type: "string",
-          examples: ["#4a5d78", "linear-gradient(135deg, #e4322f, #f6c945)"],
+          examples: ["#4a5d78", "linear-gradient(135deg, #e4322f, #f6c945, #2787c9)"],
           description: "The swatch as a CSS background: a color or a linear-gradient.",
         },
         mode: { type: "string", enum: [...COLOR_MODES] },

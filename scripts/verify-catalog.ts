@@ -193,13 +193,13 @@ async function main() {
   const addColorForm = () => findForm(page, [`value="${asa!.id}"`, 'name="mode"', 'Add']);
   await owner.submit(`${APP}/admin/catalog`, page, addColorForm(), { name: "Black", mode: "solid", hex: "#111111" });
   page = await (await owner.go(`${APP}/admin/catalog`)).text();
-  await owner.submit(`${APP}/admin/catalog`, page, addColorForm(), { name: "Sunset", mode: "gradient", hex: "#e4322f", hexTo: "#f6c945" });
+  await owner.submit(`${APP}/admin/catalog`, page, addColorForm(), { name: "Sunset", mode: "gradient", hex: "#e4322f", hexVia: "#f6c945", hexTo: "#7557c7" });
   page = await (await owner.go(`${APP}/admin/catalog`)).text();
   await owner.submit(`${APP}/admin/catalog`, page, addColorForm(), { name: "Surprise me", mode: "whatever" });
 
   const colors = await db.catalogColor.findMany({ where: { materialId: asa!.id }, orderBy: { sortOrder: "asc" } });
   check("solid uses one colour", colors[0]?.mode === "solid" && colors[0]?.style === "#111111");
-  check("gradient stores both colours", colors[1]?.mode === "gradient" && colors[1]?.style.includes("#f6c945"));
+  check("gradient stores all three colours", colors[1]?.mode === "gradient" && colors[1]?.style === "linear-gradient(135deg, #e4322f, #f6c945, #7557c7)");
   check("whatever needs no colour input", colors[2]?.mode === "whatever" && colors[2]?.style === RAINBOW);
   check("whatever is independent of its label", colors[2]?.name === "Surprise me");
 
