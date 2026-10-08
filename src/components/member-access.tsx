@@ -51,7 +51,7 @@ export function MemberAccess({
           colleague out, so it carries the same cherry as the other destructive
           controls. "Suspended" is doing double duty — it reports a state and it
           is the way back — and red would read as a threat rather than a flag,
-          so it takes the amber the tokens reserve for warnings. Both are
+          so it takes the sky blue the tokens reserve for warnings. Both are
           buttons either way; neither used to look like one. */}
       <summary
         className={

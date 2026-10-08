@@ -33,10 +33,11 @@
   --color-aqua-dk: #0a807c;
   --color-aqua-wash: #d3f2f0;
 
-  /* --- sunshine yellow: the in-progress state --- */
-  --color-sun: #f5b227;
-  --color-sun-dk: #8a5f08;
-  --color-sun-wash: #fdeecb;
+  /* --- sky blue: the in-progress state. still called "sun" in class
+         names (bg-sun, text-sun-dk); it used to be yellow --- */
+  --color-sun: #5bc0de;
+  --color-sun-dk: #1b6680;
+  --color-sun-wash: #e5f5fa;
 
   /* --- mint: done --- */
   --color-mint: #35b073;

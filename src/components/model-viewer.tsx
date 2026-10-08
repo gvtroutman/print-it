@@ -406,7 +406,7 @@ function NotAMesh({ filename }: { filename: string }) {
  * number; "three and a half times what a browser can rotate" is an answer, and
  * the bars make that true at a glance rather than on arithmetic.
  *
- * Amber rather than red: nothing has failed. The file is intact, it is stored,
+ * Calm blue rather than red: nothing has failed. The file is intact, it is stored,
  * it will print. Only the preview is declined, and the two things that actually
  * get the model onto a plate are both still there.
  */

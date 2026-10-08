@@ -93,7 +93,7 @@ const INK = "#221a14";
 const INK_2 = "#55483e";
 const CHERRY_DK = "#b7231f";
 const AQUA = "#14b3ae";
-const SUN = "#f5b227";
+const SUN = "#5bc0de";
 
 const SANS = "Archivo,'Helvetica Neue',Helvetica,Arial,sans-serif";
 const SLAB = "Georgia,'Times New Roman',serif";
