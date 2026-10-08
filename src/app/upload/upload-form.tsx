@@ -778,7 +778,9 @@ export function UploadForm({
         <legend className="mb-[8.8px] font-mono text-[12px] font-bold uppercase tracking-[0.1em] text-ink-2">
           Color
         </legend>
-        <div className="flex flex-wrap gap-[13.2px]">
+        {/* Three across on a phone, each spool shrinking to its column; from sm up
+            they keep their full size and wrap. */}
+        <div className="grid grid-cols-3 gap-x-[10px] gap-y-[13.2px] sm:flex sm:flex-wrap sm:gap-[13.2px]">
           {selectedMaterial.colors.map((c) => {
             const active = c.name === color;
             return (
@@ -789,15 +791,15 @@ export function UploadForm({
                 aria-checked={active}
                 aria-label={`${c.name} filament`}
                 onClick={() => setColor(c.name)}
-                className="flex w-[110px] cursor-pointer flex-col items-center gap-[7px] border-0 bg-transparent p-0"
+                className="flex min-w-0 cursor-pointer flex-col items-center gap-[7px] border-0 bg-transparent p-0 sm:w-[110px]"
               >
                 <FilamentSpool
                   mode={c.mode}
                   style={c.style}
-                  className="h-[144px] w-[100px]"
+                  className="aspect-[100/144] w-full max-w-[100px]"
                 />
                 <span
-                  className={`font-mono text-[11px] font-bold uppercase tracking-[0.04em] ${
+                  className={`text-center font-mono text-[11px] font-bold uppercase tracking-[0.04em] ${
                     active ? "text-cherry-dk" : "text-ink-2"
                   }`}
                 >
