@@ -321,10 +321,11 @@ model Story {
   flagReason String?
 
   // --- uploaded asset. Bytes live under MODELS_ROOT, never the web root. ---
-  filename   String
-  fileSize   Int
-  mimeType   String
-  storageKey String
+  // All four null together for a request filed as words alone — no model yet.
+  filename   String?
+  fileSize   Int?
+  mimeType   String?
+  storageKey String?
 
   /// Where the model came from, when it was imported from a link instead of
   /// uploaded: the model's page on the site it was fetched from. Built by the

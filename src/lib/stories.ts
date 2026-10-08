@@ -580,7 +580,8 @@ export async function withdrawStory(actor: Actor, id: number) {
   // an object that is not there. The reverse would be worse: an orphaned
   // object is invisible, a story with no file is broken in the viewer.
   // The attachment rows went with the story (cascade); their files go too.
-  for (const key of [story.storageKey, ...story.attachments.map((a) => a.storageKey)]) {
+  const keys = [story.storageKey, ...story.attachments.map((a) => a.storageKey)];
+  for (const key of keys.filter((k): k is string => k !== null)) {
     try {
       await deleteModel(key);
     } catch (error) {
@@ -694,7 +695,8 @@ export async function requeueStory(
   // geometry which was never written — the same ordering the upload uses.
   // The order's other files come along, each copied the same way: the same
   // order again means the same parts and the same reference photos.
-  const destKey = storageKeyFor(extensionOf(src.filename));
+  // A request filed without a model has none to copy; it stays without one.
+  const destKey = src.storageKey && src.filename ? storageKeyFor(extensionOf(src.filename)) : null;
   const extraKeys = src.attachments.map((a) =>
     storageKeyFor(extensionOf(a.filename), a.kind === "model" ? "models" : "media"),
   );
@@ -702,8 +704,10 @@ export async function requeueStory(
   try {
     // Noted before each copy, as in intake.ts: a copy can fail after its file
     // is in place, and removing one that never landed is a no-op.
-    copied.push(destKey);
-    await copyModel(src.storageKey, destKey);
+    if (src.storageKey && destKey) {
+      copied.push(destKey);
+      await copyModel(src.storageKey, destKey);
+    }
     for (const [i, a] of src.attachments.entries()) {
       copied.push(extraKeys[i]!);
       await copyModel(a.storageKey, extraKeys[i]!);

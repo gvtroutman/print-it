@@ -225,10 +225,17 @@ async function main() {
   await mkdir(ROOT, { recursive: true, mode: DIR_MODE });
   await handOver(ROOT);
 
-  const rows: Row[] = await db.story.findMany({
-    select: { id: true, storageKey: true, filename: true, fileSize: true },
-    orderBy: { id: "asc" },
-  });
+  // A request filed without a model has no object to export.
+  const rows: Row[] = (
+    await db.story.findMany({
+      select: { id: true, storageKey: true, filename: true, fileSize: true },
+      orderBy: { id: "asc" },
+    })
+  ).flatMap((r) =>
+    r.storageKey && r.filename && r.fileSize !== null
+      ? [{ id: r.id, storageKey: r.storageKey, filename: r.filename, fileSize: r.fileSize }]
+      : [],
+  );
 
   console.info(`\n  source   s3://${BUCKET} at ${process.env.S3_ENDPOINT ?? "http://localhost:9000"}`);
   console.info(`  target   ${ROOT}`);

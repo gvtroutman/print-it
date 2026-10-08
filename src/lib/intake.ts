@@ -72,7 +72,7 @@ export async function checkWish(raw: Record<string, unknown>): Promise<CheckedWi
 /** Where a model came from, when it did not come from the requester's disk. */
 export type Origin = { source: ImportSource; url: string };
 
-/** A file sent with the order besides its main model, as it arrived. */
+/** A file sent with the order, as it arrived. */
 export type Incoming = { name: string; bytes: Uint8Array };
 
 type Checked = {
@@ -135,49 +135,67 @@ async function checkAttachment(actor: Actor, incoming: Incoming): Promise<Checke
 
 let storageReady: Promise<void> | null = null;
 
+/** The title a ticket gets when the requester gave none. */
+function fallbackTitle(wish: Wish, filename: string | null, attachments: Incoming[]): string {
+  if (filename) return filename.replace(/\.[^.]+$/, "");
+  const line = wish.note.split("\n").map((l) => l.trim()).find(Boolean);
+  if (line) return line.length > 80 ? `${line.slice(0, 79).trimEnd()}…` : line;
+  const first = attachments[0];
+  if (first) return safeFilename(first.name).replace(/\.[^.]+$/, "");
+  return "Print request";
+}
+
 /**
  * Inspect, store, open the ticket, tell the owner, write the trail.
  *
- * `rawName` is whatever the door was given — a browser's filename or the one a
+ * `main` is the model, or null for a request made of words (and perhaps
+ * photos or links) alone — the owner can ask for a file in the conversation.
+ * Its name is whatever the door was given — a browser's filename or the one a
  * model site lists — and is cleaned here, so neither door can forget to.
  */
 export async function openRequest(
   actor: Actor,
   { wish, selection, links }: CheckedWish,
-  rawName: string,
-  bytes: Uint8Array,
+  main: Incoming | null,
   origin?: Origin,
   attachments: Incoming[] = [],
 ) {
-  const filename = safeFilename(rawName);
+  // Nothing at all is not a request. A few words are.
+  if (!main && !wish.title && !wish.note && attachments.length === 0 && links.length === 0) {
+    throw problem(400, "Say what you need — a few words is enough.");
+  }
+
+  const filename = main ? safeFilename(main.name) : null;
+  const bytes = main?.bytes ?? null;
 
   // Authoritative check. Whatever the browser allowed through, and whatever a
   // model site says a file is, this is what decides — extension, size and
   // actual content all have to agree.
-  const inspection = inspectModel(filename, bytes);
-  if (!inspection.ok) {
+  const inspection = filename && bytes ? inspectModel(filename, bytes) : null;
+  if (inspection && !inspection.ok) {
     // A refused file creates no story, so it gets its own verb. Repeated
     // rejections from one account are worth being able to see.
     await record({
       action: "upload.rejected",
       actor,
-      subject: filename,
+      subject: filename!,
       detail: {
         reason: inspection.reason,
-        bytes: bytes.length,
+        bytes: bytes!.length,
         ...(origin ? { source: origin.source, sourceUrl: origin.url } : {}),
       },
     });
     throw problem(422, REJECTION_COPY[inspection.reason]);
   }
+  const measured = inspection?.ok ? inspection : null;
 
   // Every attachment is checked before anything is written, so one bad photo
   // refuses the order whole rather than leaving half of it on the disk.
   const extras: Checked[] = [];
   for (const incoming of attachments) extras.push(await checkAttachment(actor, incoming));
 
-  const extension = extensionOf(filename);
-  const key = storageKeyFor(extension);
+  const extension = filename ? extensionOf(filename) : null;
+  const key = extension !== null ? storageKeyFor(extension) : null;
 
   const written: string[] = [];
   const removeWritten = async () => {
@@ -188,8 +206,10 @@ export async function openRequest(
     await storageReady;
     // Noted before each write, not after: a write can fail after its file is
     // already in place, and removing a key that was never written is a no-op.
-    written.push(key);
-    await putModel(key, bytes);
+    if (key && bytes) {
+      written.push(key);
+      await putModel(key, bytes);
+    }
     for (const extra of extras) {
       written.push(extra.key);
       await putModel(extra.key, extra.bytes);
@@ -201,7 +221,7 @@ export async function openRequest(
     throw problem(502, "The file could not be stored. Try again in a moment.");
   }
 
-  const title = wish.title || filename.replace(/\.[^.]+$/, "");
+  const title = wish.title || fallbackTitle(wish, filename, attachments);
 
   let story;
   try {
@@ -220,10 +240,10 @@ export async function openRequest(
         note: wish.note,
         printSettings: wish.printSettings,
         filename,
-        fileSize: bytes.length,
-        mimeType: MIME_FOR[extension] ?? "application/octet-stream",
+        fileSize: bytes?.length ?? null,
+        mimeType: extension !== null ? MIME_FOR[extension] ?? "application/octet-stream" : null,
         storageKey: key,
-        dims: inspection.dims,
+        dims: measured?.dims ?? null,
         sourceUrl: origin?.url ?? null,
         links,
         attachments: {
@@ -254,7 +274,9 @@ export async function openRequest(
       storyId: story.id,
       text: origin
         ? `${actor.name} imported “${title}”.`
-        : `${actor.name} uploaded “${title}”.`,
+        : filename
+          ? `${actor.name} uploaded “${title}”.`
+          : `${actor.name} asked for “${title}”.`,
     });
   }
 
@@ -264,11 +286,15 @@ export async function openRequest(
     subject: storyRef(story.id),
     detail: {
       title,
-      filename,
-      bytes: bytes.length,
-      format: inspection.format,
-      triangles: inspection.triangles,
-      dims: inspection.dims,
+      ...(measured
+        ? {
+            filename,
+            bytes: bytes!.length,
+            format: measured.format,
+            triangles: measured.triangles,
+            dims: measured.dims,
+          }
+        : { model: false }),
       material: wish.material,
       quantity: wish.quantity,
       ...(extras.length ? { attachments: extras.map((e) => `${e.kind}:${e.filename}`) } : {}),
@@ -277,5 +303,5 @@ export async function openRequest(
     },
   });
 
-  return { id: story.id, ref: storyRef(story.id), title, dims: inspection.dims };
+  return { id: story.id, ref: storyRef(story.id), title, dims: measured?.dims ?? null };
 }

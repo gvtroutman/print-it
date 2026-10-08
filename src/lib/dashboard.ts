@@ -218,11 +218,13 @@ export type Mix = {
  * panel that says whether either number was right.
  */
 export async function mix(): Promise<Mix> {
-  const [materials, colors, sizes] = await Promise.all([
+  const [materials, colors, rows] = await Promise.all([
     db.story.groupBy({ by: ["material"], _count: { _all: true } }),
     db.story.groupBy({ by: ["colorName", "colorHex"], _count: { _all: true } }),
     db.story.findMany({ select: { fileSize: true } }),
   ]);
+  // Only requests that came with a model have a size to sort.
+  const sizes = rows.flatMap((r) => (r.fileSize === null ? [] : [r.fileSize]));
 
   const MB = 1024 * 1024;
   const buckets: Array<{ label: string; test: (n: number) => boolean }> = [
@@ -233,7 +235,7 @@ export async function mix(): Promise<Mix> {
   ];
 
   return {
-    total: sizes.length,
+    total: rows.length,
     materials: materials
       .map((m) => ({ label: m.material, count: m._count._all }))
       .sort((a, b) => b.count - a.count),
@@ -242,8 +244,8 @@ export async function mix(): Promise<Mix> {
       .sort((a, b) => b.count - a.count),
     sizes: buckets.map((b) => ({
       label: b.label,
-      count: sizes.filter((s) => b.test(s.fileSize)).length,
+      count: sizes.filter(b.test).length,
     })),
-    largestBytes: sizes.reduce((m, s) => Math.max(m, s.fileSize), 0),
+    largestBytes: sizes.reduce((m, s) => Math.max(m, s), 0),
   };
 }

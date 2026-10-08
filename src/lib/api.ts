@@ -187,13 +187,16 @@ export function storyResource(story: StoryRow) {
       mode: story.colorMode,
     },
     note: story.note,
-    file: {
-      filename: story.filename,
-      size: story.fileSize,
-      mimeType: story.mimeType,
-      dims: story.dims,
-      url: `/api/models/${story.id}`,
-    },
+    // Null for a request filed as words alone, with no model yet.
+    file: story.filename
+      ? {
+          filename: story.filename,
+          size: story.fileSize,
+          mimeType: story.mimeType,
+          dims: story.dims,
+          url: `/api/models/${story.id}`,
+        }
+      : null,
     // Everything else sent with the order. Same proxied, scoped route idea as
     // the model: the url is the app's, never a storage path.
     attachments: story.attachments.map((a) => ({

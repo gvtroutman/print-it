@@ -49,7 +49,7 @@ export default async function PrintAgainPage({
             Same again?
           </h1>
           <p className="m-0 mb-[26.4px] text-[16.5px] leading-[1.5] text-ink-2 text-pretty">
-            This opens a fresh request from the file on {ref}. It starts as you
+            This opens a fresh request from {story.filename ? `the file on ${ref}` : ref}. It starts as you
             asked for it last time — change whatever should be different.{" "}
             {ref} itself stays exactly as it is.
           </p>
@@ -69,7 +69,6 @@ export default async function PrintAgainPage({
               quantity: story.quantity,
               priority: story.priority,
               note: story.note,
-              printSettings: story.printSettings,
             }}
           />
         ) : (

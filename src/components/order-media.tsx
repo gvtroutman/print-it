@@ -54,7 +54,7 @@ export function OrderMedia({ items, colorHex }: { items: MediaItem[]; colorHex: 
 
       {/* What is on the stage, when it is not the main model — the main
           model's name and size are already in the chips below the viewer. */}
-      {selected > 0 && (
+      {item.key !== "main" && (
         <p className="m-0 mt-[11px] flex flex-wrap items-baseline gap-x-[11px] gap-y-[4px] font-mono text-[12px] text-ink-2">
           <span className="min-w-0 break-words font-bold text-ink">{item.filename}</span>
           <span>{[item.dims, formatBytes(item.fileSize)].filter(Boolean).join(" · ")}</span>

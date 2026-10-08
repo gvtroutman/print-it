@@ -311,7 +311,7 @@ async function main() {
   check("where it came from is on the ticket",
         story?.sourceUrl === "https://www.printables.com/model/3161-3d-benchy", story?.sourceUrl ?? "null");
 
-  const onDisk = story ? await stat(join(MODELS_ROOT, story.storageKey)).catch(() => null) : null;
+  const onDisk = story?.storageKey ? await stat(join(MODELS_ROOT, story.storageKey)).catch(() => null) : null;
   check("the bytes are really on disk", onDisk?.size === 684 && (await storedFiles()) === diskBefore + 1,
         `size ${onDisk?.size}, files ${await storedFiles()} (was ${diskBefore})`);
 

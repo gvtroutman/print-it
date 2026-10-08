@@ -55,17 +55,24 @@ export default async function StoryPage({
     (user.role === "admin" || story.uploader.id === user.id) &&
     story.status !== "Done" && story.status !== "Declined";
 
-  // The main model first, then everything else in the order it was added.
+  // The main model first, then everything else in the order it was added. A
+  // request filed as words alone has no main model.
+  const model =
+    story.filename && story.fileSize !== null
+      ? { filename: story.filename, fileSize: story.fileSize }
+      : null;
   const media: MediaItem[] = [
-    {
-      key: "main",
-      kind: "model",
-      filename: story.filename,
-      fileSize: story.fileSize,
-      dims: story.dims,
-      src: `/api/models/${story.id}`,
-      downloadHref: null,
-    },
+    ...(model
+      ? [{
+          key: "main",
+          kind: "model" as const,
+          filename: model.filename,
+          fileSize: model.fileSize,
+          dims: story.dims,
+          src: `/api/models/${story.id}`,
+          downloadHref: null,
+        }]
+      : []),
     ...story.attachments.map((a) => {
       const src = `/api/stories/${story.id}/attachments/${a.id}`;
       return {
@@ -97,19 +104,30 @@ export default async function StoryPage({
         <div className="mt-[13.2px] grid grid-cols-[repeat(auto-fit,minmax(330px,1fr))] items-start gap-[26.4px]">
           {/* ---------- left: the file ---------- */}
           <div>
-            <OrderMedia colorHex={story.colorHex} items={media} />
+            {media.length > 0 ? (
+              <OrderMedia colorHex={story.colorHex} items={media} />
+            ) : (
+              <div className="rounded-panel border-[3px] border-dashed border-ink-3 bg-porcelain px-[26.4px] py-[35.2px] text-center">
+                <p className="m-0 font-display text-[19px] text-ink">No model yet</p>
+                <p className="m-0 mt-[6px] font-mono text-[12px] uppercase tracking-[0.04em] text-ink-3">
+                  Asked for in words · sort out the file in the conversation below
+                </p>
+              </div>
+            )}
 
             {/* Both measured from the file itself. Nothing inferred. */}
-            <div className="mt-[13.2px] flex flex-wrap gap-[8px]">
-              {[story.dims ?? "dimensions unknown", formatBytes(story.fileSize)].map((v) => (
-                <span
-                  key={v}
-                  className="rounded-chip border-2 border-ink bg-porcelain px-[11px] py-[3px] font-mono text-[12px] font-bold text-ink"
-                >
-                  {v}
-                </span>
-              ))}
-            </div>
+            {model && (
+              <div className="mt-[13.2px] flex flex-wrap gap-[8px]">
+                {[story.dims ?? "dimensions unknown", formatBytes(model.fileSize)].map((v) => (
+                  <span
+                    key={v}
+                    className="rounded-chip border-2 border-ink bg-porcelain px-[11px] py-[3px] font-mono text-[12px] font-bold text-ink"
+                  >
+                    {v}
+                  </span>
+                ))}
+              </div>
+            )}
 
             {/* Where an imported model came from: the page with its author,
                 its licence and its print notes, which the file alone does not
@@ -134,9 +152,12 @@ export default async function StoryPage({
             {/* The plain way to get the bytes — no helper, any machine. Kept
                 above the slicer control so the simple answer is the visible
                 one. */}
-            <DownloadModel storyId={story.id} filename={story.filename} />
-
-            <OpenInSlicer storyId={story.id} userId={user.id} />
+            {model && (
+              <>
+                <DownloadModel storyId={story.id} filename={model.filename} />
+                <OpenInSlicer storyId={story.id} userId={user.id} />
+              </>
+            )}
 
             <Conversation
               storyId={story.id}

@@ -125,7 +125,8 @@ const STORY_SCHEMA = {
     },
     note: { type: "string" },
     file: {
-      type: "object",
+      type: ["object", "null"],
+      description: "The main model. Null for a request filed as words alone, with no model yet.",
       properties: {
         filename: { type: "string", examples: ["clip.stl"] },
         size: { type: "integer", description: "Bytes." },
@@ -924,7 +925,7 @@ export async function buildOpenApiDocument() {
       "/api/upload": {
         post: {
           tags: ["files"],
-          summary: "Upload a model and open a request",
+          summary: "Open a request, with or without a model",
           description:
             `Multipart, because it carries up to ${formatBytes(MAX_BYTES)} of ` +
             `geometry. ${ACCEPTED_EXTENSIONS.join(" and ")} only, and the ` +
@@ -933,6 +934,9 @@ export async function buildOpenApiDocument() {
             "Order matters: nothing reaches storage until the file has been " +
             "inspected, and no ticket exists until the object is in place. A " +
             "refused upload therefore leaves nothing behind.\n\n" +
+            "The model is optional: a `title` or `note` alone opens a ticket, " +
+            "and the owner can ask for a file in the conversation. A body with " +
+            "no model, no words, no attachments and no links is refused.\n\n" +
             "The uploader comes from the session. A `uploaderId` or `status` " +
             "in the body is ignored — every new ticket starts `Requested`.",
           requestBody: {
@@ -944,12 +948,11 @@ export async function buildOpenApiDocument() {
                     { $ref: "#/components/schemas/Wish" },
                     {
                       type: "object",
-                      required: ["file"],
                       properties: {
                         file: {
                           type: "string",
                           format: "binary",
-                          description: `The model. At most ${formatBytes(MAX_BYTES)}.`,
+                          description: `The model, if there is one. At most ${formatBytes(MAX_BYTES)}.`,
                         },
                       },
                     },

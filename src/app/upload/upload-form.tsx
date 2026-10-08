@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import {
   DEFAULT_STORY_PRIORITY,
   PRIORITY_CHIP,
-  QUANTITY_PRESETS,
   STORY_PRIORITIES,
   type CatalogMaterialChoice,
   type StoryPriorityName,
@@ -45,21 +44,25 @@ import { ColorSwatch } from "@/components/color-swatch";
 /**
  * An old ticket being printed again. When this is given the form has no
  * dropzone — the file is the old ticket's, copied on the server — and opens
- * with that ticket's wish filled in, ready to be changed.
+ * with that ticket's wish filled in, ready to be changed. Print settings are
+ * not asked for any more; an old ticket's ride along unchanged on the server.
  */
 export type Again = {
   id: number;
   ref: string;
-  filename: string;
-  fileSize: number;
+  /** Null when the old ticket was asked for in words, with no model. */
+  filename: string | null;
+  fileSize: number | null;
   title: string;
   material: string;
   colorName: string;
   quantity: number;
   priority: StoryPriorityName;
   note: string;
-  printSettings: string;
 };
+
+/** The most one request may ask for; the server says the same. */
+const MAX_QUANTITY = 24;
 
 type Phase =
   | { kind: "idle" }
@@ -178,7 +181,7 @@ export function UploadForm({
   const [title, setTitle] = useState(again?.title ?? "");
   const [material, setMaterial] = useState<string>(initialMaterial.name);
   const [quantity, setQuantity] = useState<number>(again?.quantity ?? 1);
-  // What is in the "type a number" box while it is being typed in, or null
+  // What is in the amount box while it is being typed in, or null
   // when it simply shows `quantity`. Kept apart from the number because a box
   // being edited passes through states that are not quantities — empty, most
   // obviously. Coercing each keystroke turned an emptied box straight back
@@ -187,7 +190,6 @@ export function UploadForm({
   const [priority, setPriority] = useState<StoryPriorityName>(again?.priority ?? DEFAULT_STORY_PRIORITY);
   const [color, setColor] = useState<string>(initialColor.name);
   const [note, setNote] = useState(again?.note ?? "");
-  const [printSettings, setPrintSettings] = useState(again?.printSettings ?? "");
 
   /**
    * Client-side checks are for fast feedback only — the server re-runs all of
@@ -247,6 +249,16 @@ export function UploadForm({
       ? linked.listing.files.find((f) => f.id === linked.fileId) ?? null
       : null;
 
+  // As little as a few words is a request; a model, photos or links are
+  // welcome but none of them is required.
+  const hasSomething =
+    !!again || !!title.trim() || !!note.trim() || files.length > 0 || links.length > 0 || !!picked;
+
+  function stepQuantity(by: number) {
+    setQuantityDraft(null);
+    setQuantity((n) => Math.min(MAX_QUANTITY, Math.max(1, n + by)));
+  }
+
   /**
    * Ask the server what the link holds. The browser never talks to the model
    * site itself — `connect-src 'self'` would refuse it, and the server is the
@@ -302,7 +314,7 @@ export function UploadForm({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          url, fileId, title, material, colorName: color, quantity, priority, note, printSettings, links,
+          url, fileId, title, material, colorName: color, quantity, priority, note, links,
         }),
       });
       const body = await res.json().catch(() => ({}));
@@ -333,7 +345,8 @@ export function UploadForm({
       const res = await fetch(`/api/stories/${source.id}/requeue`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title, material, colorName: color, quantity, priority, note, printSettings }),
+        // No printSettings: left out, the old ticket's carry across as they were.
+        body: JSON.stringify({ title, material, colorName: color, quantity, priority, note }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -367,10 +380,15 @@ export function UploadForm({
       }
       return void sendImport(linked.url, picked.id);
     }
-    if (!primary) return;
+    if (linked.kind === "listed") {
+      return setPhase({ kind: "error", message: "Pick which file to print from that link, or clear the link." });
+    }
+    if (!hasSomething) {
+      return setPhase({ kind: "error", message: "Say what you need — a few words is enough." });
+    }
 
     const body = new FormData();
-    body.set("file", primary);
+    if (primary) body.set("file", primary);
     for (const extra of extras) body.append("attachments", extra);
     for (const l of links) body.append("links", l);
     body.set("title", title);
@@ -379,7 +397,6 @@ export function UploadForm({
     body.set("quantity", String(quantity));
     body.set("priority", priority);
     body.set("note", note);
-    body.set("printSettings", printSettings);
 
     // XHR rather than fetch: it is still the only way to observe upload
     // progress, and a large model over office wifi needs a real bar.
@@ -437,11 +454,13 @@ export function UploadForm({
       {again && (
         <div className="rounded-panel border-[3px] border-ink bg-porcelain px-[22px] py-[17.6px] shadow-stamp">
           <p className="m-0 font-mono text-[11.5px] font-bold uppercase tracking-[0.08em] text-ink-3">
-            Same file as {again.ref} — no re-upload
+            {again.filename ? `Same file as ${again.ref} — no re-upload` : `Same as ${again.ref}`}
           </p>
-          <p className="m-0 mt-[4px] break-words font-display text-[19px] text-ink">{again.filename}</p>
+          <p className="m-0 mt-[4px] break-words font-display text-[19px] text-ink">
+            {again.filename ?? "No model — asked for in words"}
+          </p>
           <p className="m-0 mt-[3px] font-mono text-[12px] uppercase tracking-[0.04em] text-ink-3">
-            {formatBytes(again.fileSize)} · change anything below, or send it as it was
+            {again.fileSize !== null ? `${formatBytes(again.fileSize)} · ` : ""}change anything below, or send it as it was
           </p>
         </div>
       )}
@@ -502,7 +521,7 @@ export function UploadForm({
           className="mx-auto mb-[13.2px] block h-[56px] w-[56px] rounded-full border-[3px] border-ink bg-aqua"
         />
         <span className="block font-display text-[19px] text-ink">
-          {files.length > 0 ? "Drop more, or click to add" : "Drop your 3D model here — and any photos or videos"}
+          {files.length > 0 ? "Drop more, or click to add" : "Drop a 3D model, photos or videos here (optional)"}
         </span>
         <span className="mt-[6px] block font-mono text-[12px] uppercase tracking-[0.04em] text-ink-3">
           {busy && !picked
@@ -562,11 +581,6 @@ export function UploadForm({
             );
           })}
         </ul>
-      )}
-      {!again && files.length > 0 && !primary && linked.kind !== "listed" && (
-        <p className="m-0 mt-[8.8px] font-mono text-[11.5px] uppercase tracking-[0.04em] text-cherry-dk">
-          Add a 3D model too — photos and videos go with a model, not instead of one.
-        </p>
       )}
 
       {/* ---- links that explain the job ---- */}
@@ -758,28 +772,25 @@ export function UploadForm({
         </div>
       </div>
 
-      {/* ---- quantity ---- */}
-      <div className="mt-[22px] max-w-[320px]">
-        <Label htmlFor="quantity">How many do you need?</Label>
-        <Segmented
-          label="Quantity"
-          mono
-          options={QUANTITY_PRESETS}
-          value={QUANTITY_PRESETS.includes(quantity as never) ? quantity : 0}
-          onChange={(n) => {
-            setQuantityDraft(null);
-            setQuantity(n);
-          }}
-        />
-        <div className="mt-[8.8px] flex items-center gap-[8.8px]">
-          <label htmlFor="quantity-other" className="font-mono text-[11.5px] uppercase tracking-[0.06em] text-ink-3">
-            or type a number
-          </label>
+      {/* ---- amount ---- */}
+      <div className="mt-[22px]">
+        <Label htmlFor="quantity">Amount</Label>
+        <div className="inline-flex items-stretch overflow-hidden rounded-chip border-[3px] border-ink bg-porcelain">
+          <button
+            type="button"
+            onClick={() => stepQuantity(-1)}
+            disabled={quantity <= 1}
+            aria-label="One fewer"
+            className="w-[44px] cursor-pointer border-0 bg-transparent font-mono text-[20px] font-bold text-ink hover:bg-sun disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+          >
+            −
+          </button>
           <input
-            id="quantity-other"
+            id="quantity"
             type="number"
+            inputMode="numeric"
             min={1}
-            max={24}
+            max={MAX_QUANTITY}
             value={quantityDraft ?? quantity}
             onChange={(e) => {
               setQuantityDraft(e.target.value);
@@ -791,8 +802,17 @@ export function UploadForm({
             // Leaving the box settles it: whatever is not a quantity gives way
             // to the last one that was.
             onBlur={() => setQuantityDraft(null)}
-            className="w-[80px] rounded-card border-[3px] border-ink bg-porcelain px-[10px] py-[6px] font-mono text-[14px] font-bold tabular-nums text-ink"
+            className="w-[64px] appearance-none border-x-[3px] border-y-0 border-ink bg-porcelain px-[6px] py-[8px] text-center font-mono text-[16px] font-bold tabular-nums text-ink [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
+          <button
+            type="button"
+            onClick={() => stepQuantity(1)}
+            disabled={quantity >= MAX_QUANTITY}
+            aria-label="One more"
+            className="w-[44px] cursor-pointer border-0 bg-transparent font-mono text-[20px] font-bold text-ink hover:bg-sun disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+          >
+            +
+          </button>
         </div>
       </div>
 
@@ -879,26 +899,9 @@ export function UploadForm({
         />
       </div>
 
-      {/* ---- print settings (optional, FRR-103) ---- */}
-      <div className="mt-[22px]">
-        <Label htmlFor="printSettings">Print settings (optional)</Label>
-        <textarea
-          id="printSettings"
-          rows={3}
-          value={printSettings}
-          onChange={(e) => setPrintSettings(e.target.value)}
-          maxLength={2000}
-          placeholder="Any specific slicer settings: layer height, infill, supports, temps…"
-          className="w-full resize-y rounded-card border-[3px] border-ink bg-porcelain px-[15px] py-[12px] font-mono text-[15px] text-ink placeholder:text-ink-3"
-        />
-        <p className="m-0 mt-[6px] font-mono text-[11px] uppercase tracking-[0.04em] text-ink-3">
-          Comes with some files — saves a round of messages with {owner}.
-        </p>
-      </div>
-
       {/* ---- actions ---- */}
       <div className="mt-[26.4px] flex flex-wrap items-center gap-[13.2px]">
-        <Button type="submit" disabled={(!primary && !again && !picked) || busy} className="px-[30px]">
+        <Button type="submit" disabled={!hasSomething || busy} className="px-[30px]">
           {busy
             ? again ? "Sending…" : picked ? "Fetching it…" : `Sending… ${phase.percent}%`
             : again ? `Send it to ${owner} again` : `Send it to ${owner}`}
@@ -910,8 +913,10 @@ export function UploadForm({
         >
           Cancel
         </Button>
-        {!primary && !again && !picked && (
-          <span className="font-mono text-[11.5px] uppercase tracking-[0.06em] text-ink-3">Add a 3D model to continue.</span>
+        {!hasSomething && (
+          <span className="font-mono text-[11.5px] uppercase tracking-[0.06em] text-ink-3">
+            Say what you need — a few words is enough.
+          </span>
         )}
       </div>
     </form>

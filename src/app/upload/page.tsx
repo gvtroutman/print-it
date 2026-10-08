@@ -24,11 +24,12 @@ export default async function UploadPage() {
             Print It!
           </h1>
           <p className="m-0 mb-[26.4px] text-[16.5px] leading-[1.5] text-ink-2 text-pretty">
-            Drop a 3D model — <span className="font-mono">.stl</span>,{" "}
+            Say what you need — a few words is enough. Add a 3D model (
+            <span className="font-mono">.stl</span>,{" "}
             <span className="font-mono">.3mf</span>,{" "}
             <span className="font-mono">.obj</span>,{" "}
-            <span className="font-mono">.step</span> and more — with any photos,
-            videos or links that explain it. {owner} gets a ping, and your order
+            <span className="font-mono">.step</span> and more), photos, videos or
+            links if you have them. {owner} gets a ping, and your order
             goes up on the rail as a ticket you can follow.
           </p>
         </div>

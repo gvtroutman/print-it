@@ -84,7 +84,11 @@ export default async function QueuePage({
                   <div className="min-w-[220px] flex-[1_1_280px]">
                     <p className="m-0 flex flex-wrap items-center gap-[8px] font-mono text-[11.5px] font-bold tracking-[0.06em] text-ink-3">
                       <PriorityChip priority={story.priority} />
-                      <span>{storyRef(story.id)} · {story.filename} · {formatBytes(story.fileSize)}</span>
+                      <span>
+                        {[storyRef(story.id), story.filename, story.fileSize !== null ? formatBytes(story.fileSize) : "no model yet"]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
                     </p>
                     <Link
                       href={`/story/${story.id}`}
@@ -144,7 +148,7 @@ export default async function QueuePage({
                     {story.title}
                   </Link>
                   <p className="m-0 mt-[3px] font-mono text-[11px] uppercase tracking-[0.04em] text-ink-3">
-                    {story.filename} · {story.uploader.name} ·{" "}
+                    {story.filename ?? "no model yet"} · {story.uploader.name} ·{" "}
                     {relativeTime(story.createdAt)}
                   </p>
                 </div>

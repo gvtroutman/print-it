@@ -215,13 +215,13 @@ async function main() {
         story?.priority === "medium", `${story?.priority}`);
 
   check("the storage key is generated, not derived from the filename",
-        !!story && !story.storageKey.includes("monitor-hook") &&
+        !!story?.storageKey && !story.storageKey.includes("monitor-hook") &&
         /^models\/\d{4}-\d{2}\/[0-9a-f-]{36}\.stl$/.test(story.storageKey),
         story?.storageKey ?? "");
 
   let storedBytes = 0;
   try {
-    storedBytes = (await stat(pathForKey(story!.storageKey))).size;
+    storedBytes = (await stat(pathForKey(story!.storageKey!))).size;
   } catch {
     storedBytes = -1;
   }
@@ -448,7 +448,7 @@ async function main() {
 
   // `story` is Ayla's real upload from the top of this run — a genuine object
   // in the bucket, which is exactly what re-queue has to copy.
-  const beforeKey = (await db.story.findUnique({ where: { id: story!.id } }))!.storageKey;
+  const beforeKey = (await db.story.findUnique({ where: { id: story!.id } }))!.storageKey!;
   const countBeforeAgain = await db.story.count();
   const rqPage = rendered(await (await aylaB.go(`${APP}/story/${story!.id}`)).text());
   check("the story page offers Print again",
@@ -461,7 +461,7 @@ async function main() {
         againPage.status === 200 && (await db.story.count()) === countBeforeAgain,
         `status ${againPage.status}`);
   check("the form names the file and has no dropzone",
-        againHtml.includes(story!.filename) && !againHtml.includes('type="file"'));
+        againHtml.includes(story!.filename!) && !againHtml.includes('type="file"'));
   check("and starts from the old wish", againHtml.includes(`value="${story!.title}"`));
   check("somebody else's ticket has no such page",
         (await jonasB.go(`${APP}/story/${story!.id}/again`)).status === 404);
@@ -500,7 +500,7 @@ async function main() {
     try { return (await stat(pathForKey(key))).isFile(); }
     catch { return false; }
   };
-  check("the copied file really landed on disk", await fileExists(copy!.storageKey));
+  check("the copied file really landed on disk", await fileExists(copy!.storageKey!));
   // Withdraw the copy (through the DELETE route it delegates to) and confirm
   // the original's file survives — proof the copy is genuinely independent.
   const del = await aylaB.raw(`${APP}/api/stories/${newId}`, { method: "DELETE" });

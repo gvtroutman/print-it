@@ -9,7 +9,7 @@ import { MAX_FILES_PER_ORDER, MAX_REQUEST_BYTES, formatBytes } from "@/lib/uploa
 import { BUSY_COPY, acquireSlot, releaseSlot } from "@/lib/upload-slots";
 
 /**
- * Model upload.
+ * Opening a request from the form — with a model, or without one.
  *
  * A route handler rather than a server action, for one reason: the browser
  * can watch a real XHR upload progress bar against this, and a large model
@@ -64,18 +64,20 @@ async function handleUpload(request: Request, user: Actor) {
     return bad(400, "That upload did not arrive intact. Try again.");
   }
 
-  const file = form.get("file");
-  if (!(file instanceof File)) return bad(400, "Add a 3D model — that is the part that gets printed.");
-  if (file.size > MAX_BYTES) return bad(413, REJECTION_COPY.too_large);
+  // The model is optional: a request can be a few words, and the owner can
+  // ask for a file in the conversation. `intake.ts` refuses one that is empty.
+  const entry = form.get("file");
+  const file = entry instanceof File ? entry : null;
+  if (file && file.size > MAX_BYTES) return bad(413, REJECTION_COPY.too_large);
 
   // Everything else that came with it: more parts, photos, videos. The cap is
   // on the whole order, not each file, because what it protects is memory and
   // the whole body is held at once.
   const extras = form.getAll("attachments").filter((v): v is File => v instanceof File);
-  if (extras.length + 1 > MAX_FILES_PER_ORDER) {
+  if (extras.length + (file ? 1 : 0) > MAX_FILES_PER_ORDER) {
     return bad(413, `Up to ${MAX_FILES_PER_ORDER} files per order, the model included.`);
   }
-  const total = extras.reduce((sum, f) => sum + f.size, file.size);
+  const total = extras.reduce((sum, f) => sum + f.size, file?.size ?? 0);
   if (total > MAX_BYTES) {
     return bad(413, `Those files come to ${formatBytes(total)} — an order can carry ${formatBytes(MAX_BYTES)} in all.`);
   }
@@ -91,9 +93,9 @@ async function handleUpload(request: Request, user: Actor) {
     links: form.getAll("links"),
   });
 
-  const bytes = new Uint8Array(await file.arrayBuffer());
+  const main = file ? { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) } : null;
   const attachments = await Promise.all(
     extras.map(async (f) => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })),
   );
-  return NextResponse.json(await openRequest(user, checked, file.name, bytes, undefined, attachments));
+  return NextResponse.json(await openRequest(user, checked, main, undefined, attachments));
 }

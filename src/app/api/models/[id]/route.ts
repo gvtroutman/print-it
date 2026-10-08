@@ -98,6 +98,9 @@ export async function GET(
     return new NextResponse(null, { status: 404 });
   }
 
+  // A request filed as words alone has no model to hand over.
+  if (!story.storageKey) return new NextResponse(null, { status: 404 });
+
   let file;
   try {
     file = await openModel(story.storageKey);
@@ -125,7 +128,7 @@ export async function GET(
       action: "file.downloaded",
       actor: user,
       subject: storyRef(story.id),
-      detail: { filename: story.filename, ...(viaLink ? { via: "slicer-link" } : {}) },
+      detail: { filename: story.filename ?? "", ...(viaLink ? { via: "slicer-link" } : {}) },
     });
   }
 
@@ -136,7 +139,7 @@ export async function GET(
       // Always known now, where S3 only sometimes reported it.
       "content-length": String(file.size),
       // Never let a browser decide to render a model file as something else.
-      "content-disposition": `attachment; filename="${story.filename.replace(/"/g, "")}"`,
+      "content-disposition": `attachment; filename="${(story.filename ?? "model").replace(/"/g, "")}"`,
       "cache-control": "private, no-store",
     },
   });

@@ -15,9 +15,6 @@ export type CatalogMaterialChoice = {
   colors: CatalogColorChoice[];
 };
 
-/** Shortcut quantities. A typed number is accepted too — see `QuantitySchema`. */
-export const QUANTITY_PRESETS = [1, 2, 3, 4, 6] as const;
-
 export const STATUS_CHIP: Record<
   string,
   { bg: string; fg: string }

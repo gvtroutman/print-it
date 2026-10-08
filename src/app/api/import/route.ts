@@ -43,7 +43,7 @@ export const POST = withActor(async (request, actor) => {
   if (!(await acquireSlot())) return fail(503, BUSY_COPY);
   try {
     const fetched = await fetchImportable(body.url, body.fileId);
-    const opened = await openRequest(actor, checked, fetched.name, fetched.bytes, {
+    const opened = await openRequest(actor, checked, { name: fetched.name, bytes: fetched.bytes }, {
       source: fetched.listing.source,
       url: fetched.listing.model.url,
     });
