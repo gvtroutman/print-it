@@ -20,10 +20,6 @@ const SPRINKLES: [color: string, x: number, y: number, w: number, h: number][] =
   ["#ffffff", 3, 3, 29, 34],
 ];
 
-/** Thin light lines across the winding, like light catching wound clear strands. */
-const STRAND_GLINTS =
-  "repeating-linear-gradient(to bottom, rgba(255,255,255,0) 0 4px, rgba(255,255,255,0.55) 5px, rgba(255,255,255,0) 6px)";
-
 /** What funfetti filament usually is: clear, which a swatch shows as a pale grey. */
 export const FUNFETTI_CLEAR = "#cfd4d8";
 
@@ -33,7 +29,6 @@ export const funfettiStyle = (base: string) =>
       ([color, x, y, w, h]) =>
         `radial-gradient(circle at ${x}px ${y}px, ${color} 2.4px, transparent 3px) 0 0 / ${w}px ${h}px`,
     ),
-    STRAND_GLINTS,
     base,
   ].join(", ");
 
