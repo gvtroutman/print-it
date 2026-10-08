@@ -72,8 +72,14 @@
   --shadow-stamp-lg: 5px 5px 0 var(--color-ink);
   --shadow-soft: 0 2px 0 rgba(34, 26, 20, 0.16);
 
-  --font-display: var(--font-slab), Georgia, serif;
-  --font-script: var(--font-script), var(--font-slab), cursive;
+  /*
+   * Arial Rounded is a system font (Windows with Office, macOS, iOS) and its
+   * licence doesn't allow bundling it, so it isn't in ./fonts. Everywhere else
+   * gets Nunito, the closest free rounded face.
+   */
+  --font-display: "Arial Rounded MT Bold", "Arial Rounded MT", var(--font-nunito),
+    system-ui, sans-serif;
+  --font-script: var(--font-script), var(--font-nunito), cursive;
   --font-sans: var(--font-archivo), system-ui, sans-serif;
   --font-mono: var(--font-courier), ui-monospace, monospace;
 }

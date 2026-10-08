@@ -3,9 +3,9 @@ import localFont from "next/font/local";
 import "./globals.css";
 
 /*
- * Four faces, each with a job, which is how a real diner sign works: a script
- * logotype, fat slab for the shouting, a workhorse for the reading, and a
- * typewriter for anything that behaves like a docket.
+ * Four faces, each with a job: a script logotype, a rounded face for the
+ * headings, a workhorse for the reading, and a typewriter for anything that
+ * behaves like a docket.
  *
  * Loaded from ./fonts rather than `next/font/google`, which downloads them at
  * build time and so made every image build depend on fonts.googleapis.com
@@ -23,11 +23,17 @@ const script = localFont({
   display: "swap",
 });
 
-/** Headings. A Clarendon-ish fat slab — the "EAT" sign face. */
-const slab = localFont({
-  src: "./fonts/alfa-slab-one-400.woff2",
+/**
+ * Headings are Arial Rounded, but that's a system font whose licence doesn't
+ * allow bundling it, so devices without it (no Office, Android, Linux) get
+ * Nunito — see --font-display in globals.css. This is the 800 cut, the closest
+ * to Arial Rounded MT Bold, registered at 400 because that's what headings ask
+ * for (Arial Rounded MT Bold is itself a 400 face).
+ */
+const rounded = localFont({
+  src: "./fonts/nunito-800.woff2",
   weight: "400",
-  variable: "--font-slab",
+  variable: "--font-nunito",
   display: "swap",
 });
 
@@ -66,7 +72,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${script.variable} ${slab.variable} ${archivo.variable} ${courier.variable}`}
+      className={`${script.variable} ${rounded.variable} ${archivo.variable} ${courier.variable}`}
     >
       <body className="plate flex min-h-screen flex-col bg-cream text-ink antialiased">
         <div className="flex-1">{children}</div>

@@ -1,4 +1,6 @@
-The four faces this app renders in, vendored as woff2.
+The four bundled faces this app renders in, vendored as woff2. (Headings prefer
+Arial Rounded, a system font whose licence doesn't allow bundling it; Nunito is
+the fallback for devices that don't have it — see globals.css.)
 
 They used to come from `next/font/google`, which downloads them at build time.
 That made every image build — CI's `verify` gate, `release-images.yml`, and the
@@ -16,7 +18,7 @@ files through `next/font/local`, which is why the CSP can keep font-src at
 'self'.
 
   pacifico-400.woff2          the script logotype
-  alfa-slab-one-400.woff2     headings, the "EAT" sign face
+  nunito-800.woff2            headings where Arial Rounded isn't installed
   archivo-100-900.woff2       body text — one variable file covers 400/500/600/700
   courier-prime-400.woff2     dockets: refs, filenames, dimensions
   courier-prime-700.woff2     the same, bold
@@ -33,7 +35,7 @@ All four are licensed under the SIL Open Font License, Version 1.1, which
 permits redistribution provided this notice travels with the files.
 
 Pacifico — Copyright 2018 The Pacifico Project Authors (https://github.com/googlefonts/Pacifico)
-Alfa Slab One — Copyright 2016 The Alfa Slab One Project Authors (http://www.jmsole.cl | info@jmsole.cl), with Reserved Font Name "Alfa Slab".
+Nunito — Copyright 2014 The Nunito Project Authors (https://github.com/googlefonts/nunito)
 Archivo — Copyright 2020 The Archivo Project Authors (https://github.com/Omnibus-Type/Archivo)
 Courier Prime — Copyright 2015 The Courier Prime Project Authors (https://github.com/quoteunquoteapps/CourierPrime).
 --------------------------------------------------------------------------------
