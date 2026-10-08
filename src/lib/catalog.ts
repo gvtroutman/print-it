@@ -1,7 +1,42 @@
 import { z } from "zod";
 
-export const COLOR_MODES = ["solid", "gradient", "whatever"] as const;
+export const COLOR_MODES = ["solid", "gradient", "whatever", "funfetti"] as const;
 export type ColorMode = (typeof COLOR_MODES)[number];
+
+/**
+ * Sprinkles over a base colour, for clear filament with coloured flakes in it.
+ * Each colour is one dot repeated on its own tile; the tile sizes don't share
+ * factors, so the dots never line up into a visible grid. Fixed pixel sizes,
+ * so a flake stays a flake on a small swatch and a big spool alike.
+ */
+const SPRINKLES: [color: string, x: number, y: number, w: number, h: number][] = [
+  ["#ff4fa3", 6, 7, 31, 27],
+  ["#2fb8e8", 21, 17, 41, 33],
+  ["#3cc24a", 13, 24, 43, 37],
+  ["#ffd23f", 28, 5, 37, 43],
+  ["#2a5bd7", 9, 31, 53, 41],
+  ["#c2185b", 35, 20, 47, 53],
+  ["#ff9f1c", 16, 11, 59, 47],
+  ["#ffffff", 3, 3, 29, 34],
+];
+
+/** Thin light lines across the winding, like light catching wound clear strands. */
+const STRAND_GLINTS =
+  "repeating-linear-gradient(to bottom, rgba(255,255,255,0) 0 4px, rgba(255,255,255,0.55) 5px, rgba(255,255,255,0) 6px)";
+
+/** What funfetti filament usually is: clear, which a swatch shows as a pale grey. */
+export const FUNFETTI_CLEAR = "#cfd4d8";
+
+export const funfettiStyle = (base: string) =>
+  [
+    ...SPRINKLES.map(
+      ([color, x, y, w, h]) =>
+        `radial-gradient(circle at ${x}px ${y}px, ${color} 2.4px, transparent 3px) 0 0 / ${w}px ${h}px`,
+    ),
+    STRAND_GLINTS,
+    base,
+  ].join(", ");
+
 export type CatalogColorChoice = {
   id: string;
   name: string;

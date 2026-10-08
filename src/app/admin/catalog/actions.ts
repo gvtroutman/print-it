@@ -8,7 +8,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/authz";
 import { record } from "@/lib/audit";
-import { COLOR_MODES } from "@/lib/catalog";
+import { COLOR_MODES, funfettiStyle } from "@/lib/catalog";
 
 const Name = z.string().trim().min(1).max(40).transform((value) => value.replace(/\s+/g, " "));
 const Hex = z.string().regex(/^#[0-9a-f]{6}$/i).transform((value) => value.toLowerCase());
@@ -38,7 +38,9 @@ function colorInput(formData: FormData) {
     ? WHATEVER_STYLE
     : mode === "gradient"
       ? `linear-gradient(135deg, ${hex}, ${parsedHexTo!.data})`
-      : hex;
+      : mode === "funfetti"
+        ? funfettiStyle(hex)
+        : hex;
   return { name, hex, style, mode };
 }
 

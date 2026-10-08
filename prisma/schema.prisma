@@ -281,6 +281,7 @@ enum CatalogColorMode {
   solid
   gradient
   whatever
+  funfetti
 }
 
 model Story {
@@ -416,9 +417,9 @@ model CatalogColor {
   material   CatalogMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
   name       String
   hex        String
-  /// A CSS colour or linear-gradient used by swatches in the UI.
+  /// A CSS background used by swatches in the UI: a colour, a gradient, or sprinkles over a colour.
   style      String
-  /// `solid`, `gradient`, or `whatever`; never inferred from the display name.
+  /// `solid`, `gradient`, `whatever` or `funfetti`; never inferred from the display name.
   mode       CatalogColorMode @default(solid)
   active     Boolean         @default(true)
   sortOrder  Int             @default(0)

@@ -22,7 +22,8 @@ export function EditColorInline({
   colorMode: ColorMode;
   materialName: string;
 }) {
-  const matches = colorStyle.match(/#[0-9a-f]{6}/gi) ?? [];
+  // A funfetti style starts with its sprinkle colours; its base is the hex.
+  const matches = colorMode === "funfetti" ? [hex] : (colorStyle.match(/#[0-9a-f]{6}/gi) ?? []);
   const [mode, setMode] = useState<ColorMode>(colorMode);
 
   return (
@@ -57,12 +58,13 @@ export function EditColorInline({
               <option value="solid">Solid</option>
               <option value="gradient">Gradient</option>
               <option value="whatever">Whatever</option>
+              <option value="funfetti">Funfetti</option>
             </select>
           </div>
           {mode !== "whatever" && (
             <>
               <label className="block text-center font-mono text-[9.5px] font-bold uppercase text-ink-3">
-                {mode === "gradient" ? "From" : "Color"}
+                {mode === "gradient" ? "From" : mode === "funfetti" ? "Base" : "Color"}
                 <input aria-label={`Color value for ${name}`} name="hex" type="color" defaultValue={matches[0] ?? hex} className="mt-[3px] block h-[45px] w-[50px] cursor-pointer rounded-card border-[3px] border-ink bg-porcelain p-[3px]" />
               </label>
               {mode === "gradient" && (

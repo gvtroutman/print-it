@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { Button, Input, Label } from "@/components/ui";
-import type { ColorMode } from "@/lib/catalog";
+import { FUNFETTI_CLEAR, type ColorMode } from "@/lib/catalog";
 import { addColorAction } from "./actions";
 
 export function AddColorForm({ materialId }: { materialId: string }) {
@@ -38,13 +38,14 @@ export function AddColorForm({ materialId }: { materialId: string }) {
           <option value="solid">Solid</option>
           <option value="gradient">Gradient</option>
           <option value="whatever">Whatever</option>
+          <option value="funfetti">Funfetti</option>
         </select>
       </div>
       {mode !== "whatever" && (
         <>
           <label className="block text-center font-mono text-[10px] font-bold uppercase text-ink-3">
-            {mode === "gradient" ? "From" : "Color"}
-            <input aria-label="Color" name="hex" type="color" defaultValue="#e4322f" className="mt-[3px] block h-[49px] w-[54px] cursor-pointer rounded-card border-[3px] border-ink bg-porcelain p-[3px]" />
+            {mode === "gradient" ? "From" : mode === "funfetti" ? "Base" : "Color"}
+            <input key={mode === "funfetti" ? "clear" : "color"} aria-label="Color" name="hex" type="color" defaultValue={mode === "funfetti" ? FUNFETTI_CLEAR : "#e4322f"} className="mt-[3px] block h-[49px] w-[54px] cursor-pointer rounded-card border-[3px] border-ink bg-porcelain p-[3px]" />
           </label>
           {mode === "gradient" && (
             <label className="block text-center font-mono text-[10px] font-bold uppercase text-ink-3">
