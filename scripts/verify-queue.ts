@@ -194,8 +194,8 @@ async function main() {
   // ------------------------------------------------------------------
   section("the owner can preview the member view, and leave it");
   const members = await (await ruben.go(`${APP}/admin/invites`)).text();
-  const startIdx = formIndexContaining(members, "Preview as a member");
-  check("the guest list offers the preview", startIdx >= 0);
+  const startIdx = formIndexContaining(members, "Switch to the member view");
+  check("the owner's card in the account menu offers the preview", startIdx >= 0);
   const started = await ruben.submit(`${APP}/admin/invites`, members, startIdx, {});
   check("starting it lands on a new order",
         started.status >= 300 && started.status < 400 &&
@@ -231,7 +231,7 @@ async function main() {
   client.jar.delete("ppp.preview");
 
   const endIdx = formIndexContaining(previewHome, "Back to the owner view");
-  check("the banner offers the way back", endIdx >= 0);
+  check("the card offers the way back", endIdx >= 0);
   const ended = await ruben.submit(`${APP}/upload`, previewHome, endIdx, {});
   check("leaving lands on the queue",
         ended.status >= 300 && ended.status < 400 &&

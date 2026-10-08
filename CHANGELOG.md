@@ -71,10 +71,10 @@ Notable changes. Every entry names a released version; deployments pin
 
 ### Added
 
-- **The printer owner can preview the member view.** **Preview as a member**
-  in the account menu, and on the guest list, shows the app the way an invited
-  member sees it: their navigation, their rail, and a 404 from every admin
-  page. A banner stays under the header with **Back to the owner view**. It is
+- **The printer owner can preview the member view.** Clicking their own name
+  card in the account menu shows the app the way an invited member sees it:
+  their navigation, their rail, and a 404 from every admin page. The card then
+  reads *Previewing as a member*, and clicking it again goes back. It is
   the owner's own account with the admin role set aside, not a colleague's, so
   it can only remove access and never add it. The preview is tied to the
   session that started it, so signing out or back in always lands in the owner

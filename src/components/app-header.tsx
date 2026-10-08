@@ -8,7 +8,6 @@ import { ActivityMenu, type FeedItem } from "@/components/activity-menu";
 import { UserMenu } from "@/components/user-menu";
 import { MobileMenu, type NavGroup } from "@/components/mobile-menu";
 import { PasskeyNudge } from "@/components/passkey-nudge";
-import { PreviewBanner, StartPreview } from "@/components/member-preview";
 
 /**
  * The owner's menu is split in two and named plainly: the day-to-day print
@@ -118,7 +117,7 @@ export async function AppHeader({
                 email={user.email}
                 role={user.role}
                 passkeyCount={passkeyCount}
-                ownerTools={user.role === "admin" ? <StartPreview /> : undefined}
+                previewing={user.previewing === true}
               />
             </div>
           </div>
@@ -179,7 +178,7 @@ export async function AppHeader({
             email={user.email}
             role={user.role}
             passkeyCount={passkeyCount}
-            ownerTools={user.role === "admin" ? <StartPreview /> : undefined}
+            previewing={user.previewing === true}
           />
           <div className="justify-self-end">
             <ActivityMenu
@@ -194,10 +193,6 @@ export async function AppHeader({
       {/* Members have no password to be tired of typing — their device is
           their sign-in — so the nudge is for the printer owner alone. */}
       {user.role === "admin" && passkeyCount === 0 && <PasskeyNudge />}
-
-      {/* While the owner previews the member view, everything above renders
-          as a member's would; this is the one thing that does not. */}
-      {user.previewing && <PreviewBanner />}
     </header>
   );
 }

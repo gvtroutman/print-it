@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import { endPreviewAction, startPreviewAction } from "@/app/actions/preview";
 
 /**
  * Replaces the prototype's role switcher, which the handoff marks as
@@ -14,15 +15,15 @@ export function UserMenu({
   email,
   role,
   passkeyCount,
-  ownerTools,
+  previewing,
 }: {
   name: string;
   initials: string;
   email: string;
   role: "client" | "admin";
   passkeyCount: number;
-  /** Server-rendered controls for the printer owner alone. */
-  ownerTools?: ReactNode;
+  /** The printer owner, looking at the member view. */
+  previewing?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
@@ -54,17 +55,20 @@ export function UserMenu({
         {initials}
       </button>
 
-      {open && (
-        <div className="ppp-in absolute right-0 top-[50px] z-50 w-[264px] rounded-panel border-[3px] border-ink bg-porcelain p-[17.6px] shadow-stamp-lg">
-          <AccountPanel
-            name={name}
-            email={email}
-            role={role}
-            passkeyCount={passkeyCount}
-            ownerTools={ownerTools}
-          />
-        </div>
-      )}
+      {/* Hidden rather than unmounted, so the view switch is in the
+          server-rendered page: `verify:queue` drives it from there. */}
+      <div
+        hidden={!open}
+        className="ppp-in absolute right-0 top-[50px] z-50 w-[264px] rounded-panel border-[3px] border-ink bg-porcelain p-[17.6px] shadow-stamp-lg"
+      >
+        <AccountPanel
+          name={name}
+          email={email}
+          role={role}
+          passkeyCount={passkeyCount}
+          previewing={previewing}
+        />
+      </div>
     </div>
   );
 }
@@ -72,6 +76,10 @@ export function UserMenu({
 /**
  * Who is signed in and the way out. Shared by the account menu and, on a
  * phone, the hamburger menu that stands in for it.
+ *
+ * For the printer owner the card with their name is also the switch between
+ * the owner view and the member view. There is no banner while the member
+ * view is on: the card says so, and the way back is one click on it.
  */
 export function AccountPanel({
   name,
@@ -79,7 +87,7 @@ export function AccountPanel({
   email,
   role,
   passkeyCount,
-  ownerTools,
+  previewing,
 }: {
   name: string;
   /** Shown as an avatar beside the name. The phone menu passes it; the
@@ -88,27 +96,47 @@ export function AccountPanel({
   email: string;
   role: "client" | "admin";
   passkeyCount: number;
-  ownerTools?: ReactNode;
+  previewing?: boolean;
 }) {
+  // Spans, not paragraphs: on the owner's card this sits inside a button.
+  const card = (
+    <span className="flex items-center gap-[12px]">
+      {initials && (
+        <span
+          aria-hidden
+          className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border-[3px] border-ink bg-aqua font-mono text-[17px] font-bold text-ink"
+        >
+          {initials}
+        </span>
+      )}
+      <span className="block min-w-0">
+        <span className="block font-display text-[17px] text-ink">{name}</span>
+        <span className="mt-[2px] block break-all font-mono text-[11.5px] text-ink-3">{email}</span>
+        <span className="mt-[8.8px] inline-block rounded-chip border-2 border-ink bg-cream-2 px-[8px] font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink">
+          {previewing ? "Previewing as a member" : role === "admin" ? "Printer owner" : "Invited member"}
+        </span>
+      </span>
+    </span>
+  );
+
   return (
     <>
-      <div className="flex items-center gap-[12px]">
-        {initials && (
-          <span
-            aria-hidden
-            className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border-[3px] border-ink bg-aqua font-mono text-[17px] font-bold text-ink"
+      {role === "admin" || previewing ? (
+        // A plain server-action form, so it works before hydration.
+        <form action={previewing ? endPreviewAction : startPreviewAction}>
+          <button
+            type="submit"
+            className="-m-[8px] block w-[calc(100%+16px)] cursor-pointer rounded-panel border-2 border-transparent bg-transparent p-[8px] text-left hover:border-ink hover:bg-cream-2"
           >
-            {initials}
-          </span>
-        )}
-        <div className="min-w-0">
-          <p className="m-0 font-display text-[17px] text-ink">{name}</p>
-          <p className="m-0 mt-[2px] break-all font-mono text-[11.5px] text-ink-3">{email}</p>
-          <p className="m-0 mt-[8.8px] inline-block rounded-chip border-2 border-ink bg-cream-2 px-[8px] font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink">
-            {role === "admin" ? "Printer owner" : "Invited member"}
-          </p>
-        </div>
-      </div>
+            {card}
+            <span className="mt-[8.8px] block font-bold text-[14px] text-cherry-dk underline underline-offset-2">
+              {previewing ? "Back to the owner view ⇄" : "Switch to the member view ⇄"}
+            </span>
+          </button>
+        </form>
+      ) : (
+        card
+      )}
       {/* How you sign in. The printer owner gets a way to change it;
           a member's device is their sign-in, and there is nothing to
           change. */}
@@ -135,12 +163,6 @@ export function AccountPanel({
         )}
       </div>
 
-      {ownerTools && (
-        <div className="mt-[13.2px] border-t-2 border-dashed border-rule pt-[13.2px]">
-          {ownerTools}
-        </div>
-      )}
-
       {/* The API console. In the account menu rather than the nav because
           it is a tool for the person, not a place the work lives — and
           because somebody who wants it goes looking here first. Not
@@ -166,6 +188,7 @@ export function AccountPanel({
           // question before it happens rather than a surprise after.
           if (
             role === "client" &&
+            !previewing &&
             !window.confirm(
               "Sign this device out? You will need a new link from the printer owner to get back in.",
             )

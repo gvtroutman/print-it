@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { AccountPanel } from "@/components/user-menu";
 
@@ -23,7 +23,7 @@ export function MobileMenu({
   email,
   role,
   passkeyCount,
-  ownerTools,
+  previewing,
 }: {
   nav: NavGroup[];
   active: string;
@@ -32,7 +32,7 @@ export function MobileMenu({
   email: string;
   role: "client" | "admin";
   passkeyCount: number;
-  ownerTools?: ReactNode;
+  previewing?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
@@ -115,7 +115,7 @@ export function MobileMenu({
               email={email}
               role={role}
               passkeyCount={passkeyCount}
-              ownerTools={ownerTools}
+              previewing={previewing}
             />
           </div>
         </div>
