@@ -23,6 +23,7 @@ const NAV: Record<Actor["role"], NavGroup[]> = {
         { label: "New order", href: "/upload" },
         { label: "My orders", href: "/me" },
         { label: "Feature requests", href: "/frr" },
+        { label: "Donation bin", href: "/bin" },
       ],
     },
   ],
@@ -37,6 +38,8 @@ const NAV: Record<Actor["role"], NavGroup[]> = {
         // The board, not the triage queue: the owner wants to see everything
         // that has been asked for, and triage is one button away on that page.
         { label: "Feature requests", href: "/frr" },
+        // Pledges wait here for the owner to say the money arrived.
+        { label: "Donation bin", href: "/bin" },
       ],
     },
     {

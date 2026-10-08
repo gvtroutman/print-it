@@ -63,7 +63,15 @@ export type AuditAction =
   | "feature.priority_changed"
   | "feature.declined"
   | "feature.withdrawn"
-  | "feature.comment_added";
+  | "feature.comment_added"
+  // donation bin
+  | "donation.pledged"
+  | "donation.received"
+  | "donation.declined"
+  | "donation.withdrawn"
+  | "donation.claimed"
+  | "donation.removed"
+  | "donation.kofi_received";
 
 function clientIp(h: Headers): string | null {
   return clientIpFrom(h, ipSource());

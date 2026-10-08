@@ -528,6 +528,36 @@ construction — they choose a model, never an address — and the
 [security notes](security-audit.md#importing-from-a-link) set out what was
 checked and what is accepted.
 
+### The donation bin and Ko-fi
+
+`/bin` is where the group chips in for a machine. The money goes through the
+owner's Ko-fi page; the app never sees a card. Each bin, with its goal and its
+Ko-fi link, is a row in `donationBin`, written by a migration.
+
+Without the webhook, a member logs what they gave and the owner confirms it
+once it shows up on Ko-fi. With it, each payment arrives on its own:
+
+1. On Ko-fi, open **Settings → More → API** (ko-fi.com/manage/webhooks) and set
+   the webhook URL to `<APP_URL>/api/kofi`.
+2. Copy the **verification token** from the same page into
+   `KOFI_VERIFICATION_TOKEN` and restart the app.
+3. Press **Send single donation test** on Ko-fi. The owner gets a "Ko-fi: …"
+   notification and a $3 gift from "Jo Example" shows in the ledger on `/bin`.
+   It counts toward the goal like any other, so press **Remove** on it.
+
+A payment belongs to the member whose app email is the Ko-fi email, or whose
+waiting entry has the same amount and Ko-fi name. Anything else goes in
+unclaimed under the name it came with, and the giver claims it by logging that
+amount and name. A retried delivery is counted once — the Ko-fi transaction id
+is unique. **Remove** takes a gift out of the total — for a test, a refund,
+or a mistake — keeps it in the ledger as *not counted*, and writes it to the
+audit log. Shop orders and commissions are ignored; a payment in another
+currency is not added, and the owner is told to log it by hand.
+
+The endpoint answers 404 while the token is unset, and 401 to a wrong token.
+Behind Cloudflare, make sure no WAF rule or Bot Fight Mode challenges `POST
+/api/kofi`: Ko-fi cannot solve a challenge, and it gives up after its retries.
+
 ### What to back up
 
 Everything is under `DATA_ROOT`: `db/` (Postgres) and `uploads/` (the uploaded

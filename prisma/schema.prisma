@@ -77,6 +77,9 @@ model User {
   featureRequests FeatureRequest[]
   featureComments FeatureComment[]
 
+  /// What they have put in the donation bin.
+  donations Donation[]
+
   @@index([role])
   @@map("user")
 }
@@ -542,4 +545,67 @@ model Benefit {
 
   @@index([active, sortOrder])
   @@map("benefit")
+}
+
+// ===========================================================================
+// Donation bin
+//
+// The group chipping in for a machine. The money goes through Ko-fi, outside
+// the app, and Ko-fi's webhook (/api/kofi) drops each gift in the bin as it
+// is paid. A member can also log what they gave, and the owner can confirm it
+// by hand, for anything the webhook did not catch. Only received money counts
+// toward the goal, so the bar never shows money nobody has seen yet.
+// ===========================================================================
+
+/// Something being saved up for. Rows come from migrations, not the app — the
+/// first, the H2D Laser, is seeded by the donation_bin migration.
+model DonationBin {
+  id        String    @id @default(cuid())
+  /// What is being bought, as the shop names it.
+  title     String
+  /// What it costs, in cents.
+  goalCents Int
+  /// The shop page, so people can see what they are paying towards.
+  url       String?
+  /// Where the money is actually given — the owner's Ko-fi page.
+  payUrl    String?
+  closedAt  DateTime?
+  createdAt DateTime  @default(now())
+
+  donations Donation[]
+
+  @@map("donationBin")
+}
+
+enum DonationStatus {
+  /// Logged by the donor; the owner has not matched it on Ko-fi yet.
+  Pledged
+  /// The owner has it. Counts toward the goal.
+  Received
+  /// The owner could not find it on Ko-fi, or it was entered wrong.
+  Declined
+}
+
+model Donation {
+  id                String         @id @default(cuid())
+  binId             String
+  bin               DonationBin    @relation(fields: [binId], references: [id], onDelete: Cascade)
+  /// Null for a Ko-fi gift nobody here has claimed yet — somebody who gave
+  /// under an email and a name the app does not know.
+  donorId           String?
+  donor             User?          @relation(fields: [donorId], references: [id], onDelete: Cascade)
+  amountCents       Int
+  /// The name or message they gave on Ko-fi, so the owner can match it up.
+  note              String         @default("")
+  status            DonationStatus @default(Pledged)
+  createdAt         DateTime       @default(now())
+  /// When it was marked received or declined, by the owner or by Ko-fi.
+  decidedAt         DateTime?
+  /// Set when Ko-fi's webhook reported the payment. Unique, so a retried
+  /// delivery cannot count the same gift twice.
+  kofiTransactionId String?        @unique
+
+  @@index([binId, status])
+  @@index([donorId])
+  @@map("donation")
 }
