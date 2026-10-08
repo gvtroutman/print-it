@@ -58,13 +58,13 @@ export function Kicker({ children }: { children: ReactNode }) {
 
 /**
  * The frame for every screen you reach before signing in. The header's kraft
- * paper fills the ground (`.kraft` in globals.css, scaled to cover), so the
- * sign over the counter is the first thing you see; one lit card on it,
+ * paper fills the ground, tiled (`.kraft-tile` in globals.css), so the sign
+ * over the counter is the first thing you see; one lit card on it,
  * checkerboard along the bottom edge.
  */
 export function AuthShell({ children }: { children: ReactNode }) {
   return (
-    <main className="kraft flex min-h-screen flex-col items-center justify-center px-[26.4px] py-[35.2px]">
+    <main className="kraft-tile flex min-h-screen flex-col items-center justify-center px-[26.4px] py-[35.2px]">
       <div className="mb-[26.4px]">
         <Brand size={56} lit />
       </div>

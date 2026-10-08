@@ -136,10 +136,10 @@
 }
 
 /*
- * Wrinkled kraft paper, for the header and the ground of the sign-in screens
- * — a photo of the real thing, which replaced an SVG-filter imitation. It does
- * not tile, so it is scaled to cover and centred; on a bar as short as the
- * header that shows a band of creases across the middle of the sheet. The
+ * Wrinkled kraft paper, for the header — a photo of the real thing, which
+ * replaced an SVG-filter imitation. It does not tile, so it is scaled to cover
+ * and centred; on a bar this short that shows a band of creases across the
+ * middle of the sheet. The
  * flat colour is the paper's own average, there while the image loads. Ink
  * text on it is about 6:1.
  *
@@ -149,6 +149,17 @@
  */
 .kraft {
   background: #c9aa7c url("./textures/kraft-paper.jpg") center / cover no-repeat;
+}
+
+/*
+ * The same paper as a seamless tile, for the full-page ground of the sign-in
+ * screens. Covering a whole screen with the photo stretched it about 2.5x on
+ * a large monitor; this repeats it at its own size instead. The tile is the
+ * photo with its lighting flattened (so repeats show no bright/dark steps) and
+ * each edge cross-faded into the opposite one, so there are no seams.
+ */
+.kraft-tile {
+  background: #c8a775 url("./textures/kraft-paper-tile.jpg") 0 0 / 804px 538px repeat;
 }
 
 /*
