@@ -759,7 +759,7 @@ export function UploadForm({
           />
         </div>
         <div>
-          <Label htmlFor="material">Material you&rsquo;d like</Label>
+          <Label htmlFor="material">Material</Label>
           <Segmented
             label="Material"
             options={catalog.map((item) => item.name)}
@@ -772,7 +772,7 @@ export function UploadForm({
       {/* ---- colour ---- */}
       <fieldset className="mt-[22px] border-0 p-0">
         <legend className="mb-[8.8px] font-mono text-[12px] font-bold uppercase tracking-[0.1em] text-ink-2">
-          Color you&rsquo;re hoping for
+          Color
         </legend>
         <div className="flex flex-wrap gap-[13.2px]">
           {selectedMaterial.colors.map((c) => {
