@@ -98,17 +98,22 @@ type Linked =
  * other options stacked beneath it. A listbox rather than a native `<select>`
  * so the open list wears the same chunky outline as the rest of the form.
  * Arrow keys, Home/End, Enter/Space and Escape work as they do on a select.
+ * `hint` puts a short line of small print under each option in the open list.
  */
 function Dropdown({
   id,
   options,
   value,
   onChange,
+  hint,
+  describedBy,
 }: {
   id: string;
   options: readonly string[];
   value: string;
   onChange: (v: string) => void;
+  hint?: (option: string) => string;
+  describedBy?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(() => Math.max(0, options.indexOf(value)));
@@ -165,7 +170,7 @@ function Dropdown({
   }
 
   return (
-    <div ref={wrap} className="relative">
+    <div ref={wrap} className="relative font-display">
       <button
         ref={trigger}
         id={id}
@@ -175,6 +180,7 @@ function Dropdown({
         aria-expanded={open}
         aria-controls={listId}
         aria-activedescendant={open ? `${listId}-${active}` : undefined}
+        aria-describedby={describedBy}
         onClick={() => (open ? setOpen(false) : show())}
         onKeyDown={onKeyDown}
         className={`flex w-full cursor-pointer items-center justify-between gap-[10px] border-[3px] border-ink bg-porcelain px-[15px] py-[12px] text-left text-[16px] font-bold text-ink hover:bg-sun ${
@@ -200,6 +206,7 @@ function Dropdown({
       >
         {options.map((option, index) => {
           const selected = option === value;
+          const small = hint?.(option);
           return (
             <li
               key={option}
@@ -213,6 +220,11 @@ function Dropdown({
               } ${selected ? "font-bold" : ""}`}
             >
               {option}
+              {small && (
+                <span className="mt-[2px] line-clamp-2 font-sans text-[13px] font-normal leading-[1.35] text-ink-2">
+                  {small}
+                </span>
+              )}
             </li>
           );
         })}
@@ -862,7 +874,18 @@ export function UploadForm({
             options={catalog.map((item) => item.name)}
             value={material}
             onChange={chooseMaterial}
+            hint={(name) => catalog.find((item) => item.name === name)?.description ?? ""}
+            describedBy={selectedMaterial.description ? "material-about" : undefined}
           />
+          {selectedMaterial.description && (
+            <p
+              id="material-about"
+              aria-live="polite"
+              className="m-0 mt-[8px] text-[14px] leading-[1.45] text-ink-2"
+            >
+              {selectedMaterial.description}
+            </p>
+          )}
         </div>
       </div>
 

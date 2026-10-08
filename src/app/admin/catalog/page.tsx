@@ -6,6 +6,7 @@ import { RemoveMaterialButton } from "./remove-material-button";
 import { RemoveColorButton } from "./remove-color-button";
 import { AddColorForm } from "./add-color-form";
 import { EditMaterialInline } from "./edit-material-inline";
+import { EditMaterialDescription } from "./edit-material-description";
 import { EditColorInline } from "./edit-color-inline";
 import {
   addMaterialAction,
@@ -108,6 +109,8 @@ export default async function CatalogPage({
                 </form>
                 <RemoveMaterialButton id={material.id} name={material.name} />
               </div>
+
+              <EditMaterialDescription id={material.id} name={material.name} description={material.description} />
 
               <div className="space-y-[8.8px]">
                 {material.colors.map((color, colorIndex) => (

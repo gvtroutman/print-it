@@ -42,8 +42,13 @@ export type CatalogColorChoice = {
 export type CatalogMaterialChoice = {
   id: string;
   name: string;
+  /** What the material is, for the person choosing; empty when not written. */
+  description: string;
   colors: CatalogColorChoice[];
 };
+
+/** The longest material description the owner can save. */
+export const MAX_MATERIAL_DESCRIPTION = 280;
 
 export const STATUS_CHIP: Record<
   string,

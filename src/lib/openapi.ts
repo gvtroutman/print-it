@@ -807,6 +807,11 @@ export async function buildOpenApiDocument() {
                           type: "object",
                           properties: {
                             name: { type: "string", examples: ["PETG"] },
+                            description: {
+                              type: "string",
+                              description: "What the material is, in the owner's words. Empty when not written.",
+                              examples: ["Tougher than PLA: it bends a little instead of snapping."],
+                            },
                             colors: {
                               type: "array",
                               items: {

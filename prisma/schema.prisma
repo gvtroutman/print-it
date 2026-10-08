@@ -399,6 +399,9 @@ model StoryAttachment {
 model CatalogMaterial {
   id        String   @id @default(cuid())
   name      String   @unique
+  /// What the material is, in a sentence or two, shown under the upload
+  /// form's material picker. Empty means nothing is shown.
+  description String @default("")
   active    Boolean  @default(true)
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())

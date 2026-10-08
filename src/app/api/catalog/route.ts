@@ -28,6 +28,7 @@ export const GET = withActor(async () => {
     importSources: enabledSources(),
     materials: materials.map((material) => ({
       name: material.name,
+      description: material.description,
       colors: material.colors.map((color) => ({
         name: color.name,
         hex: color.hex,

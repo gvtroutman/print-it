@@ -11,6 +11,7 @@ export async function availableCatalog(): Promise<CatalogMaterialChoice[]> {
     select: {
       id: true,
       name: true,
+      description: true,
       colors: {
         where: { active: true },
         orderBy: [{ sortOrder: "asc" }, { name: "asc" }],

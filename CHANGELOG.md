@@ -16,6 +16,12 @@ Notable changes. Every entry names a released version; deployments pin
 - **A viewer on every ticket** for everything that came with it: 3D models
   spin in the filament colour, photos open full size, videos play and seek.
   STEP files are stored and downloadable but not previewed.
+- **Each material says what it is.** The new-order form shows a sentence or
+  two about the chosen material under the picker, and the start of it under
+  each option in the open list. The printer owner writes these on
+  *Materials & colors*; PLA, PETG, TPU and Resin start with one. `GET
+  /api/catalog` returns it as `description`. Needs the
+  `catalog_material_description` migration, which is additive.
 
 ### Changed
 

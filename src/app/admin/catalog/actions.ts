@@ -8,9 +8,11 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/authz";
 import { record } from "@/lib/audit";
-import { COLOR_MODES, funfettiStyle } from "@/lib/catalog";
+import { COLOR_MODES, MAX_MATERIAL_DESCRIPTION, funfettiStyle } from "@/lib/catalog";
 
 const Name = z.string().trim().min(1).max(40).transform((value) => value.replace(/\s+/g, " "));
+/** One paragraph: line breaks and runs of spaces fold to single spaces. */
+const Description = z.string().transform((value) => value.replace(/\s+/g, " ").trim()).pipe(z.string().max(MAX_MATERIAL_DESCRIPTION));
 const Hex = z.string().regex(/^#[0-9a-f]{6}$/i).transform((value) => value.toLowerCase());
 /**
  * What a "whatever" colour stands for where a single colour is needed: the
@@ -114,6 +116,25 @@ export async function editMaterialAction(formData: FormData): Promise<void> {
   revalidatePath("/admin/catalog");
   revalidatePath("/upload");
   back("toast", `${material.name} renamed to ${parsedName.data}.`);
+}
+
+export async function describeMaterialAction(formData: FormData): Promise<void> {
+  const admin = await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  const parsed = Description.safeParse(formData.get("description") ?? "");
+  if (!parsed.success) back("error", `Keep the description under ${MAX_MATERIAL_DESCRIPTION} characters.`);
+  const material = await db.catalogMaterial.findUnique({ where: { id }, select: { name: true } });
+  if (!material) back("error", "That material no longer exists.");
+  await db.catalogMaterial.update({ where: { id }, data: { description: parsed.data } });
+  await record({
+    action: "catalog.material_updated",
+    actor: admin,
+    subject: material.name,
+    detail: { description: parsed.data },
+  });
+  revalidatePath("/admin/catalog");
+  revalidatePath("/upload");
+  back("toast", parsed.data ? `${material.name}'s description saved.` : `${material.name}'s description removed.`);
 }
 
 export async function removeMaterialAction(formData: FormData): Promise<void> {
