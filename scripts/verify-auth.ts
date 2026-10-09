@@ -18,6 +18,7 @@ import "./_env";
 import { PrismaClient } from "@prisma/client";
 import { db } from "../src/lib/db";
 import { createInvite, mailConfigured } from "../src/lib/invites";
+import { contactEmail, isPlaceholderEmail, placeholderEmailFor } from "../src/lib/contact-email";
 import { issuePasswordSetupUrl } from "../src/lib/password-reset";
 import { issueDeviceLinkUrl } from "../src/lib/device-link";
 import { DEVICE_SESSION_SECONDS, SESSION_IDLE_SECONDS } from "../src/lib/auth-rules";
@@ -394,6 +395,61 @@ async function main() {
         (await db.user.count({ where: { email: DUP } })) === 1,
         `status ${ok.status}`);
   await db.user.deleteMany({ where: { email: DUP } });
+
+  // ------------------------------------------------------------------------
+  section("6b. an invitation needs no address");
+  // The owner can invite somebody by name alone. There is nowhere to mail the
+  // link, so it comes straight back to be handed over; the account that opens
+  // carries a placeholder address nothing can be delivered to.
+  const noAddress = await createInvite({ email: null, name: "Noe Mail", invitedById: admin.id });
+  check("an invitation with no address hands the link straight back",
+        typeof noAddress.handoverUrl === "string" && noAddress.invite.email === null,
+        JSON.stringify({ email: noAddress.invite.email, handover: Boolean(noAddress.handoverUrl) }));
+  if (!noAddress.handoverUrl) throw new Error("no handover link for the address-less invite");
+
+  const noe = new Browser();
+  const noePage = await (await noe.go(noAddress.handoverUrl)).text();
+  check("the claim page asks for a name and shows no address at all",
+        noePage.includes('name="name"') && !noePage.includes('id="email"') &&
+        !noePage.includes("placeholder.invalid"));
+  const noeIn = await noe.submit(noAddress.handoverUrl, noePage, { name: "Noe Mail" });
+  check("a name alone opens the account and signs the device in",
+        noeIn.status >= 300 && noeIn.status < 400 && signedIn(noe), `status ${noeIn.status}`);
+
+  const noeAccount = await db.user.findFirst({ where: { name: "Noe Mail" } });
+  check("the account carries a placeholder under a reserved domain, not marked verified",
+        noeAccount !== null && isPlaceholderEmail(noeAccount.email) &&
+        noeAccount.email === placeholderEmailFor(noAddress.invite.id) &&
+        noeAccount.emailVerified === false && contactEmail(noeAccount.email) === null,
+        noeAccount?.email ?? "no account");
+  check("and is stamped from the invite like any other",
+        noeAccount?.role === "client" && noeAccount.initials === "NO" &&
+        noeAccount.invitedById === admin.id,
+        JSON.stringify({ role: noeAccount?.role, initials: noeAccount?.initials }));
+  check("the invitation is spent",
+        (await db.invite.findUnique({ where: { id: noAddress.invite.id } }))?.acceptedAt !== null);
+
+  const noeHome = await (await noe.go(`${APP}/`)).text();
+  check("the placeholder never reaches the page",
+        noeHome.includes('data-authenticated="true"') && !noeHome.includes("placeholder.invalid"));
+
+  const guestListNow = await (await ruben.go(`${APP}/admin/invites`)).text();
+  check("the guest list shows the member with no address, and no placeholder",
+        guestListNow.includes("No email on file") && !guestListNow.includes("placeholder.invalid"));
+
+  // The link is still the credential. Knowing how a placeholder is built does
+  // not let anybody post one at the sign-up endpoint.
+  const second = await createInvite({ email: null, name: "Second Guess", invitedById: admin.id });
+  await clearRateLimit();
+  const guessed = await signUp(new Browser(), {
+    email: placeholderEmailFor(second.invite.id), name: "Second Guess",
+    username: "second", password: TEST_PASSWORD,
+  });
+  check("posting an address-less invitation's placeholder without its link is refused",
+        guessed.status === 403 &&
+        (await db.user.count({ where: { email: placeholderEmailFor(second.invite.id) } })) === 0,
+        `status ${guessed.status}`);
+  await db.invite.delete({ where: { id: second.invite.id } });
 
   // ------------------------------------------------------------------------
   section("7. a breached password is refused");

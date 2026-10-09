@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/authz";
 import { requireFreshAuth } from "@/lib/reauth";
 import { record } from "@/lib/audit";
+import { contactEmail } from "@/lib/contact-email";
 import { deviceLinkEmail, passwordResetEmail, sendMail } from "@/lib/email";
 import {
   DEVICE_LINK_TTL_MINUTES,
@@ -28,7 +29,10 @@ import {
 
 export type InviteFormState = {
   error?: string;
-  /** The address that was invited. */
+  /**
+   * Who this was for: the address when there is one, otherwise the name. When
+   * `handoverUrl` is absent the link was mailed, so this is always an address.
+   */
   sent?: string;
   /**
    * Present only when there was nowhere to mail the link, so the admin has to
@@ -38,10 +42,17 @@ export type InviteFormState = {
   handoverUrl?: string;
 };
 
-const InviteSchema = z.object({
-  email: z.email("That does not look like an email address."),
-  name: z.string().trim().max(80).optional(),
-});
+const InviteSchema = z
+  .object({
+    // Blank is allowed: the link is then handed over rather than mailed, and
+    // the member signs up with just a name.
+    email: z.union([z.email("That does not look like an email address."), z.literal("")]),
+    name: z.string().trim().max(80).optional(),
+  })
+  .refine((v) => v.email || v.name, {
+    message: "Give an email address or a name — something to tell the invitation by.",
+    path: ["name"],
+  });
 
 export async function sendInviteAction(
   _prev: InviteFormState,
@@ -54,7 +65,7 @@ export async function sendInviteAction(
   await requireFreshAuth("/admin/invites");
 
   const parsed = InviteSchema.safeParse({
-    email: formData.get("email"),
+    email: String(formData.get("email") ?? "").trim(),
     name: formData.get("name") || undefined,
   });
   if (!parsed.success) {
@@ -63,22 +74,24 @@ export async function sendInviteAction(
 
   try {
     const { invite, handoverUrl } = await createInvite({
-      email: parsed.data.email,
+      email: parsed.data.email || null,
       name: parsed.data.name ?? null,
       invitedById: admin.id,
     });
+    const who = invite.email ?? invite.name ?? invite.id;
     await record({
       action: "invite.sent",
       actor: admin,
-      subject: invite.email,
+      subject: who,
       detail: {
         role: invite.role,
         expiresAt: invite.expiresAt.toISOString(),
         delivery: handoverUrl ? "handover" : "email",
+        hasEmail: invite.email !== null,
       },
     });
     revalidatePath("/admin/invites");
-    return { sent: invite.email, handoverUrl };
+    return { sent: who, handoverUrl };
   } catch (e) {
     if (e instanceof InviteError) return { error: e.message };
     if (isUniqueViolation(e)) {
@@ -92,28 +105,52 @@ export async function sendInviteAction(
   }
 }
 
-export async function resendInviteAction(formData: FormData): Promise<void> {
+/**
+ * Rotate the link and send it again. For an invitation with no address — or a
+ * deployment with no mail — the fresh link comes back here for the admin to
+ * hand over; it used to be dropped on the floor, which left "Send again"
+ * silently killing the only working link.
+ */
+export async function resendInviteAction(
+  _prev: InviteFormState,
+  formData: FormData,
+): Promise<InviteFormState> {
   const admin = await requireAdmin();
   // Re-sending rotates the token, so it hands out a working link exactly the
   // way the first one did.
   await requireFreshAuth("/admin/invites");
   const id = String(formData.get("id") ?? "");
   try {
-    const { invite } = await resendInvite(id);
-    await record({ action: "invite.resent", actor: admin, subject: invite.email });
+    const { invite, handoverUrl } = await resendInvite(id);
+    const who = invite.email ?? invite.name ?? invite.id;
+    await record({
+      action: "invite.resent",
+      actor: admin,
+      subject: who,
+      detail: { delivery: handoverUrl ? "handover" : "email" },
+    });
+    revalidatePath("/admin/invites");
+    return { sent: who, handoverUrl };
   } catch (e) {
-    if (!(e instanceof InviteError)) throw e;
+    if (e instanceof InviteError) return { error: e.message };
+    throw e;
   }
-  revalidatePath("/admin/invites");
 }
 
 export async function revokeInviteAction(formData: FormData): Promise<void> {
   const admin = await requireAdmin();
   const id = String(formData.get("id") ?? "");
-  const invite = await db.invite.findUnique({ where: { id }, select: { email: true } });
+  const invite = await db.invite.findUnique({
+    where: { id },
+    select: { email: true, name: true },
+  });
   await revokeInvite(id);
   if (invite) {
-    await record({ action: "invite.revoked", actor: admin, subject: invite.email });
+    await record({
+      action: "invite.revoked",
+      actor: admin,
+      subject: invite.email ?? invite.name ?? id,
+    });
   }
   revalidatePath("/admin/invites");
 }
@@ -127,9 +164,9 @@ export async function revokeInviteAction(formData: FormData): Promise<void> {
  * sign-in link this replaces. Whoever holds that link can set a password and
  * then has to use it; the old one stops working the moment they do.
  *
- * Mailed when there is a transport, handed to the admin when there is not,
- * which is the same split invitations use and the reason the app needs no
- * mail server at all.
+ * Mailed when there is a transport and an address, handed to the admin when
+ * there is not, which is the same split invitations use and the reason the
+ * app needs no mail server at all.
  */
 export async function resetPasswordAction(
   _prev: InviteFormState,
@@ -160,23 +197,23 @@ export async function resetPasswordAction(
 
   // A transport that refuses is treated as no transport: the link already
   // exists, and showing it to the admin beats losing it to a bounced send.
+  // A member with no address has nowhere to send it in the first place.
+  const to = contactEmail(target.email);
   let delivered = false;
-  try {
-    delivered = await sendMail(
-      passwordResetEmail({
-        to: target.email,
-        url,
-        expiresInMinutes: RESET_TTL_MINUTES,
-      }),
-    );
-  } catch (error) {
-    console.error("reset mail failed; handing the link over instead", error);
+  if (to) {
+    try {
+      delivered = await sendMail(
+        passwordResetEmail({ to, url, expiresInMinutes: RESET_TTL_MINUTES }),
+      );
+    } catch (error) {
+      console.error("reset mail failed; handing the link over instead", error);
+    }
   }
 
   await record({
     action: "password.reset_requested",
     actor: admin,
-    subject: target.email,
+    subject: to ?? target.name,
     detail: {
       forName: target.name,
       validMinutes: RESET_TTL_MINUTES,
@@ -187,7 +224,8 @@ export async function resetPasswordAction(
   revalidatePath("/admin/invites");
   // Same rule as invitations: when the link was delivered it stays inside the
   // message, so not even the admin who triggered it can replay it.
-  return delivered ? { sent: target.email } : { sent: target.email, handoverUrl: url };
+  const who = to ?? target.name;
+  return delivered ? { sent: who } : { sent: who, handoverUrl: url };
 }
 
 /**
@@ -231,19 +269,22 @@ export async function deviceLinkAction(
     return { error: "That link could not be created. Try again." };
   }
 
+  const to = contactEmail(target.email);
   let delivered = false;
-  try {
-    delivered = await sendMail(
-      deviceLinkEmail({ to: target.email, url, expiresInMinutes: DEVICE_LINK_TTL_MINUTES }),
-    );
-  } catch (error) {
-    console.error("device link mail failed; handing the link over instead", error);
+  if (to) {
+    try {
+      delivered = await sendMail(
+        deviceLinkEmail({ to, url, expiresInMinutes: DEVICE_LINK_TTL_MINUTES }),
+      );
+    } catch (error) {
+      console.error("device link mail failed; handing the link over instead", error);
+    }
   }
 
   await record({
     action: "device.link_requested",
     actor: admin,
-    subject: target.email,
+    subject: to ?? target.name,
     detail: {
       forName: target.name,
       validMinutes: DEVICE_LINK_TTL_MINUTES,
@@ -252,7 +293,8 @@ export async function deviceLinkAction(
   });
 
   revalidatePath("/admin/invites");
-  return delivered ? { sent: target.email } : { sent: target.email, handoverUrl: url };
+  const who = to ?? target.name;
+  return delivered ? { sent: who } : { sent: who, handoverUrl: url };
 }
 
 /**
@@ -309,13 +351,14 @@ export async function setMemberAccessAction(
     await revokeDeviceLinks(target.id);
   }
 
+  const who = contactEmail(target.email) ?? target.name;
   await record({
     action: revoke ? "access.revoked" : "access.restored",
     actor: admin,
-    subject: target.email,
+    subject: who,
     detail: { forName: target.name },
   });
 
   revalidatePath("/admin/invites");
-  return { sent: target.email };
+  return { sent: who };
 }

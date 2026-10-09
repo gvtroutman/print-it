@@ -33,7 +33,7 @@ export function MobileMenu({
   active: string;
   name: string;
   initials: string;
-  email: string;
+  email: string | null;
   role: "client" | "admin";
   passkeyCount: number;
   previewing?: boolean;

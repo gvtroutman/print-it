@@ -37,23 +37,23 @@ export function InviteForm() {
       </h2>
       <p className="m-0 mb-[17.6px] text-[14.5px] text-ink-2">
         They get a link that works once and expires in a week. There is no other
-        way in.
+        way in. No email address? Give a name instead and hand the link over
+        yourself — they sign up with just that name.
       </p>
 
       <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-[17.6px]">
         <div>
-          <Label htmlFor="invite-email">Email</Label>
+          <Label htmlFor="invite-email">Email (optional)</Label>
           <Input
             id="invite-email"
             name="email"
             type="email"
-            required
             placeholder="ayla@office.example"
             autoComplete="off"
           />
         </div>
         <div>
-          <Label htmlFor="invite-name">Name (optional)</Label>
+          <Label htmlFor="invite-name">Name (optional with an email)</Label>
           <Input
             id="invite-name"
             name="name"

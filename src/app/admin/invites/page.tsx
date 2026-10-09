@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Invite } from "@prisma/client";
 
 import { db } from "@/lib/db";
+import { contactEmail } from "@/lib/contact-email";
 import { requireAdmin } from "@/lib/authz";
 import { INVITE_TTL_DAYS } from "@/lib/invites";
 import { RESET_TTL_MINUTES } from "@/lib/password-reset";
@@ -12,7 +13,8 @@ import { InviteForm } from "./invite-form";
 import { ResetPassword } from "@/components/reset-password";
 import { DeviceLink } from "@/components/device-link";
 import { MemberAccess } from "@/components/member-access";
-import { resendInviteAction, revokeInviteAction } from "./actions";
+import { ResendInvite } from "@/components/resend-invite";
+import { revokeInviteAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -126,7 +128,9 @@ export default async function InvitesPage() {
                         </span>
                       )}
                     </p>
-                    <p className="m-0 font-mono text-[11.5px] text-ink-3">{m.email}</p>
+                    <p className="m-0 font-mono text-[11.5px] text-ink-3">
+                      {contactEmail(m.email) ?? "No email on file"}
+                    </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-[8.8px]">
                     {/* What this person has sent — the first thing to look at
@@ -180,9 +184,14 @@ export default async function InvitesPage() {
                 className="flex flex-wrap items-center gap-[17.6px] border-b-2 border-dashed border-rule py-[17.6px] last:border-b-0"
               >
                 <div className="min-w-[190px] flex-[1_1_240px]">
-                  <div className="font-mono text-[15px] font-bold text-ink">{invite.email}</div>
+                  {/* An invitation with no address leads with the name instead; the
+                      subline says where the link went. */}
+                  <div className="font-mono text-[15px] font-bold text-ink">
+                    {invite.email ?? invite.name ?? "No email"}
+                  </div>
                   <div className="mt-[3px] text-[13px] text-ink-3">
-                    {invite.name ? `${invite.name} · ` : ""}
+                    {invite.email && invite.name ? `${invite.name} · ` : ""}
+                    {invite.email ? "" : "no email, link handed over · "}
                     invited by {invite.invitedBy.name} · {relative(invite.createdAt)}
                   </div>
                 </div>
@@ -202,16 +211,14 @@ export default async function InvitesPage() {
                 </div>
 
                 {state === "Pending" || state === "Expired" ? (
-                  <div className="flex flex-wrap gap-[8.8px]">
-                    <form action={resendInviteAction}>
-                      <input type="hidden" name="id" value={invite.id} />
-                      <button
-                        type="submit"
-                        className="stamp cursor-pointer rounded-chip border-[3px] border-ink bg-aqua px-[15px] py-[6px] font-mono text-[11.5px] font-bold uppercase text-ink hover:bg-sun"
-                      >
-                        Send again
-                      </button>
-                    </form>
+                  // Grows to the whole row once a fresh link (or a notice) is
+                  // showing, so it can sit beneath the buttons.
+                  <div className="flex flex-wrap gap-[8.8px] has-[[data-handover]]:basis-full">
+                    <ResendInvite
+                      inviteId={invite.id}
+                      hasEmail={invite.email !== null}
+                      expiresInDays={INVITE_TTL_DAYS}
+                    />
                     {/* Carries the same keyline as its neighbour. It used to be
                         a transparent-bordered grey label, which on a page with
                         no header read as body text — the destructive action was

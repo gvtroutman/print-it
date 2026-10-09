@@ -3,6 +3,7 @@ import { Prisma, type Invite, type Role } from "@prisma/client";
 import { db } from "@/lib/db";
 import { generateToken, hashToken } from "@/lib/tokens";
 import { inviteEmail, mailConfigured, sendMail } from "@/lib/email";
+import { contactEmail, placeholderEmailFor } from "@/lib/contact-email";
 
 export const INVITE_TTL_DAYS = 7;
 
@@ -54,9 +55,9 @@ export async function checkInviteToken(token: string): Promise<InviteCheck> {
 }
 
 /**
- * The pending invite for an address, if any. This is the single source of
- * truth for "is this person allowed to exist", consulted by the
- * `user.validateUserInfo` gate in `src/lib/auth.ts`.
+ * The pending invite for an address, if any. Invitations with no address are
+ * never found this way — they are reached only through their link, and
+ * `claimedInviteFor` is what tells the gate about one of those.
  */
 export function pendingInviteFor(email: string) {
   return db.invite.findFirst({
@@ -81,7 +82,8 @@ export class InviteError extends Error {
 
 /**
  * What the caller gets back. `handoverUrl` is present only when the link could
- * not be delivered, i.e. no mail transport is configured.
+ * not be delivered: no mail transport is configured, or the invitation has no
+ * address to send it to.
  *
  * When mail works, the raw token is still withheld: it exists only inside the
  * message, so not even the admin who sent it can replay the link. That
@@ -91,22 +93,28 @@ export class InviteError extends Error {
  */
 export type CreatedInvite = { invite: Invite; handoverUrl?: string };
 
+/**
+ * Open an invitation. An address is optional: without one the link is handed
+ * to the admin to pass on, and the member will sign up with just a name.
+ */
 export async function createInvite(opts: {
-  email: string;
+  email?: string | null;
   name?: string | null;
   role?: Role;
   invitedById: string;
 }): Promise<CreatedInvite> {
-  const email = normalizeEmail(opts.email);
+  const email = opts.email?.trim() ? normalizeEmail(opts.email) : null;
 
-  if (await db.user.findUnique({ where: { email } })) {
-    throw new InviteError(`${email} already has an account.`, "already_a_member");
-  }
-  if (await pendingInviteFor(email)) {
-    throw new InviteError(
-      `${email} already has an invite that has not been used yet.`,
-      "already_invited",
-    );
+  if (email) {
+    if (await db.user.findUnique({ where: { email } })) {
+      throw new InviteError(`${email} already has an account.`, "already_a_member");
+    }
+    if (await pendingInviteFor(email)) {
+      throw new InviteError(
+        `${email} already has an invite that has not been used yet.`,
+        "already_invited",
+      );
+    }
   }
 
   const token = generateToken();
@@ -123,14 +131,16 @@ export async function createInvite(opts: {
   });
 
   const url = inviteUrl(token);
-  const delivered = await sendMail(
-    inviteEmail({
-      to: email,
-      url,
-      inviterName: invite.invitedBy.name,
-      expiresInDays: INVITE_TTL_DAYS,
-    }),
-  );
+  const delivered = email
+    ? await sendMail(
+        inviteEmail({
+          to: email,
+          url,
+          inviterName: invite.invitedBy.name,
+          expiresInDays: INVITE_TTL_DAYS,
+        }),
+      )
+    : false;
 
   return delivered ? { invite } : { invite, handoverUrl: url };
 }
@@ -138,6 +148,8 @@ export async function createInvite(opts: {
 /**
  * Rotate the token, push the expiry out and send again. Rotating means an
  * older email that has since leaked stops working the moment a resend happens.
+ * For an invitation with no address there is nothing to send: the fresh link
+ * comes back for the admin to hand over, and the old one is dead.
  */
 export async function resendInvite(inviteId: string): Promise<CreatedInvite> {
   const existing = await db.invite.findUnique({
@@ -159,14 +171,16 @@ export async function resendInvite(inviteId: string): Promise<CreatedInvite> {
   });
 
   const url = inviteUrl(token);
-  const delivered = await sendMail(
-    inviteEmail({
-      to: invite.email,
-      url,
-      inviterName: existing.invitedBy.name,
-      expiresInDays: INVITE_TTL_DAYS,
-    }),
-  );
+  const delivered = invite.email
+    ? await sendMail(
+        inviteEmail({
+          to: invite.email,
+          url,
+          inviterName: existing.invitedBy.name,
+          expiresInDays: INVITE_TTL_DAYS,
+        }),
+      )
+    : false;
 
   return delivered ? { invite } : { invite, handoverUrl: url };
 }
@@ -179,15 +193,24 @@ export async function revokeInvite(inviteId: string): Promise<void> {
 }
 
 /**
- * Burn every open invite for an address once its account exists.
+ * Burn every open invite for a new account: the ones addressed to its email,
+ * and the one whose link is being redeemed right now (which, for an account
+ * with no address, is the only one there is).
  *
  * `updateMany` with `acceptedAt: null` in the filter makes this a single
  * conditional UPDATE, so two links raced against each other still only mark
  * the invite accepted once.
  */
 export async function consumeInvitesFor(email: string): Promise<void> {
+  const matches: Prisma.InviteWhereInput[] = [];
+  const address = contactEmail(email);
+  if (address) matches.push({ email: normalizeEmail(address) });
+  const claim = claims.getStore();
+  if (claim) matches.push({ id: claim.inviteId });
+  if (matches.length === 0) return;
+
   await db.invite.updateMany({
-    where: { email: normalizeEmail(email), acceptedAt: null, revokedAt: null },
+    where: { OR: matches, acceptedAt: null, revokedAt: null },
     data: { acceptedAt: new Date() },
   });
 }
@@ -208,7 +231,7 @@ export async function purgeStaleInvites(): Promise<number> {
 // ---------------------------------------------------------------------------
 
 /**
- * "This request is redeeming an invitation link for this address."
+ * "This request is redeeming this invitation's link."
  *
  * The invite gate in src/lib/auth.ts used to ask one question — is there a
  * pending invitation for this e-mail address — and Better Auth's sign-up
@@ -218,12 +241,16 @@ export async function purgeStaleInvites(): Promise<number> {
  * account and a session, without ever seeing the link. The token in the link,
  * the thing that proves the mailbox, played no part.
  *
- * So the gate now asks a second question, and this is how it is answered. The
- * only code that may open an account is the code that has just checked a token
- * (`acceptInvite`), and it says so by running the sign-up inside
- * `claimingInvite`. The gate reads it back with `isClaimingInvite`. A request
- * that arrives at the endpoint by itself has no claim around it, and is
- * refused exactly as an address with no invitation is.
+ * So the gate now asks a different question, and this is how it is answered.
+ * The only code that may open an account is the code that has just checked a
+ * token (`acceptInvite`), and it says so by running the sign-up inside
+ * `claimingInvite`. The gate reads it back with `claimedInviteFor`, which also
+ * checks that the address in the sign-up body is the one the invitation
+ * decided on. A request that arrives at the endpoint by itself has no claim
+ * around it, and is refused exactly as an address with no invitation is.
+ *
+ * The claim names the invitation by id rather than by address, because an
+ * invitation need not have one.
  *
  * AsyncLocalStorage rather than a field in the sign-up body, because a body is
  * the one thing the caller controls: this cannot be set from outside the
@@ -231,18 +258,46 @@ export async function purgeStaleInvites(): Promise<number> {
  * a bundler is free to make — still share one store.
  */
 const CLAIM = Symbol.for("ppp.invite-claim");
-type ClaimStore = AsyncLocalStorage<{ email: string }>;
+type ClaimStore = AsyncLocalStorage<{ inviteId: string }>;
 const claims: ClaimStore = ((globalThis as Record<symbol, unknown>)[CLAIM] as ClaimStore | undefined) ??
-  ((globalThis as Record<symbol, unknown>)[CLAIM] = new AsyncLocalStorage<{ email: string }>());
+  ((globalThis as Record<symbol, unknown>)[CLAIM] = new AsyncLocalStorage<{ inviteId: string }>());
 
 /** Run `fn` as the redemption of this invitation. Call it only after the token has been checked. */
-export function claimingInvite<T>(invite: Pick<Invite, "email">, fn: () => Promise<T>): Promise<T> {
-  return claims.run({ email: normalizeEmail(invite.email) }, fn);
+export function claimingInvite<T>(invite: Pick<Invite, "id">, fn: () => Promise<T>): Promise<T> {
+  return claims.run({ inviteId: invite.id }, fn);
 }
 
-/** Is the current request redeeming an invitation for exactly this address? */
-export function isClaimingInvite(email: string): boolean {
-  return claims.getStore()?.email === normalizeEmail(email);
+/**
+ * The address the account opened from this invitation carries: the one the
+ * link was mailed to, or a placeholder when there was none. Both the claim
+ * form and the gate compute it from the invitation, so the sign-up body has
+ * no say in it.
+ */
+export function accountEmailFor(invite: Pick<Invite, "id" | "email">): string {
+  return invite.email ? normalizeEmail(invite.email) : placeholderEmailFor(invite.id);
+}
+
+/**
+ * The pending invitation this request is redeeming — for exactly this address.
+ *
+ * Null for a request with no claim around it, for a claim whose invitation
+ * has since been withdrawn, spent or has run out, and for a sign-up body
+ * carrying any address other than the one the invitation decided on.
+ */
+export async function claimedInviteFor(email: string): Promise<Invite | null> {
+  const claim = claims.getStore();
+  if (!claim) return null;
+
+  const invite = await db.invite.findFirst({
+    where: {
+      id: claim.inviteId,
+      acceptedAt: null,
+      revokedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+  });
+  if (!invite || accountEmailFor(invite) !== normalizeEmail(email)) return null;
+  return invite;
 }
 
 export { mailConfigured };

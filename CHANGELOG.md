@@ -7,6 +7,13 @@ Notable changes. Every entry names a released version; deployments pin
 
 ### Added
 
+- **An invitation no longer needs an email address.** The printer owner can
+  invite somebody by name alone; the link is shown once to hand over, and the
+  member signs up with just that name. Such an account carries a non-routable
+  placeholder address that is never shown or mailed; reset and device links for
+  it are handed over rather than sent. "Send again" on an invitation now shows
+  the fresh link when there is nowhere to mail it, instead of silently killing
+  the old one. Needs the `invite_email_optional` migration, which is additive.
 - **An order can carry more than one file.** Besides `.stl` and `.3mf`, a
   model can be OBJ, PLY, AMF, STEP/STP, GLB or glTF, and photos (PNG, JPEG,
   WebP, GIF), videos (MP4, MOV, WebM) and up to ten links can go with it. The

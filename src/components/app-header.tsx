@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { contactEmail } from "@/lib/contact-email";
 import { db } from "@/lib/db";
 import type { Actor } from "@/lib/scope";
 import { relativeTime } from "@/lib/catalog";
@@ -117,7 +118,7 @@ export async function AppHeader({
               <UserMenu
                 name={user.name}
                 initials={user.initials}
-                email={user.email}
+                email={contactEmail(user.email)}
                 role={user.role}
                 passkeyCount={passkeyCount}
                 previewing={user.previewing === true}
@@ -179,7 +180,7 @@ export async function AppHeader({
             active={active}
             name={user.name}
             initials={user.initials}
-            email={user.email}
+            email={contactEmail(user.email)}
             role={user.role}
             passkeyCount={passkeyCount}
             previewing={user.previewing === true}

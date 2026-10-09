@@ -13,8 +13,9 @@ import {
   normalizeEmail,
   pendingInviteFor,
   consumeInvitesFor,
-  isClaimingInvite,
+  claimedInviteFor,
 } from "@/lib/invites";
+import { contactEmail } from "@/lib/contact-email";
 import { initialsFor } from "@/lib/tokens";
 import { isBuildPhase } from "@/lib/runtime";
 import { enabledSources } from "@/lib/import-source";
@@ -87,11 +88,13 @@ export const auth = betterAuth({
    * see `deviceSessions()` below. Accounts that registered with a password
    * before that keep it, and it still works.
    *
-   * `requireEmailVerification` stays off: the address was verified by
-   * construction. An account is only ever opened by redeeming an invite link
-   * that was delivered to that mailbox — the sign-up endpoint is reachable by
-   * anyone, and the invite gate below refuses every request that is not such
-   * a redemption.
+   * `requireEmailVerification` stays off: an address is verified by
+   * construction. An account is only ever opened by redeeming an invite link,
+   * and when the invitation has an address, that is the mailbox the link went
+   * to — the sign-up endpoint is reachable by anyone, and the invite gate
+   * below refuses every request that is not such a redemption. An invitation
+   * need not have an address at all; the account then carries a placeholder
+   * one (src/lib/contact-email.ts), marked unverified.
    */
   emailAndPassword: {
     enabled: true,
@@ -251,13 +254,14 @@ export const auth = betterAuth({
      * `/sign-up/email` goes through with `{ method: "email-password" }`, so
      * adding passwords did not move this rule or add a second copy of it.
      *
-     * Two conditions, and the second is the one that was missing. A pending
-     * invitation for the address is necessary and was once treated as
-     * sufficient — but `/sign-up/email` answers anybody, so an address alone
-     * let whoever knew it register the account without the link. The request
-     * must also be the redemption of that link: `acceptInvite` checks the
-     * token and wraps the sign-up in `claimingInvite`, and nothing a caller
-     * sends can stand in for that. See `claimingInvite` in src/lib/invites.ts.
+     * The request must be the redemption of an invitation link. A pending
+     * invitation for the address was once treated as sufficient — but
+     * `/sign-up/email` answers anybody, so an address alone let whoever knew
+     * it register the account without the link. Now `acceptInvite` checks the
+     * token and wraps the sign-up in `claimingInvite`; `claimedInviteFor` reads
+     * that back and confirms the address in the body is the one the
+     * invitation decided on — its own, or a placeholder when it has none.
+     * Nothing a caller sends can stand in for that. See src/lib/invites.ts.
      *
      * Both refusals answer identically. Saying "there is an invitation for
      * that address, you just lack the link" would turn the endpoint into a way
@@ -271,8 +275,9 @@ export const auth = betterAuth({
         return { error: "invalid_request", errorDescription: "No email address." };
       }
 
-      const invited = Boolean(await pendingInviteFor(email));
-      if (!invited || !isClaimingInvite(email)) {
+      const invite = await claimedInviteFor(email);
+      if (!invite) {
+        const invited = Boolean(await pendingInviteFor(email));
         // Worth a trail entry: repeated rejections for the same address are
         // the shape of someone probing for a way in — and `no_link` against an
         // address that *is* invited is the shape of someone who knows who was.
@@ -299,8 +304,9 @@ export const auth = betterAuth({
          */
         async before(user) {
           const email = normalizeEmail(user.email);
-          const invite = await pendingInviteFor(email);
-          const name = (user.name || invite?.name || email.split("@")[0]!).trim();
+          const invite = await claimedInviteFor(email);
+          const address = contactEmail(email);
+          const name = (user.name || invite?.name || address?.split("@")[0] || "Member").trim();
 
           return {
             data: {
@@ -310,9 +316,10 @@ export const auth = betterAuth({
               initials: initialsFor(name),
               role: invite?.role ?? "client",
               invitedById: invite?.invitedById ?? null,
-              // Registration only happens off a link sent to this address,
-              // so the address is verified by construction.
-              emailVerified: true,
+              // Registration only happens off a link, and when the invitation
+              // had an address that is where the link went — so it is verified
+              // by construction. A placeholder stands for no address, and is not.
+              emailVerified: address !== null,
             },
           };
         },

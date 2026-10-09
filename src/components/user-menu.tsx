@@ -19,7 +19,8 @@ export function UserMenu({
 }: {
   name: string;
   initials: string;
-  email: string;
+  /** Null for a member who was invited with no address. */
+  email: string | null;
   role: "client" | "admin";
   passkeyCount: number;
   /** The printer owner, looking at the member view. */
@@ -93,7 +94,7 @@ export function AccountPanel({
   /** Shown as an avatar beside the name. The phone menu passes it; the
       desktop menu doesn't, because there the avatar is the button. */
   initials?: string;
-  email: string;
+  email: string | null;
   role: "client" | "admin";
   passkeyCount: number;
   previewing?: boolean;
@@ -111,7 +112,9 @@ export function AccountPanel({
       )}
       <span className="block min-w-0">
         <span className="block font-display text-[17px] text-ink">{name}</span>
-        <span className="mt-[2px] block break-all font-mono text-[11.5px] text-ink-3">{email}</span>
+        {email && (
+          <span className="mt-[2px] block break-all font-mono text-[11.5px] text-ink-3">{email}</span>
+        )}
         <span className="mt-[8.8px] inline-block rounded-chip border-2 border-ink bg-cream-2 px-[8px] font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink">
           {previewing ? "Previewing as a member" : role === "admin" ? "Printer owner" : "Invited member"}
         </span>

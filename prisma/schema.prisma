@@ -192,7 +192,10 @@ model RateLimit {
 /// `src/lib/auth.ts` via `user.validateUserInfo`).
 model Invite {
   id    String @id @default(cuid())
-  email String
+  /// Where the link was mailed. Null for an invitation handed over by other
+  /// means — the member then has no address at all, and the account that
+  /// opens carries a placeholder one (see src/lib/contact-email.ts).
+  email String?
 
   /// SHA-256 of the invite token. The raw token exists only inside the
   /// emailed link — a database dump does not let anyone accept an invite.

@@ -128,30 +128,31 @@ smaller thing to leak.
 
 ### Invite-only, enforced in one place
 
-A `User` row can only come into existence when a pending invite matches the
-address. That decision lives in a single hook, `user.validateUserInfo` in
-[`src/lib/auth.ts`](../src/lib/auth.ts):
+A `User` row can only come into existence as the redemption of a pending
+invitation's link. That decision lives in a single hook, `user.validateUserInfo`
+in [`src/lib/auth.ts`](../src/lib/auth.ts):
 
 ```ts
 async validateUserInfo({ user, source }) {
   if (source.action !== "create-user") return;
-  const invited = Boolean(await pendingInviteFor(user.email));
-  if (!invited || !isClaimingInvite(user.email))
-    return { error: "invite_required", ... };
+  const invite = await claimedInviteFor(user.email);
+  if (!invite) return { error: "invite_required", ... };
 }
 ```
 
-Two conditions. A pending invitation for the address is necessary, and for a
-while it was treated as sufficient — which, because Better Auth's
-`/sign-up/email` answers anybody, made the *address* the credential: whoever
-knew an invited address could post it with their own password and be given the
-account. So the request must also be the redemption of that invitation's link.
-`acceptInvite` checks the token and runs the sign-up inside `claimingInvite`
-(`src/lib/invites.ts`), an `AsyncLocalStorage` scope the gate reads back. It
-cannot be set from a request body, and a request that arrives at the endpoint
-by itself is refused exactly as an address with no invitation is — same status,
-same words, so the endpoint cannot be used to ask who has been invited. The
-audit trail tells the two apart (`reason: "no_link"` / `"no_invitation"`).
+For a while the rule was "a pending invitation exists for this address" — which,
+because Better Auth's `/sign-up/email` answers anybody, made the *address* the
+credential: whoever knew an invited address could post it with their own
+password and be given the account. So the request must be the redemption of
+the invitation's link. `acceptInvite` checks the token and runs the sign-up
+inside `claimingInvite` (`src/lib/invites.ts`), an `AsyncLocalStorage` scope
+naming the invitation by id; `claimedInviteFor` reads it back, confirms the
+invitation is still open, and confirms the address in the sign-up body is the
+one the invitation decided on. None of that can be set from a request body, and
+a request that arrives at the endpoint by itself is refused exactly as an
+address with no invitation is — same status, same words, so the endpoint cannot
+be used to ask who has been invited. The audit trail tells the two apart
+(`reason: "no_link"` / `"no_invitation"`).
 
 Better Auth calls it before provisioning an identity **by any method**, from
 `internalAdapter.createUser`. Password sign-up goes through that path with
@@ -163,10 +164,13 @@ row, and so is registering an invited address without its link.
 
 ### The invitation link
 
-1. The admin submits an address at `/admin/invites`.
+1. The admin submits an address at `/admin/invites` — or just a name, when the
+   person has no address to send to.
 2. `createInvite` mints 32 bytes of CSPRNG output, stores **only its SHA-256
    digest**, and emails the raw token inside the link. The raw token is never
    returned to the admin either — it exists in the email and nowhere else.
+   With no address (or no mail transport) there is nowhere to send it, so the
+   link is shown to the admin once, to hand over however they like.
 3. The invitee opens `/invite/<token>`, sees who invited them, and types the
    **name** they want to go by. That is the whole form. A name somebody already
    has, ignoring case, is refused, with a pointer to the printer owner if the
@@ -177,7 +181,23 @@ row, and so is registering an invited address without its link.
    stamping hook run exactly as they would for a sign-up, and it starts a
    device session. They land on the board.
 5. `databaseHooks.user.create.after` burns every open invite for that address,
-   so the link cannot mint a second account.
+   and the one just redeemed, so the link cannot mint a second account.
+
+#### Members without an email address
+
+An invitation need not carry an address at all. Better Auth still requires
+every account to have one (`user.email` is required and unique in its core
+schema), so an account opened from an address-less invitation is given a
+placeholder — `member-<invite id>@members.placeholder.invalid`, under a
+top-level domain reserved never to resolve (RFC 6761 §6.4), the same device
+Better Auth's own anonymous plugin uses. It is marked unverified. Everything
+that would show an address or mail one goes through `contactEmail()` in
+[`src/lib/contact-email.ts`](../src/lib/contact-email.ts), which turns the
+placeholder back into "none": the menus show no address, the guest list says
+*No email on file*, and a reset or device link for that member is handed to the
+admin rather than mailed. The gate computes the same placeholder from the
+invitation id, so a sign-up body carrying it without the link is refused like
+any other.
 
 Invites expire after 7 days, can be withdrawn, and can be re-sent — re-sending
 **rotates the token**, so a previously leaked email stops working.

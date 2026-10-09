@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { db } from "@/lib/db";
 import { auth } from "@/lib/auth";
-import { checkInviteToken, claimingInvite } from "@/lib/invites";
+import { accountEmailFor, checkInviteToken, claimingInvite } from "@/lib/invites";
 
 const ClaimSchema = z.object({
   token: z.string().min(1),
@@ -97,11 +97,13 @@ export async function acceptInvite(
 
   try {
     // Inside `claimingInvite`, because the token was checked a few lines up
-    // and that — not the address — is what the gate in src/lib/auth.ts admits.
+    // and that — not an address — is what the gate in src/lib/auth.ts admits.
+    // The address the account carries is the invitation's own, or a
+    // placeholder when it has none; either way it is decided here, not typed.
     const requestHeaders = await headers();
     await claimingInvite(check.invite, () =>
       auth.api.registerMemberDevice({
-        body: { email: check.invite.email, name: parsed.data.name },
+        body: { email: accountEmailFor(check.invite), name: parsed.data.name },
         headers: requestHeaders,
       }),
     );

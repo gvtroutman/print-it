@@ -20,7 +20,8 @@ export function ClaimForm({
   suggestedName,
 }: {
   token: string;
-  email: string;
+  /** Null for an invitation that was handed over with no address. */
+  email: string | null;
   suggestedName: string;
 }) {
   const [state, formAction] = useActionState<ClaimState, FormData>(
@@ -33,15 +34,17 @@ export function ClaimForm({
     <form action={formAction} className="flex flex-col gap-[17.6px]">
       <input type="hidden" name="token" value={token} />
 
-      <div>
-        <Label htmlFor="email">Your email</Label>
-        {/* Fixed: the invite is bound to this address. Showing it disabled is
-            clearer than hiding it — people want to know which inbox they are. */}
-        <Input id="email" value={email} disabled readOnly />
-        <p className="mt-[6px] font-mono text-[11.5px] uppercase tracking-[0.04em] text-ink-3">
-          The invite is tied to this address and cannot be moved to another.
-        </p>
-      </div>
+      {email && (
+        <div>
+          <Label htmlFor="email">Your email</Label>
+          {/* Fixed: the invite is bound to this address. Showing it disabled is
+              clearer than hiding it — people want to know which inbox they are. */}
+          <Input id="email" value={email} disabled readOnly />
+          <p className="mt-[6px] font-mono text-[11.5px] uppercase tracking-[0.04em] text-ink-3">
+            The invite is tied to this address and cannot be moved to another.
+          </p>
+        </div>
+      )}
 
       <div>
         <Label htmlFor="name">What should we call you?</Label>
