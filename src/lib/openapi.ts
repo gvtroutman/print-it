@@ -878,6 +878,14 @@ export async function buildOpenApiDocument() {
             { name: "material", in: "query", required: true, schema: { type: "string" }, description: "A material from `GET /api/catalog`." },
             { name: "q", in: "query", schema: { type: "string" }, description: "Words that must all appear in the color name, maker or type." },
             { name: "shade", in: "query", schema: { type: "string", enum: SWATCH_SHADES.map((s) => s.key) } },
+            {
+              name: "near",
+              in: "query",
+              schema: { type: "string", pattern: "^#?[0-9a-fA-F]{6}$", examples: ["#ff6a00"] },
+              description:
+                "A color: spools are listed closest-looking first, and only those near it — or the " +
+                "closest 12 when fewer are.",
+            },
           ],
           responses: {
             "200": {

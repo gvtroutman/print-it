@@ -61,7 +61,11 @@ the JSON API — see [the API](api.md).
 Under a material's shelf colours, the request form offers "Not on the shelf?
 Find a spool … can get". It searches the [filamentcolors.xyz](https://filamentcolors.xyz/)
 swatch library for that kind of filament, by words (colour, maker, type) and
-by shade. The match uses the filament table in `src/lib/filament-traits.ts`:
+by colour: a grid laid out like a phone's colour picker, where tapping a cell
+lists the spools that look closest to it first (ΔE in CIE L\*a\*b\*). Spools that
+look nothing like it are left out, unless fewer than 12 are near, in which case
+the 12 closest show. Real filament is rarely as vivid as the grid's bright
+blues and purples, so those cells often land on that fallback. The match uses the filament table in `src/lib/filament-traits.ts`:
 a "Silk PLA" material offers any PLA swatch (silk ones first), "PLA-CF" only
 fibre-filled PLA, and a name the table does not know has to appear in the
 swatch's type ("Wood" finds "PLA Wood").

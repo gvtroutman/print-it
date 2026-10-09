@@ -259,30 +259,80 @@ export async function swatchPhoto(id: number): Promise<Photo | null> {
 /** The most swatches one search answers with. */
 export const SEARCH_LIMIT = 60;
 
+/** sRGB "#rrggbb" to CIE L*a*b* (D65), for judging how alike two colours look. */
+function labOf(hex: string): [number, number, number] {
+  const linear = [1, 3, 5].map((i) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  }) as [number, number, number];
+  const [r, g, b] = linear;
+  const f = (t: number) => (t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 * t + 16) / 116);
+  const x = f((0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047);
+  const y = f(0.2126 * r + 0.7152 * g + 0.0722 * b);
+  const z = f((0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883);
+  return [116 * y - 16, 500 * (x - y), 200 * (y - z)];
+}
+
+/** How different two colours look (ΔE*76); about 2.3 is just noticeable. */
+function distance(a: [number, number, number], b: [number, number, number]) {
+  return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+}
+
+/** A swatch this far from the colour asked for still counts as near it. */
+const NEAR_ENOUGH = 28;
+/** When fewer than this are near enough, the closest this many are shown anyway. */
+const AT_LEAST = 12;
+
+const labs = new WeakMap<LibrarySwatch, [number, number, number]>();
+const labFor = (swatch: LibrarySwatch) => {
+  let lab = labs.get(swatch);
+  if (!lab) labs.set(swatch, (lab = labOf(swatch.hex)));
+  return lab;
+};
+
 /**
- * Swatches that fit a material, narrowed by an optional shade and search
- * words (every word has to appear in the name, maker or type). Swatches whose
- * type is the material's own name come first, then by maker and name.
+ * Swatches that fit a material, narrowed by search words (every word has to
+ * appear in the name, maker or type) and an optional shade.
+ *
+ * With `near`, a colour picked from the grid, they come closest first, and
+ * only those that look near it — or, where the material has few spools that
+ * colour, the closest dozen, so a pick never comes back empty. Otherwise
+ * swatches whose type is the material's own name come first, then by maker
+ * and name.
  */
 export async function searchLibrary(
   material: string,
-  { query = "", shade = null }: { query?: string; shade?: SwatchShade | null } = {},
+  {
+    query = "",
+    shade = null,
+    near = null,
+  }: { query?: string; shade?: SwatchShade | null; near?: string | null } = {},
 ): Promise<{ total: number; swatches: LibrarySwatch[] }> {
   const { byId } = await load();
   const terms = words(query).split(" ").filter(Boolean);
   const exact = words(material);
-  const matches = [...byId.values()].filter((swatch) => {
+  let matches = [...byId.values()].filter((swatch) => {
     if (!swatchFits(material, swatch)) return false;
     if (shade && swatch.shade !== shade) return false;
     if (terms.length === 0) return true;
     const haystack = words(`${swatch.name} ${swatch.maker} ${swatch.type}`);
     return terms.every((term) => haystack.includes(term));
   });
-  matches.sort(
-    (a, b) =>
-      Number(words(b.type) === exact) - Number(words(a.type) === exact) ||
-      a.maker.localeCompare(b.maker) ||
-      a.name.localeCompare(b.name),
-  );
+
+  if (near) {
+    const target = labOf(near);
+    const scored = matches
+      .map((swatch) => ({ swatch, d: distance(labFor(swatch), target) }))
+      .sort((a, b) => a.d - b.d);
+    const close = scored.filter((s) => s.d <= NEAR_ENOUGH);
+    matches = (close.length >= AT_LEAST ? close : scored.slice(0, AT_LEAST)).map((s) => s.swatch);
+  } else {
+    matches.sort(
+      (a, b) =>
+        Number(words(b.type) === exact) - Number(words(a.type) === exact) ||
+        a.maker.localeCompare(b.maker) ||
+        a.name.localeCompare(b.name),
+    );
+  }
   return { total: matches.length, swatches: matches.slice(0, SEARCH_LIMIT) };
 }

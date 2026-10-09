@@ -9,7 +9,9 @@ import { LibraryUnavailable, searchLibrary } from "@/lib/filament-library";
  *
  * `material` is a catalogue material's name and decides which kind of
  * filament is listed; `q` narrows by words in the name, maker or type, and
- * `shade` by the library's colour family (`RED`, `BLU`, …). At most
+ * `shade` by the library's colour family (`RED`, `BLU`, …). `near`, a
+ * `#rrggbb` from the picker's colour grid, lists the spools that look closest
+ * to it first, leaving out the ones that look nothing like it. At most
  * `SEARCH_LIMIT` swatches come back, with `total` saying how many matched.
  *
  * Any signed-in person may search — it is what the request form shows them.
@@ -28,9 +30,12 @@ export const GET = withActor(async (request) => {
   const shadeParam = params.get("shade");
   const shade = SWATCH_SHADES.find((s) => s.key === shadeParam)?.key ?? null;
   if (shadeParam && !shade) return fail(400, "That is not a shade.");
+  const nearParam = params.get("near");
+  const near = nearParam && /^#?[0-9a-f]{6}$/i.test(nearParam) ? `#${nearParam.replace("#", "").toLowerCase()}` : null;
+  if (nearParam && !near) return fail(400, "That is not a colour — send #rrggbb.");
 
   try {
-    const { total, swatches } = await searchLibrary(material, { query, shade: shade as SwatchShade | null });
+    const { total, swatches } = await searchLibrary(material, { query, shade: shade as SwatchShade | null, near });
     return ok({
       total,
       // Every field named — see `storyResource` in src/lib/api.ts.

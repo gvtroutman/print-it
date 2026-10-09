@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { SWATCH_SHADES, type SwatchChoice, type SwatchShade } from "@/lib/catalog";
+import { COLOR_GRID, type SwatchChoice } from "@/lib/catalog";
 import { SwatchPhoto } from "@/components/swatch-photo";
 
 /** What `GET /api/filament-library` answers with. */
@@ -39,7 +39,8 @@ export function SpoolFinder({
 }) {
   const [open, setOpen] = useState(picked !== null);
   const [query, setQuery] = useState("");
-  const [shade, setShade] = useState<SwatchShade | null>(null);
+  // A colour picked from the grid; the library answers closest first.
+  const [near, setNear] = useState<string | null>(null);
   const [search, setSearch] = useState<Search>({ kind: "loading" });
 
   useEffect(() => {
@@ -51,7 +52,7 @@ export function SpoolFinder({
     const timer = setTimeout(async () => {
       const params = new URLSearchParams({ material });
       if (query.trim()) params.set("q", query.trim());
-      if (shade) params.set("shade", shade);
+      if (near) params.set("near", near);
       try {
         const res = await fetch(`/api/filament-library?${params}`, { signal: controller.signal });
         const body = await res.json().catch(() => ({}));
@@ -67,7 +68,7 @@ export function SpoolFinder({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [open, material, query, shade]);
+  }, [open, material, query, near]);
 
   if (!open) {
     return (
@@ -149,26 +150,21 @@ export function SpoolFinder({
         className="w-full rounded-card border-[3px] border-ink bg-cream px-[15px] py-[11px] text-[16px] text-ink placeholder:text-ink-3"
       />
 
-      <div role="radiogroup" aria-label="Shade" className="mt-[10px] flex flex-wrap gap-[6px]">
-        {SWATCH_SHADES.map((s) => {
-          const active = s.key === shade;
-          return (
-            <button
-              key={s.key}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              onClick={() => setShade(active ? null : s.key)}
-              className={`flex cursor-pointer items-center gap-[6px] rounded-chip border-2 border-ink px-[9px] py-[3px] font-mono text-[11px] font-bold uppercase tracking-[0.05em] transition-colors ${
-                active ? "bg-cherry-dk text-cream" : "bg-cream text-ink hover:bg-sun"
-              }`}
-            >
-              <span aria-hidden className="h-[10px] w-[10px] rounded-full border-[1.5px] border-ink" style={{ background: s.dot }} />
-              {s.label}
-            </button>
-          );
-        })}
+      <div className="mt-[11px] flex items-baseline justify-between gap-[13.2px]">
+        <p className="m-0 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-2">
+          {near ? "Closest to this color first" : "Tap a color to find spools like it"}
+        </p>
+        {near && (
+          <button
+            type="button"
+            onClick={() => setNear(null)}
+            className="cursor-pointer border-0 bg-transparent p-0 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
+          >
+            Any color
+          </button>
+        )}
       </div>
+      <ColorGrid value={near} onChange={setNear} />
 
       <div className="mt-[13.2px] min-h-[120px]">
         {search.kind === "loading" && (
@@ -183,7 +179,7 @@ export function SpoolFinder({
         )}
         {search.kind === "found" && search.found.total === 0 && (
           <p className="m-0 py-[22px] text-center text-[14px] text-ink-2">
-            No {material} spools match that. Try fewer words, or another shade.
+            No {material} spools match that. Try fewer words, or another color.
           </p>
         )}
         {search.kind === "found" && search.found.total > 0 && (
@@ -232,5 +228,90 @@ export function SpoolFinder({
         )}
       </div>
     </section>
+  );
+}
+
+/** What a screen reader hears for each column, then each row of `COLOR_GRID`. */
+const HUE_NAMES = ["cyan", "blue", "indigo", "purple", "magenta", "red", "red-orange", "orange", "amber", "yellow", "lime", "green"];
+const ROW_NAMES = ["darkest", "very dark", "dark", "deep", "rich", "bright", "light", "soft", "pale", "palest"];
+
+function cellLabel(row: number, col: number) {
+  if (row === 0) {
+    if (col === 0) return "white";
+    if (col === COLOR_GRID[0]!.length - 1) return "black";
+    return `grey ${col} of ${COLOR_GRID[0]!.length - 2}`;
+  }
+  return `${ROW_NAMES[row - 1] ?? ""} ${HUE_NAMES[col] ?? ""}`.trim();
+}
+
+/**
+ * A grid of colours to search by, laid out like a phone's colour picker. One
+ * tab stop for the whole grid; the arrow keys move around it, Home and End
+ * go to a row's ends, and Enter or Space picks. Picking the chosen colour
+ * again clears it.
+ */
+function ColorGrid({ value, onChange }: { value: string | null; onChange: (hex: string | null) => void }) {
+  const rows = COLOR_GRID.length;
+  const cols = COLOR_GRID[0]!.length;
+  const chosen = value === null ? -1 : COLOR_GRID.flat().indexOf(value);
+  const [focus, setFocus] = useState(chosen >= 0 ? chosen : 0);
+  const cells = useRef<(HTMLButtonElement | null)[]>([]);
+
+  function move(e: React.KeyboardEvent, index: number) {
+    const row = Math.floor(index / cols);
+    const col = index % cols;
+    const next = {
+      ArrowRight: row * cols + Math.min(cols - 1, col + 1),
+      ArrowLeft: row * cols + Math.max(0, col - 1),
+      ArrowDown: Math.min(rows - 1, row + 1) * cols + col,
+      ArrowUp: Math.max(0, row - 1) * cols + col,
+      Home: row * cols,
+      End: row * cols + cols - 1,
+    }[e.key];
+    if (next === undefined) return;
+    e.preventDefault();
+    setFocus(next);
+    cells.current[next]?.focus();
+  }
+
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Color to search by"
+      className="mt-[6px] grid overflow-hidden rounded-[12px] border-[3px] border-ink"
+      style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+    >
+      {COLOR_GRID.flatMap((row, r) =>
+        row.map((hex, c) => {
+          const index = r * cols + c;
+          const active = index === chosen;
+          return (
+            <button
+              key={index}
+              ref={(el) => {
+                cells.current[index] = el;
+              }}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              aria-label={cellLabel(r, c)}
+              tabIndex={index === focus ? 0 : -1}
+              onClick={() => {
+                setFocus(index);
+                onChange(active ? null : hex);
+              }}
+              onKeyDown={(e) => move(e, index)}
+              className={`relative aspect-square cursor-pointer border-0 p-0 transition-transform focus-visible:z-20 ${
+                active ? "z-10 scale-[1.18] rounded-[5px]" : "hover:z-10 hover:scale-[1.12] hover:rounded-[4px]"
+              }`}
+              style={{
+                background: hex,
+                boxShadow: active ? "0 0 0 2.5px #ffffff, 0 0 0 5px #1b2126" : undefined,
+              }}
+            />
+          );
+        }),
+      )}
+    </div>
   );
 }

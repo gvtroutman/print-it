@@ -9,7 +9,8 @@ Notable changes. Every entry names a released version; deployments pin
 
 - **Ask for a colour the owner can get.** Under the shelf colours, the
   request form can search the filamentcolors.xyz swatch library for spools of
-  the chosen material, by words and shade. The ticket snapshots the spool's
+  the chosen material, by words and from a colour grid (closest-looking
+  first), each spool shown as the library's photo. The ticket snapshots the spool's
   name, maker, type, colour and buy link, and wears a "Spool to buy" chip on
   the ticket and in the queue. The server keeps its own copy of the library
   (refreshed daily) and reads the pick back from it, so a request cannot name
