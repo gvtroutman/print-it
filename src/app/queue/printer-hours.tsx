@@ -70,12 +70,6 @@ export async function PrinterHours() {
                     autoComplete="off"
                   />
                 </label>
-                <label className="flex-[1_1_150px]">
-                  <span className="mb-[6px] block font-mono text-[12px] font-bold uppercase tracking-[0.1em] text-ink-2">
-                    Note
-                  </span>
-                  <Input name="note" maxLength={80} placeholder="optional" autoComplete="off" />
-                </label>
                 <Button variant="secondary" type="submit">
                   Log it
                 </Button>
@@ -92,9 +86,7 @@ export async function PrinterHours() {
                     <span className="w-[80px] font-bold text-ink">{reading.hours.toFixed(1)} h</span>
                     <span className="text-ink-3">
                       {reading.createdAt.toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}
-                    </span>
-                    {reading.note && <span>{reading.note}</span>}
-                  </li>
+                    </span>                  </li>
                 ))}
               </ol>
             )}

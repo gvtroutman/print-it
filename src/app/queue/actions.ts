@@ -20,7 +20,6 @@ const Reading = z.object({
     .string()
     .transform((value) => Number(value.replace(/[,\s]/g, "")))
     .pipe(z.number().finite().min(0).max(100_000)),
-  note: z.string().trim().max(80).default(""),
 });
 
 function back(kind: "toast" | "error", message: string): never {
@@ -32,11 +31,10 @@ export async function logHoursAction(formData: FormData): Promise<void> {
   const parsed = Reading.safeParse({
     printerId: formData.get("printerId") ?? "",
     hours: formData.get("hours") ?? "",
-    note: formData.get("note") ?? "",
   });
   if (!parsed.success) back("error", "Hours should be a number, like 412.5.");
 
-  const { printerId, note } = parsed.data;
+  const { printerId } = parsed.data;
   const hours = Math.round(parsed.data.hours * 10) / 10;
 
   const printer = await db.printer.findUnique({
@@ -50,7 +48,7 @@ export async function logHoursAction(formData: FormData): Promise<void> {
     back("error", `The meter only goes up. The last reading was ${last.hours} h.`);
   }
 
-  await db.printerReading.create({ data: { printerId, hours, note } });
+  await db.printerReading.create({ data: { printerId, hours } });
   await record({
     action: "printer.hours_logged",
     actor: admin,
