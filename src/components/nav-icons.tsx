@@ -28,8 +28,9 @@ const PATHS: Record<NavIconName, string> = {
   check: "M4 4h12v12H4zM7 10.2l2.2 2.3L13.5 7.5",
   // One person.
   person: "M10 3a3.2 3.2 0 1 0 0 6.4A3.2 3.2 0 0 0 10 3ZM3.5 17.5c.6-3.5 3.3-5.5 6.5-5.5s5.9 2 6.5 5.5",
-  // A spool of filament, side on.
-  spool: "M4 4h12v3H4zM4 13h12v3H4zM6.5 7v6M13.5 7v6M8 9h4M8 11h4",
+  // A spool of filament lying on its side: flanges left and right, the
+  // winding between them.
+  spool: "M4 4v12h3V4zM13 4v12h3V4zM7 6.5h6M7 13.5h6M9 8v4M11 8v4",
   // Two people.
   people: "M7.5 3.5a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6ZM2 17c.5-3 2.8-5 5.5-5s5 2 5.5 5M13 4a2.6 2.6 0 0 1 0 5.2M14.5 12.2c2.1.4 3.4 2.2 3.8 4.8",
   // A page of lines: the log.
