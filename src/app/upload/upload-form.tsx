@@ -40,6 +40,7 @@ const KIND_BADGE: Record<FileKind, { label: string; className: string }> = {
 import { SOURCE_LABEL, identifySource, type ImportSource } from "@/lib/import-source";
 import { Button, Label, Notice } from "@/components/ui";
 import { FilamentSpool } from "@/components/color-swatch";
+import { InkCube } from "@/components/ink-cube";
 
 /**
  * An old ticket being printed again. When this is given the form has no
@@ -617,18 +618,7 @@ export function UploadForm({
           disabled={busy}
           onChange={(e) => accept(Array.from(e.target.files ?? []))}
         />
-        <span aria-hidden className="mx-auto mb-[13.2px] flex h-[80px] w-[80px] items-center justify-center">
-          <span className="ppp-cube">
-            <span>
-              <span />
-              <span />
-              <span />
-              <span />
-              <span />
-              <span />
-            </span>
-          </span>
-        </span>
+        <InkCube className="mx-auto mb-[13.2px] block" />
         <span className="block font-display text-[19px] text-ink">
           {files.length > 0 ? "Drop more, or click to add" : "Drop a 3D model, photos or videos here (optional)"}
         </span>
