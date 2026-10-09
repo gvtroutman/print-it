@@ -97,7 +97,7 @@ const GRID_HUES = [195, 220, 262, 292, 330, 358, 24, 48, 90, 145];
  * show, and a cell nothing is near is a cell that finds nothing like it.
  */
 const GRID_ROWS: [number, number][] = [
-  [70, 16], [72, 25], [75, 34], [80, 43], [85, 52], [88, 62], [90, 72], [90, 81], [90, 90],
+  [68, 13], [70, 20], [72, 27], [75, 35], [80, 43], [85, 51], [88, 59], [90, 67], [90, 75], [90, 83], [90, 91],
 ];
 
 /**
@@ -138,6 +138,11 @@ export type LibrarySwatch = {
    * only — `img-src 'self'` — and shown through `swatchImagePath`.
    */
   imageUrl: string | null;
+  /**
+   * The library's full-size photo of the card, which the server cuts down to
+   * tile size; `imageUrl` is the fallback. Server only, like `imageUrl`.
+   */
+  photoUrl: string | null;
 };
 
 /** Where the app serves a library swatch's photo from. */
@@ -148,7 +153,7 @@ export const swatchImagePath = (id: number) => `/api/filament-library/${id}/imag
  * answers with, and what the request form and a ticket hold. `image` is this
  * app's path to the swatch photo, null when the library has none.
  */
-export type SwatchChoice = Omit<LibrarySwatch, "family" | "imageUrl"> & { image: string | null };
+export type SwatchChoice = Omit<LibrarySwatch, "family" | "imageUrl" | "photoUrl"> & { image: string | null };
 
 /** A swatch's page on filamentcolors.xyz. */
 export const swatchPageUrl = (id: number) => `https://filamentcolors.xyz/swatch/${id}/`;

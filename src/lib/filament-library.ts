@@ -98,6 +98,7 @@ function toSwatch(raw: unknown): LibrarySwatch | null {
     buyUrl: httpUrl(r.mfr_purchase_link) ?? httpUrl(r.amazon_purchase_link),
     pageUrl: swatchPageUrl(id),
     imageUrl: libraryMedia(r.card_img),
+    photoUrl: libraryMedia(r.image_front),
   };
 }
 
@@ -209,51 +210,124 @@ export function swatchFits(material: string, swatch: LibrarySwatch): boolean {
   return wanted.trim() !== "" && ` ${words(swatch.type)} `.includes(wanted);
 }
 
-/** A swatch photo as fetched: a couple of kilobytes of JPEG. */
+/** A swatch photo ready to serve: around 10 KB of JPEG. */
 type Photo = { bytes: Uint8Array<ArrayBuffer>; type: string };
 
-/** Photos held in memory, oldest dropped first. At ~2 KB each, about 2 MB. */
+/** Photos held in memory, oldest dropped first. At ~10 KB each, about 10 MB. */
 const PHOTO_CACHE = 1000;
-/** Bigger than any thumbnail the library serves; anything larger is refused. */
-const MAX_PHOTO_BYTES = 256 * 1024;
-const photos = new Map<number, Photo>();
-
+/** The library's full photos run 100–400 KB; anything past this is refused. */
+const MAX_SOURCE_BYTES = 4 * 1024 * 1024;
+/** The thumbnail fallback is served as it comes, so it has to be small. */
+const MAX_THUMB_BYTES = 256 * 1024;
 /**
- * A swatch's photo, fetched from the library on first ask and kept. Only a
- * swatch in the library has one, and only from the library's media path, so
- * this cannot be steered at another address. Null when there is no photo or
- * it could not be fetched; the picker then draws the colour instead.
+ * The size a photo is cut to: the shape of a swatch card (as the library's own
+ * thumbnail), wide enough to stay sharp on a high-density screen at the size
+ * the picker draws it.
  */
-export async function swatchPhoto(id: number): Promise<Photo | null> {
-  const held = photos.get(id);
-  if (held) return held;
-  const swatch = (await load()).byId.get(id);
-  if (!swatch?.imageUrl) return null;
+const PHOTO_WIDTH = 480;
+const PHOTO_HEIGHT = Math.round((PHOTO_WIDTH * 89) / 288);
+/**
+ * Full photos decoded at once. A 2740 x 2056 JPEG is ~17 MB once decoded,
+ * even shrunk on load, and a page of results asks for 60 together; the
+ * ZimaBoard has about 2 GB to spare.
+ */
+const PARALLEL_PHOTOS = 3;
 
+const photos = new Map<number, Photo>();
+const making = new Map<number, Promise<Photo | null>>();
+let running = 0;
+const queue: (() => void)[] = [];
+
+/** Run `job` once fewer than `PARALLEL_PHOTOS` are running. */
+async function inTurn<T>(job: () => Promise<T>): Promise<T> {
+  if (running >= PARALLEL_PHOTOS) await new Promise<void>((resolve) => queue.push(resolve));
+  running += 1;
+  try {
+    return await job();
+  } finally {
+    running -= 1;
+    queue.shift()?.();
+  }
+}
+
+async function fetchImage(url: string, max: number): Promise<{ bytes: Uint8Array<ArrayBuffer>; type: string } | null> {
   let response: Response;
   try {
-    response = await fetch(swatch.imageUrl, {
+    response = await fetch(url, {
       headers: { accept: "image/*", "user-agent": userAgent() },
       redirect: "error",
       signal: AbortSignal.timeout(TIMEOUT_MS),
       cache: "no-store",
     });
   } catch (error) {
-    console.error(`[filament-library] photo ${id} unreachable`, error);
+    console.error(`[filament-library] ${url} unreachable`, error);
     return null;
   }
   const type = response.headers.get("content-type") ?? "";
-  if (!response.ok || !/^image\/(jpeg|png|webp)$/.test(type)) {
+  const declared = Number(response.headers.get("content-length") ?? 0);
+  if (!response.ok || !/^image\/(jpeg|png|webp)$/.test(type) || declared > max) {
     await response.body?.cancel().catch(() => {});
     return null;
   }
   const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.length === 0 || bytes.length > MAX_PHOTO_BYTES) return null;
+  return bytes.length === 0 || bytes.length > max ? null : { bytes, type };
+}
 
-  const photo = { bytes, type };
-  photos.set(id, photo);
-  if (photos.size > PHOTO_CACHE) photos.delete(photos.keys().next().value!);
-  return photo;
+/**
+ * The library's full photo of the swatch card, cut down to `PHOTO_WIDTH`:
+ * the white table it was shot on trimmed off, then cropped to the card's
+ * shape. Null when there is no full photo or sharp cannot read it.
+ */
+async function sharpened(url: string): Promise<Photo | null> {
+  const source = await fetchImage(url, MAX_SOURCE_BYTES);
+  if (!source) return null;
+  try {
+    const { default: sharp } = await import("sharp");
+    // Two passes: sharp trims before it resizes, whatever the call order, and
+    // trimming the full-size image would decode all of it. The first pass
+    // shrinks on load.
+    const smaller = await sharp(source.bytes).rotate().resize({ width: 1200, withoutEnlargement: true }).toBuffer();
+    const out = await sharp(smaller)
+      .trim({ threshold: 40 })
+      .resize({ width: PHOTO_WIDTH, height: PHOTO_HEIGHT, fit: "cover" })
+      .jpeg({ quality: 80, mozjpeg: true })
+      .toBuffer();
+    return { bytes: new Uint8Array(out), type: "image/jpeg" };
+  } catch (error) {
+    console.error(`[filament-library] could not resize ${url}`, error);
+    return null;
+  }
+}
+
+/**
+ * A swatch's photo, made on first ask and kept: the library's full photo cut
+ * down to size, or its small thumbnail when that fails. Only a swatch in the
+ * library has one, and only from the library's media path, so this cannot be
+ * steered at another address. Null when there is nothing to show; the picker
+ * then draws the colour instead.
+ */
+export async function swatchPhoto(id: number): Promise<Photo | null> {
+  const held = photos.get(id);
+  if (held) return held;
+  const swatch = (await load()).byId.get(id);
+  if (!swatch?.photoUrl && !swatch?.imageUrl) return null;
+
+  // Sixty tiles asking at once for the same swatch make it once.
+  let pending = making.get(id);
+  if (!pending) {
+    pending = inTurn(async () => {
+      const photo =
+        (swatch.photoUrl ? await sharpened(swatch.photoUrl) : null) ??
+        (swatch.imageUrl ? await fetchImage(swatch.imageUrl, MAX_THUMB_BYTES) : null);
+      if (photo) {
+        photos.set(id, photo);
+        if (photos.size > PHOTO_CACHE) photos.delete(photos.keys().next().value!);
+      }
+      return photo;
+    }).finally(() => making.delete(id));
+    making.set(id, pending);
+  }
+  return pending;
 }
 
 /** The most swatches one search answers with. */

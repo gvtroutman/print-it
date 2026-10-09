@@ -49,7 +49,7 @@ export const GET = withActor(async (request) => {
         buyUrl: s.buyUrl,
         pageUrl: s.pageUrl,
         // This app's copy of the library's photo, not the library's own URL.
-        image: s.imageUrl ? swatchImagePath(s.id) : null,
+        image: s.photoUrl || s.imageUrl ? swatchImagePath(s.id) : null,
       })) satisfies SwatchChoice[],
     });
   } catch (error) {

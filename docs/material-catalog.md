@@ -73,8 +73,11 @@ swatch's type ("Wood" finds "PLA Wood").
 Each spool shows as the library's own photo of its printed swatch card,
 with the swatch's colour underneath while it loads or if it fails. The photos
 come through `/api/filament-library/{id}/image`, which fetches only from the
-library's media path and keeps up to 1,000 of them (about 2 KB each) in memory,
-so `img-src` stays at `'self'`.
+library's media path, so `img-src` stays at `'self'`. It takes the library's
+full-size photo (100–400 KB, 2740 × 2056), trims off the white table, crops it
+to the card's shape at 480 px wide (about 8 KB) with `sharp`, three at a time
+so a page of results cannot exhaust the ZimaBoard's memory, and keeps up to
+1,000 in memory. If that fails it serves the library's small thumbnail.
 
 The browser never calls that site. The server (`src/lib/filament-library.ts`)
 sweeps the whole library into memory, about 25 pages and 30 seconds, when the
