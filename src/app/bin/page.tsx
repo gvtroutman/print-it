@@ -18,6 +18,7 @@ import {
 import { AppHeader } from "@/components/app-header";
 import { Button, Input, Kicker, Label, Notice } from "@/components/ui";
 import { Toast } from "@/components/toast";
+import { PRINTER_PHOTOS, PrinterPeek } from "@/components/printer-peek";
 
 export const dynamic = "force-dynamic";
 
@@ -103,81 +104,83 @@ export default async function DonationBinPage({
 
       <main className="mx-auto w-full max-w-[880px] px-[16px] pb-[80px] pt-[26.4px] sm:px-[26.4px] sm:pt-[35.2px]">
         {/* The jar. */}
-        <section className="overflow-hidden rounded-panel border-[3px] border-ink bg-cream-2 shadow-stamp-lg">
-          <div className="p-[17.6px] sm:p-[26.4px]">
-            <Kicker>Donation bin · chipping in together</Kicker>
-            <h1 className="m-0 mb-[11px] text-[30px] leading-[1] text-ink sm:text-[40px]">
-              {bin.title}
-            </h1>
-            <p className="m-0 max-w-[620px] text-[16.5px] leading-[1.5] text-ink-2 text-pretty">
-              {full
-                ? `The bin is full — thank you. ${owner} can order it.`
-                : connected
-                  ? "Saving up for it together. Give on Ko-fi and it lands in the bin by itself."
-                  : `Saving up for it together. Give on Ko-fi, then log it here so ${owner} can match it up — it counts once they see it come in.`}
-              {bin.url && (
-                <>
-                  {" "}
-                  <a
-                    href={bin.url}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="font-bold text-ink underline underline-offset-2 hover:text-cherry-dk"
-                  >
-                    See it in the shop ↗
-                  </a>
-                </>
-              )}
-            </p>
-
-            <div className="mt-[22px]">
-              <div className="mb-[8px] flex flex-wrap items-baseline justify-between gap-[8px]">
-                <span className="font-display text-[28px] leading-none text-ink sm:text-[34px]">
-                  {formatCents(totals.received)}
-                  <span className="ml-[8px] font-mono text-[13px] font-bold uppercase tracking-[0.06em] text-ink-2">
-                    of {formatCents(bin.goalCents)}
-                  </span>
-                </span>
-                <span className="font-mono text-[12px] font-bold uppercase tracking-[0.08em] text-ink-2">
-                  {full ? "Goal reached" : `${formatCents(left)} to go`}
-                </span>
-              </div>
-              <div
-                role="progressbar"
-                aria-label="Money received toward the goal"
-                aria-valuemin={0}
-                aria-valuemax={bin.goalCents / 100}
-                aria-valuenow={totals.received / 100}
-                aria-valuetext={`${formatCents(totals.received)} of ${formatCents(bin.goalCents)}`}
-                className="flex h-[30px] overflow-hidden rounded-chip border-[3px] border-ink bg-porcelain"
-              >
-                <div className="h-full bg-mint" style={{ width: `${percent}%` }} />
-                {/* Promised but not yet in hand: drawn, but hatched apart from
-                    the money that is really there. */}
-                <div
-                  className="h-full bg-sun-wash bg-[repeating-linear-gradient(135deg,transparent_0_6px,var(--color-sun)_6px_9px)]"
-                  style={{ width: `${pledgedPercent}%` }}
-                />
-              </div>
-              <p className="m-0 mt-[8px] font-mono text-[11.5px] uppercase tracking-[0.05em] text-ink-3">
-                {percent}% received · {totals.donors}{" "}
-                {totals.donors === 1 ? "person has" : "people have"} chipped in
-                {totals.pledged > 0 && ` · ${formatCents(totals.pledged)} waiting to be matched`}
+        <PrinterPeek src={PRINTER_PHOTOS[bin.id]} alt={bin.title}>
+          <section className="overflow-hidden rounded-panel border-[3px] border-ink bg-cream-2 shadow-stamp-lg">
+            <div className="p-[17.6px] sm:p-[26.4px]">
+              <Kicker>Donation bin · chipping in together</Kicker>
+              <h1 className="m-0 mb-[11px] text-[30px] leading-[1] text-ink sm:text-[40px]">
+                {bin.title}
+              </h1>
+              <p className="m-0 max-w-[620px] text-[16.5px] leading-[1.5] text-ink-2 text-pretty">
+                {full
+                  ? `The bin is full — thank you. ${owner} can order it.`
+                  : connected
+                    ? "Saving up for it together. Give on Ko-fi and it lands in the bin by itself."
+                    : `Saving up for it together. Give on Ko-fi, then log it here so ${owner} can match it up — it counts once they see it come in.`}
+                {bin.url && (
+                  <>
+                    {" "}
+                    <a
+                      href={bin.url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="font-bold text-ink underline underline-offset-2 hover:text-cherry-dk"
+                    >
+                      See it in the shop ↗
+                    </a>
+                  </>
+                )}
               </p>
-            </div>
 
-            {!full && bin.payUrl && (
-              <a
-                href={bin.payUrl}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="stamp mt-[22px] inline-block cursor-pointer rounded-chip border-[3px] border-ink bg-cherry-dk px-[28px] py-[14px] font-display text-[18px] text-cream hover:bg-cherry"
-              >
-                Give on Ko-fi ↗
-              </a>
-            )}
-          </div>
-        </section>
+              <div className="mt-[22px]">
+                <div className="mb-[8px] flex flex-wrap items-baseline justify-between gap-[8px]">
+                  <span className="font-display text-[28px] leading-none text-ink sm:text-[34px]">
+                    {formatCents(totals.received)}
+                    <span className="ml-[8px] font-mono text-[13px] font-bold uppercase tracking-[0.06em] text-ink-2">
+                      of {formatCents(bin.goalCents)}
+                    </span>
+                  </span>
+                  <span className="font-mono text-[12px] font-bold uppercase tracking-[0.08em] text-ink-2">
+                    {full ? "Goal reached" : `${formatCents(left)} to go`}
+                  </span>
+                </div>
+                <div
+                  role="progressbar"
+                  aria-label="Money received toward the goal"
+                  aria-valuemin={0}
+                  aria-valuemax={bin.goalCents / 100}
+                  aria-valuenow={totals.received / 100}
+                  aria-valuetext={`${formatCents(totals.received)} of ${formatCents(bin.goalCents)}`}
+                  className="flex h-[30px] overflow-hidden rounded-chip border-[3px] border-ink bg-porcelain"
+                >
+                  <div className="h-full bg-mint" style={{ width: `${percent}%` }} />
+                  {/* Promised but not yet in hand: drawn, but hatched apart from
+                      the money that is really there. */}
+                  <div
+                    className="h-full bg-sun-wash bg-[repeating-linear-gradient(135deg,transparent_0_6px,var(--color-sun)_6px_9px)]"
+                    style={{ width: `${pledgedPercent}%` }}
+                  />
+                </div>
+                <p className="m-0 mt-[8px] font-mono text-[11.5px] uppercase tracking-[0.05em] text-ink-3">
+                  {percent}% received · {totals.donors}{" "}
+                  {totals.donors === 1 ? "person has" : "people have"} chipped in
+                  {totals.pledged > 0 && ` · ${formatCents(totals.pledged)} waiting to be matched`}
+                </p>
+              </div>
+
+              {!full && bin.payUrl && (
+                <a
+                  href={bin.payUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="stamp mt-[22px] inline-block cursor-pointer rounded-chip border-[3px] border-ink bg-cherry-dk px-[28px] py-[14px] font-display text-[18px] text-cream hover:bg-cherry"
+                >
+                  Give on Ko-fi ↗
+                </a>
+              )}
+            </div>
+          </section>
+        </PrinterPeek>
 
         {error && (
           <div className="mt-[22px]">

@@ -1,15 +1,11 @@
 import { db } from "@/lib/db";
 import { relativeTime } from "@/lib/catalog";
 import { Button, Input } from "@/components/ui";
+import { PRINTER_PHOTOS, PrinterPeek } from "@/components/printer-peek";
 
 import { logHoursAction } from "./actions";
 
 const WEEK_MS = 7 * 86_400_000;
-
-/** Cut-out photos in public/printers, by printer id. Bambu Lab's product shots. */
-const PHOTOS: Record<string, string> = {
-  "p1s-combo": "/printers/p1s-combo.webp",
-};
 
 /**
  * The hour meter for each printer, on the owner's home. The owner reads the
@@ -33,20 +29,9 @@ export async function PrinterHours() {
         const perWeek = latest && first && span >= 86_400_000 ? ((latest.hours - first.hours) / span) * WEEK_MS : null;
 
         return (
-          <div key={printer.id} className={PHOTOS[printer.id] ? "relative pt-[92px]" : undefined}>
-            {PHOTOS[printer.id] && (
-              // Sits behind the card, so only the AMS and the top of the printer peek over it.
-              // eslint-disable-next-line @next/next/no-img-element -- a small static cut-out
-              <img
-                src={PHOTOS[printer.id]}
-                alt={printer.name}
-                width={132}
-                height={190}
-                className="absolute right-[36px] top-0 h-[190px] w-[132px] object-contain"
-              />
-            )}
+          <PrinterPeek key={printer.id} src={PRINTER_PHOTOS[printer.id]} alt={printer.name}>
             <article
-              className="relative z-[1] overflow-hidden rounded-panel border-[3px] border-ink bg-aqua-wash shadow-stamp"
+              className="overflow-hidden rounded-panel border-[3px] border-ink bg-aqua-wash shadow-stamp"
             >
               <div className="layers flex flex-wrap items-baseline justify-between gap-[8px] border-b-[3px] border-ink px-[22px] py-[11px]">
                 <h2 className="m-0 font-display text-[20px] text-ink">{printer.name}</h2>
@@ -107,7 +92,7 @@ export async function PrinterHours() {
                 </ol>
               )}
             </article>
-          </div>
+          </PrinterPeek>
         );
       })}
     </section>
