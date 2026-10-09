@@ -16,8 +16,8 @@ import { useEffect, useRef } from "react";
  * sorting. Orthographic, no perspective, like a flat toy.
  */
 
-const SIZE = 80; // CSS px, square
-const HALF = 21; // half the cube's edge
+const SIZE = 120; // CSS px, square
+const HALF = 32; // half the cube's edge
 const TURN_MS = 16000;
 
 // One per face, in FACES order: left, right, top, bottom, back, front.
