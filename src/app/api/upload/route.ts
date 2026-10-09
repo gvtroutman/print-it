@@ -85,7 +85,8 @@ async function handleUpload(request: Request, user: Actor) {
   const checked = await checkWish({
     title: form.get("title") ?? "",
     material: form.get("material"),
-    colorName: form.get("colorName"),
+    colorName: form.get("colorName") ?? "",
+    swatchId: form.get("swatchId"),
     quantity: form.get("quantity"),
     priority: form.get("priority") ?? undefined,
     note: form.get("note") ?? "",

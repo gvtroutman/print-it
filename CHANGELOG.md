@@ -7,6 +7,15 @@ Notable changes. Every entry names a released version; deployments pin
 
 ### Added
 
+- **Ask for a colour the owner can get.** Under the shelf colours, the
+  request form can search the filamentcolors.xyz swatch library for spools of
+  the chosen material, by words and shade. The ticket snapshots the spool's
+  name, maker, type, colour and buy link, and wears a "Spool to buy" chip on
+  the ticket and in the queue. The server keeps its own copy of the library
+  (refreshed daily) and reads the pick back from it, so a request cannot name
+  a colour or a kind of filament the library does not list. New
+  `GET /api/filament-library`, and `swatchId` on the wish. Needs the
+  `story_spool_to_buy` migration, which is additive.
 - **An invitation no longer needs an email address.** The printer owner can
   invite somebody by name alone; the link is shown once to hand over, and the
   member signs up with just that name. Such an account carries a non-routable

@@ -7,7 +7,7 @@ import { formatBytes } from "@/lib/models";
 import { PRIORITY_RANK, quantityText, relativeTime } from "@/lib/catalog";
 import { AppHeader } from "@/components/app-header";
 import { AdminActions } from "@/components/admin-actions";
-import { Kicker, Notice, StatusChip, PriorityChip } from "@/components/ui";
+import { Kicker, Notice, StatusChip, PriorityChip, SpoolToBuyChip } from "@/components/ui";
 import { Toast } from "@/components/toast";
 import { FilamentSpool } from "@/components/color-swatch";
 
@@ -86,6 +86,7 @@ export default async function QueuePage({
                   <div className="min-w-[220px] flex-[1_1_280px]">
                     <p className="m-0 flex flex-wrap items-center gap-[8px] font-mono text-[11.5px] font-bold tracking-[0.06em] text-ink-3">
                       <PriorityChip priority={story.priority} />
+                      {story.swatchId !== null && <SpoolToBuyChip />}
                       <span>
                         {[storyRef(story.id), story.filename, story.fileSize !== null ? formatBytes(story.fileSize) : "no model yet"]
                           .filter(Boolean)
@@ -155,6 +156,7 @@ export default async function QueuePage({
                   </p>
                 </div>
                 <StatusChip status={story.status} />
+                {story.swatchId !== null && <SpoolToBuyChip />}
                 {story.flagged && (
                   <span className="rounded-chip border-2 border-ink bg-cherry px-[9px] py-[2px] font-mono text-[10.5px] font-bold uppercase text-ink">
                     needs a look

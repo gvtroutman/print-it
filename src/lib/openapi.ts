@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 
 import { auth } from "@/lib/auth";
-import { COLOR_MODES, STORY_PRIORITIES, WishSchema } from "@/lib/catalog";
+import { COLOR_MODES, STORY_PRIORITIES, SWATCH_SHADES, WishSchema } from "@/lib/catalog";
 import { TOP_MARK, TRAITS } from "@/lib/filament-traits";
 import { ACCEPTED_EXTENSIONS, MAX_BYTES, formatBytes } from "@/lib/models";
 import { FLOW } from "@/lib/scope";
@@ -122,6 +122,19 @@ const STORY_SCHEMA = {
           description: "The swatch as a CSS background: a color or a linear-gradient.",
         },
         mode: { type: "string", enum: [...COLOR_MODES] },
+        toBuy: {
+          type: ["object", "null"],
+          description:
+            "A spool the owner does not have yet, picked from the filamentcolors.xyz library " +
+            "(`swatchId` on the request). Null for a color on the shelf.",
+          properties: {
+            swatchId: { type: "integer" },
+            maker: { type: "string", examples: ["Polymaker"] },
+            type: { type: "string", examples: ["Silk PLA"] },
+            buyUrl: { type: ["string", "null"], format: "uri" },
+            swatchUrl: { type: "string", format: "uri" },
+          },
+        },
       },
     },
     note: { type: "string" },
@@ -846,6 +859,58 @@ export async function buildOpenApiDocument() {
                 },
               },
             },
+            ...COMMON_ERRORS,
+          },
+        },
+      },
+
+      "/api/filament-library": {
+        get: {
+          tags: ["stories"],
+          summary: "Spools the owner can buy",
+          description:
+            "Searches the filamentcolors.xyz swatch library for spools of one " +
+            "material that the owner does not have but can get. Send a swatch's " +
+            "`id` as `swatchId` on a request instead of `colorName`; the server " +
+            "reads the swatch back from its own copy of the library and refuses " +
+            "one that is not the material's kind of filament. At most 60 come back.",
+          parameters: [
+            { name: "material", in: "query", required: true, schema: { type: "string" }, description: "A material from `GET /api/catalog`." },
+            { name: "q", in: "query", schema: { type: "string" }, description: "Words that must all appear in the color name, maker or type." },
+            { name: "shade", in: "query", schema: { type: "string", enum: SWATCH_SHADES.map((s) => s.key) } },
+          ],
+          responses: {
+            "200": {
+              description: "The matching spools, those named like the material first.",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      total: { type: "integer", description: "How many matched, before the cap." },
+                      swatches: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            id: { type: "integer" },
+                            name: { type: "string", examples: ["Galaxy Black"] },
+                            maker: { type: "string", examples: ["Prusament"] },
+                            type: { type: "string", examples: ["PLA"] },
+                            hex: { type: "string", examples: ["#2b2b33"] },
+                            shade: { type: ["string", "null"], enum: [...SWATCH_SHADES.map((s) => s.key), null] },
+                            buyUrl: { type: ["string", "null"], format: "uri" },
+                            pageUrl: { type: "string", format: "uri" },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            "400": errorResponse("No material, or not a shade."),
+            "503": errorResponse("The library cannot be reached right now."),
             ...COMMON_ERRORS,
           },
         },

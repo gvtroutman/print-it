@@ -234,6 +234,18 @@ export function PriorityChip({
   );
 }
 
+/**
+ * A ticket whose colour the owner does not have yet: they picked a spool to
+ * buy from the filamentcolors.xyz library rather than one on the shelf.
+ */
+export function SpoolToBuyChip() {
+  return (
+    <span className="inline-block flex-none rounded-chip border-2 border-ink bg-aqua px-[8px] py-[1px] font-mono text-[10.5px] font-bold uppercase tracking-[0.06em] text-ink">
+      Spool to buy
+    </span>
+  );
+}
+
 export function StatusChip({
   status,
   label,

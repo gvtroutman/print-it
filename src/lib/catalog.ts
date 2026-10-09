@@ -54,6 +54,84 @@ export type CatalogMaterialChoice = {
   colors: CatalogColorChoice[];
 };
 
+/**
+ * The shade families filamentcolors.xyz files every swatch under, by its own
+ * codes, in the order the "can get" picker offers them.
+ */
+export const SWATCH_SHADES = [
+  { key: "WHT", label: "White", dot: "#f4f4f0" },
+  { key: "GRY", label: "Grey", dot: "#8c939a" },
+  { key: "BLK", label: "Black", dot: "#1b1d1f" },
+  { key: "RED", label: "Red", dot: "#d6312b" },
+  { key: "RNG", label: "Orange", dot: "#f08a24" },
+  { key: "YLW", label: "Yellow", dot: "#f5d033" },
+  { key: "GRN", label: "Green", dot: "#3aa655" },
+  { key: "BLU", label: "Blue", dot: "#2f6fd1" },
+  { key: "PPL", label: "Purple", dot: "#7d4cc2" },
+  { key: "PNK", label: "Pink", dot: "#f27ab0" },
+  { key: "BRN", label: "Brown", dot: "#8a5a35" },
+  { key: "TRN", label: "Clear", dot: "#dfe9ee" },
+] as const;
+export type SwatchShade = (typeof SWATCH_SHADES)[number]["key"];
+
+/**
+ * A spool the owner does not have but can buy, as the filamentcolors.xyz
+ * library describes it. See src/lib/filament-library.ts.
+ */
+export type LibrarySwatch = {
+  id: number;
+  name: string;
+  maker: string;
+  /** The library's filament type, e.g. "Silk PLA" or "PETG". */
+  type: string;
+  /** "#rrggbb", lower case. */
+  hex: string;
+  /** The filament table's family for `type`, or null when it knows none. */
+  family: string | null;
+  shade: SwatchShade | null;
+  /** Where to buy it: the maker's shop when listed, else the library's Amazon link. */
+  buyUrl: string | null;
+  /** The swatch's own page on filamentcolors.xyz. */
+  pageUrl: string;
+};
+
+/** A swatch's page on filamentcolors.xyz. */
+export const swatchPageUrl = (id: number) => `https://filamentcolors.xyz/swatch/${id}/`;
+
+/**
+ * The spool a ticket asks the owner to buy, from the ticket's own snapshot,
+ * or null for a shelf colour. The buy link was checked when the library was
+ * read, and is checked again here because it ends up in an `href`.
+ */
+export function storySwatch(story: {
+  swatchId: number | null;
+  swatchMaker: string | null;
+  swatchType: string | null;
+  swatchBuyUrl: string | null;
+  colorName: string;
+  colorHex: string;
+}): LibrarySwatch | null {
+  if (story.swatchId === null) return null;
+  let buyUrl: string | null = null;
+  try {
+    const url = story.swatchBuyUrl ? new URL(story.swatchBuyUrl) : null;
+    if (url && (url.protocol === "https:" || url.protocol === "http:")) buyUrl = url.href;
+  } catch {
+    /* not a link; leave it off */
+  }
+  return {
+    id: story.swatchId,
+    name: story.colorName,
+    maker: story.swatchMaker ?? "",
+    type: story.swatchType ?? "",
+    hex: story.colorHex,
+    family: null,
+    shade: null,
+    buyUrl,
+    pageUrl: swatchPageUrl(story.swatchId),
+  };
+}
+
 /** The longest material description the owner can save. */
 export const MAX_MATERIAL_DESCRIPTION = 280;
 
@@ -100,7 +178,19 @@ export const WishSchema = z.object({
   // the database in the upload route. These bounds keep hostile form values
   // small before that query runs.
   material: z.string().trim().min(1, "Pick a material.").max(40),
-  colorName: z.string().trim().min(1, "Pick a color.").max(40),
+  // A shelf colour by name, or a spool to buy by its filamentcolors.xyz id;
+  // see the refinement below. With a swatch the name is read from the
+  // library, not from here, so this may be left empty.
+  colorName: z.string().trim().max(40).optional().default(""),
+  swatchId: z.coerce
+    .number("That is not a swatch.")
+    .int("That is not a swatch.")
+    .positive("That is not a swatch.")
+    .nullish()
+    .describe(
+      "A spool to buy instead of a shelf color: an id from GET /api/filament-library. " +
+        "Replaces colorName; the swatch has to be the kind of filament `material` is.",
+    ),
   quantity: QuantitySchema,
   // Optional on the wire, so a client written before priority existed still
   // files a request — it comes out `medium`, which is what it would have meant.
@@ -114,6 +204,9 @@ export const WishSchema = z.object({
     .max(2000, "Those print settings are very long.")
     .optional()
     .default(""),
+}).refine((wish) => wish.colorName !== "" || wish.swatchId != null, {
+  message: "Pick a color.",
+  path: ["colorName"],
 });
 
 export type Wish = z.infer<typeof WishSchema>;

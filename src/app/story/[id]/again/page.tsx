@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 
 import { getStoryOr404, printerName, requireUser, storyRef } from "@/lib/authz";
+import { storySwatch } from "@/lib/catalog";
 import { availableCatalog } from "@/lib/catalog-data";
+import { warmLibrary } from "@/lib/filament-library";
 import { AppHeader } from "@/components/app-header";
 import { Kicker, Notice } from "@/components/ui";
 import { UploadForm } from "@/app/upload/upload-form";
@@ -37,6 +39,8 @@ export default async function PrintAgainPage({
   if (story.uploader.id !== user.id) notFound();
 
   const [owner, catalog] = await Promise.all([printerName(), availableCatalog()]);
+  // So the "can get" picker finds the library ready by the time it is opened.
+  warmLibrary();
   const ref = storyRef(story.id);
 
   return (
@@ -66,6 +70,7 @@ export default async function PrintAgainPage({
               title: story.title,
               material: story.material,
               colorName: story.colorName,
+              swatch: storySwatch(story),
               quantity: story.quantity,
               priority: story.priority,
               note: story.note,

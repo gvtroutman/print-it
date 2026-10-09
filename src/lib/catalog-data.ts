@@ -1,7 +1,8 @@
 import "server-only";
 
 import { db } from "@/lib/db";
-import type { CatalogMaterialChoice } from "@/lib/catalog";
+import type { CatalogMaterialChoice, ColorMode, Wish } from "@/lib/catalog";
+import { LibraryUnavailable, librarySwatch, swatchFits } from "@/lib/filament-library";
 
 /** Only materials with at least one available colour can be requested. */
 export async function availableCatalog(): Promise<CatalogMaterialChoice[]> {
@@ -59,3 +60,83 @@ export function availableSelection(material: string, colorName: string) {
     select: { hex: true, style: true, mode: true },
   });
 }
+
+/** The spool a ticket asks the owner to buy, as the story row stores it. */
+export type SpoolToBuy = {
+  swatchId: number;
+  swatchMaker: string;
+  swatchType: string;
+  swatchBuyUrl: string | null;
+};
+
+/** What a wish's colour comes to, ready to snapshot onto a ticket. */
+export type Selection = {
+  colorName: string;
+  hex: string;
+  style: string;
+  mode: ColorMode;
+  /** Null for a colour on the shelf. */
+  toBuy: SpoolToBuy | null;
+};
+
+export type SelectionResult =
+  | { ok: true; selection: Selection }
+  /** `off`: not on the shelf. `misfit`: a swatch of another kind of filament. */
+  | { ok: false; reason: "off" | "gone" | "misfit" | "unreachable" };
+
+/**
+ * A wish's material and colour, held to what can be had today: a shelf
+ * colour from the catalogue, or a spool to buy from the filamentcolors.xyz
+ * library. A spool to buy still needs its material on offer — the owner
+ * prints the materials they print — and has to be that kind of filament.
+ * Its name and colour come from the library, never from the form.
+ */
+export async function resolveSelection(wish: Pick<Wish, "material" | "colorName" | "swatchId">): Promise<SelectionResult> {
+  if (wish.swatchId == null) {
+    const found = await availableSelection(wish.material, wish.colorName);
+    return found ? { ok: true, selection: { colorName: wish.colorName, ...found, toBuy: null } } : { ok: false, reason: "off" };
+  }
+
+  const material = await db.catalogMaterial.findFirst({
+    where: { active: true, name: wish.material, colors: { some: { active: true } } },
+    select: { name: true },
+  });
+  if (!material) return { ok: false, reason: "off" };
+
+  let swatch;
+  try {
+    swatch = await librarySwatch(wish.swatchId);
+  } catch (error) {
+    if (error instanceof LibraryUnavailable) return { ok: false, reason: "unreachable" };
+    throw error;
+  }
+  if (!swatch) return { ok: false, reason: "gone" };
+  if (!swatchFits(material.name, swatch)) return { ok: false, reason: "misfit" };
+
+  return {
+    ok: true,
+    selection: {
+      colorName: swatch.name,
+      hex: swatch.hex,
+      style: swatch.hex,
+      mode: "solid",
+      toBuy: {
+        swatchId: swatch.id,
+        swatchMaker: swatch.maker,
+        swatchType: swatch.type,
+        swatchBuyUrl: swatch.buyUrl,
+      },
+    },
+  };
+}
+
+/** What to tell the requester when `resolveSelection` says no. */
+export const SELECTION_REFUSAL: Record<Exclude<SelectionResult, { ok: true }>["reason"], { status: number; message: string }> = {
+  off: { status: 400, message: "That material and color combination is no longer available." },
+  gone: { status: 409, message: "That spool is not in the filamentcolors.xyz library any more — pick another." },
+  misfit: { status: 400, message: "That spool is a different kind of filament from the material picked." },
+  unreachable: {
+    status: 503,
+    message: "The filamentcolors.xyz library cannot be reached right now. Pick a color on the shelf, or try again later.",
+  },
+};

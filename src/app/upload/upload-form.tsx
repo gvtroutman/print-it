@@ -8,6 +8,7 @@ import {
   PRIORITY_CHIP,
   STORY_PRIORITIES,
   type CatalogMaterialChoice,
+  type LibrarySwatch,
   type StoryPriorityName,
 } from "@/lib/catalog";
 // The same numbers the server enforces. `models.ts` cannot be imported here —
@@ -44,6 +45,8 @@ import { MaterialChart, TraitSticker } from "@/components/material-chart";
 import { CATEGORIES, categoriesOf, traitsFor, type CategoryKey } from "@/lib/filament-traits";
 import { InkCube } from "@/components/ink-cube";
 
+import { SpoolFinder } from "./spool-finder";
+
 /**
  * An old ticket being printed again. When this is given the form has no
  * dropzone — the file is the old ticket's, copied on the server — and opens
@@ -59,6 +62,8 @@ export type Again = {
   title: string;
   material: string;
   colorName: string;
+  /** The spool the old ticket asked the owner to buy, or null for a shelf colour. */
+  swatch: LibrarySwatch | null;
   quantity: number;
   priority: StoryPriorityName;
   note: string;
@@ -266,12 +271,19 @@ export function UploadForm({
     ? wanted ?? catalog.find((item) => item.name === "PETG") ?? catalog[0]!
     : null;
   const wantedColor = wanted?.colors.find((item) => item.name === again?.colorName);
-  const initialColor = initialMaterial
+  // A spool to buy carries across while its material is still offered; the
+  // server checks it against the library when the request is sent.
+  const initialSwatch = wanted ? again?.swatch ?? null : null;
+  const initialColor = initialMaterial && !initialSwatch
     ? wantedColor ?? initialMaterial.colors.find((item) => item.name === "Slate") ?? initialMaterial.colors[0]!
     : null;
   const gone = again
     ? [
-        !wanted ? again.material : !wantedColor ? `${again.material} in ${again.colorName}` : null,
+        !wanted
+          ? again.material
+          : !wantedColor && !initialSwatch
+            ? `${again.material} in ${again.colorName}`
+            : null,
       ].filter((x): x is string => x !== null)
     : [];
 
@@ -309,6 +321,9 @@ export function UploadForm({
   const [quantityDraft, setQuantityDraft] = useState<string | null>(null);
   const [priority, setPriority] = useState<StoryPriorityName>(again?.priority ?? DEFAULT_STORY_PRIORITY);
   const [color, setColor] = useState<string | null>(initialColor?.name ?? null);
+  // A spool the owner can get instead of one on the shelf. One or the other:
+  // picking either clears the other.
+  const [toBuy, setToBuy] = useState<LibrarySwatch | null>(initialSwatch);
   const [note, setNote] = useState(again?.note ?? "");
 
   /**
@@ -434,7 +449,8 @@ export function UploadForm({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          url, fileId, title, material, colorName: color, quantity, priority, note, links,
+          url, fileId, title, material, colorName: color ?? "", swatchId: toBuy?.id ?? null,
+          quantity, priority, note, links,
         }),
       });
       const body = await res.json().catch(() => ({}));
@@ -466,7 +482,10 @@ export function UploadForm({
         method: "POST",
         headers: { "content-type": "application/json" },
         // No printSettings: left out, the old ticket's carry across as they were.
-        body: JSON.stringify({ title, material, colorName: color, quantity, priority, note }),
+        // Both colour fields, always: naming either replaces the old ticket's choice.
+        body: JSON.stringify({
+          title, material, colorName: color ?? "", swatchId: toBuy?.id ?? null, quantity, priority, note,
+        }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -489,7 +508,7 @@ export function UploadForm({
     if (category === null) {
       return setPhase({ kind: "error", message: "Pick what it should be good at, then a filament from that shelf." });
     }
-    if (material === null || color === null) {
+    if (material === null || (color === null && toBuy === null)) {
       return setPhase({ kind: "error", message: "Pick a material first — the chart shows what each one is good at." });
     }
     if (again) return void sendAgain(again);
@@ -519,7 +538,8 @@ export function UploadForm({
     for (const l of links) body.append("links", l);
     body.set("title", title);
     body.set("material", material);
-    body.set("colorName", color);
+    if (toBuy) body.set("swatchId", String(toBuy.id));
+    else if (color) body.set("colorName", color);
     body.set("quantity", String(quantity));
     body.set("priority", priority);
     body.set("note", note);
@@ -582,6 +602,9 @@ export function UploadForm({
   function chooseMaterial(next: string) {
     const item = catalog.find((candidate) => candidate.name === next);
     if (!item) return;
+    // A spool to buy was one kind of filament; another material starts from its shelf.
+    if (item.name !== material) setToBuy(null);
+    else if (toBuy) return;
     setMaterial(item.name);
     setColor((item.colors.find((candidate) => candidate.name === "Slate") ?? item.colors[0]!).name);
   }
@@ -590,6 +613,16 @@ export function UploadForm({
   function compareMaterials() {
     setMaterial(null);
     setColor(null);
+    setToBuy(null);
+  }
+
+  /** A spool to buy instead of the shelf colour; null goes back to the shelf. */
+  function chooseToBuy(next: LibrarySwatch | null) {
+    setToBuy(next);
+    if (next) setColor(null);
+    else if (color === null && selectedMaterial) {
+      setColor((selectedMaterial.colors.find((c) => c.name === "Slate") ?? selectedMaterial.colors[0]!).name);
+    }
   }
 
   return (
@@ -995,7 +1028,10 @@ export function UploadForm({
                 role="radio"
                 aria-checked={active}
                 aria-label={`${c.name} filament`}
-                onClick={() => setColor(c.name)}
+                onClick={() => {
+                  setColor(c.name);
+                  setToBuy(null);
+                }}
                 className="flex min-w-0 cursor-pointer flex-col items-center gap-[7px] border-0 bg-transparent p-0 sm:w-[110px]"
               >
                 <FilamentSpool
@@ -1014,6 +1050,14 @@ export function UploadForm({
             );
           })}
         </div>
+        {/* Keyed by material: another material is another library search. */}
+        <SpoolFinder
+          key={selectedMaterial.name}
+          material={selectedMaterial.name}
+          owner={owner}
+          picked={toBuy}
+          onPick={chooseToBuy}
+        />
       </fieldset>
       )}
         </>

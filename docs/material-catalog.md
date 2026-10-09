@@ -56,6 +56,30 @@ re-queue is refused and says so, and the old ticket is left as it was.
 `GET /api/catalog` returns the same list the form is drawn from, for clients of
 the JSON API — see [the API](api.md).
 
+## Spools the owner can get
+
+Under a material's shelf colours, the request form offers "Not on the shelf?
+Find a spool … can get". It searches the [filamentcolors.xyz](https://filamentcolors.xyz/)
+swatch library for that kind of filament, by words (colour, maker, type) and
+by shade. The match uses the filament table in `src/lib/filament-traits.ts`:
+a "Silk PLA" material offers any PLA swatch (silk ones first), "PLA-CF" only
+fibre-filled PLA, and a name the table does not know has to appear in the
+swatch's type ("Wood" finds "PLA Wood").
+
+The browser never calls that site. The server (`src/lib/filament-library.ts`)
+sweeps the whole library into memory, about 25 pages and 30 seconds, when the
+upload page first loads, and keeps it for a day. A failed refresh keeps the old
+copy; with no copy at all, picking a spool is refused with 503 and the shelf
+still works.
+
+The form sends only the swatch's id. At submission the server reads it back
+from its copy, checks the material is still on offer and is the swatch's kind
+of filament, and snapshots the name, hex, maker, type and buy link onto the
+ticket (`swatchId`, `swatchMaker`, `swatchType`, `swatchBuyUrl`). The ticket
+then shows a "Spool to buy" chip, with links to buy the spool and to see the
+real swatch. It is otherwise an ordinary request. Printing it again
+asks for the same spool, checked against the library as it is that day.
+
 ## What "whatever" paints
 
 A ticket carries two colours: `colorStyle`, the swatch as drawn, and

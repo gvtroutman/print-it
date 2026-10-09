@@ -71,6 +71,7 @@ no header that names a user.
 | `POST` | `/api/notifications/read` | Mark one read, or all of them. |
 | `DELETE` | `/api/notifications/{id}` | Dismiss one. |
 | `GET` | `/api/catalog` | The materials and colours on offer right now, and which sites — if any — this instance imports from. |
+| `GET` | `/api/filament-library` | Spools of one material the owner can buy, searched in the filamentcolors.xyz library. Send one's `id` as `swatchId` instead of `colorName`. |
 | `POST` | `/api/upload` | Upload a model and open a request. Multipart. |
 | `POST` | `/api/import/files` | What a link to a model offers: the model and its printable files. `501` unless the instance imports. |
 | `POST` | `/api/import` | Open a request from one of those files instead of an upload. |

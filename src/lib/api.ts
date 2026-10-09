@@ -6,6 +6,7 @@ import { storyRef, type Actor } from "@/lib/scope";
 import { StoryProblem, type CommentRow, type StoryRow } from "@/lib/stories";
 import { trustedSourceLink } from "@/lib/import-source";
 import { displayLink } from "@/lib/links";
+import { storySwatch } from "@/lib/catalog";
 import type { Prisma } from "@prisma/client";
 
 /**
@@ -185,6 +186,14 @@ export function storyResource(story: StoryRow) {
       // Tickets filed before swatches had a style carry none; the hex is it.
       style: story.colorStyle ?? story.colorHex,
       mode: story.colorMode,
+      // A spool the owner has to buy first, from the filamentcolors.xyz
+      // library; null for a colour on the shelf.
+      toBuy: (() => {
+        const swatch = storySwatch(story);
+        return swatch
+          ? { swatchId: swatch.id, maker: swatch.maker, type: swatch.type, buyUrl: swatch.buyUrl, swatchUrl: swatch.pageUrl }
+          : null;
+      })(),
     },
     note: story.note,
     // Null for a request filed as words alone, with no model yet.

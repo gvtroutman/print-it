@@ -32,7 +32,8 @@ export const POST = withActor(async (request, actor) => {
   const checked = await checkWish({
     title: body.title ?? "",
     material: body.material,
-    colorName: body.colorName,
+    colorName: body.colorName ?? "",
+    swatchId: body.swatchId,
     quantity: body.quantity,
     priority: body.priority ?? undefined,
     note: body.note ?? "",

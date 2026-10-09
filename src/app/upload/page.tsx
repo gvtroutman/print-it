@@ -3,6 +3,7 @@ import { AppHeader } from "@/components/app-header";
 import { Notice } from "@/components/ui";
 import { availableCatalog } from "@/lib/catalog-data";
 import { enabledSources } from "@/lib/import-source";
+import { warmLibrary } from "@/lib/filament-library";
 import { UploadForm } from "./upload-form";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +11,8 @@ export const dynamic = "force-dynamic";
 export default async function UploadPage() {
   const user = await requireUser("/upload");
   const [owner, catalog] = await Promise.all([printerName(), availableCatalog()]);
+  // So the "can get" picker finds the library ready by the time it is opened.
+  warmLibrary();
 
   return (
     <>

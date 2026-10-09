@@ -5,7 +5,7 @@ import { notify, printerOwner, storyRef } from "@/lib/authz";
 import type { Actor } from "@/lib/scope";
 import { record } from "@/lib/audit";
 import { WishSchema, type Wish } from "@/lib/catalog";
-import { availableSelection } from "@/lib/catalog-data";
+import { SELECTION_REFUSAL, resolveSelection, type Selection } from "@/lib/catalog-data";
 import { REJECTION_COPY, extensionOf, inspectModel, safeFilename } from "@/lib/models";
 import { MEDIA_REJECTION_COPY, inspectMedia } from "@/lib/media";
 import { parseLinks } from "@/lib/links";
@@ -35,7 +35,7 @@ const problem = (status: number, message: string) => new StoryProblem(status, me
 
 export type CheckedWish = {
   wish: Wish;
-  selection: NonNullable<Awaited<ReturnType<typeof availableSelection>>>;
+  selection: Selection;
   /** Cleaned, http(s) only, no repeats — see src/lib/links.ts. */
   links: string[];
 };
@@ -54,10 +54,12 @@ export async function checkWish(raw: Record<string, unknown>): Promise<CheckedWi
   }
   const wish = parsed.data;
 
-  const selection = await availableSelection(wish.material, wish.colorName);
-  if (!selection) {
-    throw problem(400, "That material and color combination is no longer available.");
+  const resolved = await resolveSelection(wish);
+  if (!resolved.ok) {
+    const refusal = SELECTION_REFUSAL[resolved.reason];
+    throw problem(refusal.status, refusal.message);
   }
+  const selection = resolved.selection;
 
   let links: string[];
   try {
@@ -233,10 +235,12 @@ export async function openRequest(
         quantity: wish.quantity,
         priority: wish.priority,
         material: wish.material,
-        colorName: wish.colorName,
+        colorName: selection.colorName,
         colorHex: selection.hex,
         colorStyle: selection.style,
         colorMode: selection.mode,
+        // A spool the owner has to buy first; left null for a shelf colour.
+        ...selection.toBuy,
         note: wish.note,
         printSettings: wish.printSettings,
         filename,
@@ -297,6 +301,7 @@ export async function openRequest(
         : { model: false }),
       material: wish.material,
       quantity: wish.quantity,
+      ...(selection.toBuy ? { spoolToBuy: selection.toBuy.swatchId } : {}),
       ...(extras.length ? { attachments: extras.map((e) => `${e.kind}:${e.filename}`) } : {}),
       ...(links.length ? { links: links.length } : {}),
       ...(origin ? { source: origin.source, sourceUrl: origin.url } : {}),

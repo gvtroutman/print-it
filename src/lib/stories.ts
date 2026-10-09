@@ -17,7 +17,7 @@ import {
 } from "@/lib/scope";
 import { copyModel, deleteModel, storageKeyFor } from "@/lib/storage";
 import { extensionOf } from "@/lib/models";
-import { availableSelection } from "@/lib/catalog-data";
+import { SELECTION_REFUSAL, resolveSelection } from "@/lib/catalog-data";
 import { STORY_PRIORITIES, WishSchema } from "@/lib/catalog";
 
 /**
@@ -134,6 +134,10 @@ export const STORY_FIELDS = {
   colorHex: true,
   colorStyle: true,
   colorMode: true,
+  swatchId: true,
+  swatchMaker: true,
+  swatchType: true,
+  swatchBuyUrl: true,
   note: true,
   filename: true,
   fileSize: true,
@@ -620,7 +624,7 @@ export async function withdrawStory(actor: Actor, id: number) {
  * opens a brand-new `Requested` ticket from any of the requester's own past
  * tickets — a finished one, a declined one, anything — carrying the wish
  * across, with whatever the requester changed on the way: `changes` may name
- * any wish field (title, material, colorName, quantity, note,
+ * any wish field (title, material, colorName or swatchId, quantity, note,
  * printSettings) and the rest are taken from the old ticket. The file is the
  * one thing that cannot change; a different model is a different request.
  *
@@ -639,7 +643,7 @@ export async function requeueStory(
     where: { AND: [{ id }, storyScope(actor)] },
     select: {
       id: true, title: true, quantity: true, priority: true, material: true,
-      colorName: true, note: true, printSettings: true,
+      colorName: true, swatchId: true, note: true, printSettings: true,
       filename: true, fileSize: true,
       mimeType: true, storageKey: true, dims: true, sourceUrl: true, uploaderId: true,
       links: true,
@@ -662,10 +666,15 @@ export async function requeueStory(
   // to exactly the rules a fresh request would be.
   const pick = (key: keyof typeof src & string) =>
     changes[key] === undefined ? src[key] : changes[key];
+  // The colour is one choice made two ways — a shelf colour by name, or a
+  // spool to buy by swatch — so naming either replaces both: a reprint of a
+  // bought spool that names a shelf colour is that shelf colour.
+  const recoloured = changes.colorName !== undefined || changes.swatchId !== undefined;
   const parsed = WishSchema.safeParse({
     title: pick("title"),
     material: pick("material"),
-    colorName: pick("colorName"),
+    colorName: recoloured ? changes.colorName ?? "" : src.colorName,
+    swatchId: recoloured ? changes.swatchId : src.swatchId,
     quantity: pick("quantity"),
     priority: pick("priority"),
     note: pick("note"),
@@ -681,14 +690,20 @@ export async function requeueStory(
   // for a material or colour the owner had taken off, and the copy would have
   // carried the old ticket's swatch rather than what is actually on offer.
   // The old ticket itself is untouched either way.
-  const selection = await availableSelection(wish.material, wish.colorName);
-  if (!selection) {
-    throw problem(
-      409,
-      `${wish.material} in ${wish.colorName} is not on the shelf any more — ` +
-        `pick from what is.`,
-    );
+  // A spool to buy answers to the library as it is today in the same way.
+  const resolved = await resolveSelection(wish);
+  if (!resolved.ok) {
+    if (resolved.reason === "off") {
+      throw problem(
+        409,
+        `${wish.material} in ${wish.colorName || src.colorName} is not on the shelf any more — ` +
+          `pick from what is.`,
+      );
+    }
+    const refusal = SELECTION_REFUSAL[resolved.reason];
+    throw problem(refusal.status, refusal.message);
   }
+  const selection = resolved.selection;
 
   // Copy the object first, so a failure here opens no ticket that points at
   // geometry which was never written — the same ordering the upload uses.
@@ -725,10 +740,11 @@ export async function requeueStory(
       quantity: wish.quantity,
       priority: wish.priority,
       material: wish.material,
-      colorName: wish.colorName,
+      colorName: selection.colorName,
       colorHex: selection.hex,
       colorStyle: selection.style,
       colorMode: selection.mode,
+      ...selection.toBuy,
       note: wish.note,
       printSettings: wish.printSettings,
       filename: src.filename,
@@ -759,8 +775,9 @@ export async function requeueStory(
   // Which fields differ from the old ticket — names only, for the trail. The
   // values are on the two tickets, and a note is not something to copy into
   // a log.
-  const changed = (["title", "material", "colorName", "quantity", "priority", "note", "printSettings"] as const)
-    .filter((key) => (key === "title" ? title : wish[key]) !== src[key]);
+  const now = { ...wish, title, colorName: selection.colorName, swatchId: selection.toBuy?.swatchId ?? null };
+  const changed = (["title", "material", "colorName", "swatchId", "quantity", "priority", "note", "printSettings"] as const)
+    .filter((key) => now[key] !== src[key]);
 
   const owner = await printerOwner();
   if (owner && owner.id !== actor.id) {

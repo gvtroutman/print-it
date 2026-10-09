@@ -2,12 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getStoryOr404, printerName, requireUser, storyRef, FLOW } from "@/lib/authz";
-import { PRIORITY_CHIP, STORY_PRIORITIES, quantityText, relativeTime } from "@/lib/catalog";
+import { PRIORITY_CHIP, STORY_PRIORITIES, quantityText, relativeTime, storySwatch } from "@/lib/catalog";
 import { changeStoryPriority } from "@/app/actions/stories";
 import { formatBytes } from "@/lib/models";
 import { trustedSourceLink } from "@/lib/import-source";
 import { AppHeader } from "@/components/app-header";
-import { Fact, Notice, StatusChip } from "@/components/ui";
+import { Fact, Notice, SpoolToBuyChip, StatusChip } from "@/components/ui";
 import { AdminActions } from "@/components/admin-actions";
 import { Conversation } from "@/components/conversation";
 import { OrderMedia, type MediaItem } from "@/components/order-media";
@@ -88,6 +88,7 @@ export default async function StoryPage({
   ];
   // Re-checked here rather than trusted from the column: these become hrefs.
   const links = story.links.flatMap((l) => displayLink(l) ?? []);
+  const toBuy = storySwatch(story);
 
   return (
     <>
@@ -231,6 +232,26 @@ export default async function StoryPage({
                   </span>
                 </Fact>
               </div>
+
+              {/* A colour the owner does not have yet: what to buy, and where. */}
+              {toBuy && (
+                <div className="mt-[17.6px] flex flex-wrap items-center gap-x-[13.2px] gap-y-[6px] border-t-2 border-dashed border-rule pt-[17.6px]">
+                  <SpoolToBuyChip />
+                  <span className="text-[14.5px] text-ink-2">
+                    <strong className="text-ink">{toBuy.maker}</strong> {toBuy.type} in {toBuy.name}
+                  </span>
+                  <span className="flex flex-wrap gap-x-[13.2px] font-mono text-[12.5px] font-bold">
+                    {toBuy.buyUrl && (
+                      <a href={toBuy.buyUrl} target="_blank" rel="noreferrer noopener" className="text-ink-2 underline underline-offset-4 hover:text-cherry-dk">
+                        Buy it ↗
+                      </a>
+                    )}
+                    <a href={toBuy.pageUrl} target="_blank" rel="noreferrer noopener" className="text-ink-2 underline underline-offset-4 hover:text-cherry-dk">
+                      Real swatch on filamentcolors.xyz ↗
+                    </a>
+                  </span>
+                </div>
+              )}
 
               {/* Change the priority after filing — the requester's on their
                   own ticket, the owner's on any, while it is still on the
