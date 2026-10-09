@@ -967,7 +967,7 @@ export function UploadForm({
       </div>
 
       {/* ---- actions ---- */}
-      <div className="mt-[26.4px] flex flex-wrap items-end gap-[13.2px]">
+      <div className="mt-[26.4px] flex flex-wrap items-end justify-center gap-[13.2px]">
         {/* Amount sits by the send button: the last thing settled before it goes. */}
         <div>
           <Label htmlFor="quantity">Amount</Label>
@@ -1019,13 +1019,6 @@ export function UploadForm({
           {busy
             ? again ? "Sending…" : picked ? "Fetching it…" : `Sending… ${phase.percent}%`
             : again ? `Send it to ${owner} again` : `Send it to ${owner}`}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={() => router.push(again ? `/story/${again.id}` : "/me")}
-        >
-          Cancel
         </Button>
       </div>
     </form>
