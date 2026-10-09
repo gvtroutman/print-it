@@ -2,16 +2,17 @@
 
 import { useEffect, useState } from "react";
 
-import { SWATCH_SHADES, type LibrarySwatch, type SwatchShade } from "@/lib/catalog";
-import { FilamentSpool } from "@/components/color-swatch";
+import { SWATCH_SHADES, type SwatchChoice, type SwatchShade } from "@/lib/catalog";
+import { SwatchPhoto } from "@/components/swatch-photo";
 
 /** What `GET /api/filament-library` answers with. */
-type Found = { total: number; swatches: LibrarySwatch[] };
+type Found = { total: number; swatches: SwatchChoice[] };
 
 type Search =
   | { kind: "loading" }
   | { kind: "error"; message: string }
-  | { kind: "found"; found: Found };
+  /** `stale` while a newer search is on its way. */
+  | { kind: "found"; found: Found; stale?: boolean };
 
 /** How long typing has to pause before the library is asked again. */
 const DEBOUNCE_MS = 300;
@@ -33,8 +34,8 @@ export function SpoolFinder({
 }: {
   material: string;
   owner: string;
-  picked: LibrarySwatch | null;
-  onPick: (swatch: LibrarySwatch | null) => void;
+  picked: SwatchChoice | null;
+  onPick: (swatch: SwatchChoice | null) => void;
 }) {
   const [open, setOpen] = useState(picked !== null);
   const [query, setQuery] = useState("");
@@ -44,7 +45,9 @@ export function SpoolFinder({
   useEffect(() => {
     if (!open) return;
     const controller = new AbortController();
-    setSearch({ kind: "loading" });
+    // The last results stay up, faded, until the new ones arrive: a blank
+    // panel on every chip read as "nothing there".
+    setSearch((prev) => (prev.kind === "found" ? { ...prev, stale: true } : { kind: "loading" }));
     const timer = setTimeout(async () => {
       const params = new URLSearchParams({ material });
       if (query.trim()) params.set("q", query.trim());
@@ -110,7 +113,7 @@ export function SpoolFinder({
           aria-live="polite"
           className="mb-[13.2px] flex items-center gap-[13.2px] rounded-card border-[3px] border-ink bg-sun px-[13px] py-[10px]"
         >
-          <FilamentSpool mode="solid" style={picked.hex} className="h-[46px] w-[32px] flex-none" />
+          <SwatchPhoto swatch={picked} className="w-[120px] flex-none" />
           <div className="min-w-0 flex-1">
             <p className="m-0 font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-2">Spool to buy</p>
             <p className="m-0 break-words font-display text-[17px] font-bold leading-[1.2] text-ink">{picked.name}</p>
@@ -188,7 +191,8 @@ export function SpoolFinder({
             <div
               role="radiogroup"
               aria-label="Spools to buy"
-              className="grid max-h-[360px] grid-cols-[repeat(auto-fill,minmax(104px,1fr))] gap-[8px] overflow-y-auto pr-[2px]"
+              aria-busy={search.stale ?? false}
+              className={`${search.stale ? "opacity-50" : ""} grid max-h-[360px] grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-[8px] overflow-y-auto pr-[2px] transition-opacity`}
             >
               {search.found.swatches.map((s) => {
                 const active = s.id === picked?.id;
@@ -204,7 +208,7 @@ export function SpoolFinder({
                       active ? "border-ink bg-sun" : "border-transparent bg-transparent hover:border-ink/40 hover:bg-cream-2"
                     }`}
                   >
-                    <FilamentSpool mode="solid" style={s.hex} className="h-[54px] w-[38px]" />
+                    <SwatchPhoto swatch={s} className="w-full" />
                     <span className="line-clamp-2 text-center text-[12px] font-bold leading-[1.2] text-ink">{s.name}</span>
                     <span className="line-clamp-1 text-center font-mono text-[10px] uppercase tracking-[0.04em] text-ink-3">
                       {s.maker}
@@ -214,6 +218,7 @@ export function SpoolFinder({
               })}
             </div>
             <p className="m-0 mt-[8px] font-mono text-[11px] uppercase tracking-[0.04em] text-ink-3">
+              {search.stale && "Looking… · "}
               {search.found.total > search.found.swatches.length
                 ? `First ${search.found.swatches.length} of ${search.found.total} · search to narrow it down`
                 : `${search.found.total} ${search.found.total === 1 ? "spool" : "spools"}`}

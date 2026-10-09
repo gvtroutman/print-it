@@ -8,7 +8,7 @@ import {
   PRIORITY_CHIP,
   STORY_PRIORITIES,
   type CatalogMaterialChoice,
-  type LibrarySwatch,
+  type SwatchChoice,
   type StoryPriorityName,
 } from "@/lib/catalog";
 // The same numbers the server enforces. `models.ts` cannot be imported here —
@@ -63,7 +63,7 @@ export type Again = {
   material: string;
   colorName: string;
   /** The spool the old ticket asked the owner to buy, or null for a shelf colour. */
-  swatch: LibrarySwatch | null;
+  swatch: SwatchChoice | null;
   quantity: number;
   priority: StoryPriorityName;
   note: string;
@@ -323,7 +323,7 @@ export function UploadForm({
   const [color, setColor] = useState<string | null>(initialColor?.name ?? null);
   // A spool the owner can get instead of one on the shelf. One or the other:
   // picking either clears the other.
-  const [toBuy, setToBuy] = useState<LibrarySwatch | null>(initialSwatch);
+  const [toBuy, setToBuy] = useState<SwatchChoice | null>(initialSwatch);
   const [note, setNote] = useState(again?.note ?? "");
 
   /**
@@ -617,7 +617,7 @@ export function UploadForm({
   }
 
   /** A spool to buy instead of the shelf colour; null goes back to the shelf. */
-  function chooseToBuy(next: LibrarySwatch | null) {
+  function chooseToBuy(next: SwatchChoice | null) {
     setToBuy(next);
     if (next) setColor(null);
     else if (color === null && selectedMaterial) {

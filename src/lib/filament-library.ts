@@ -97,7 +97,22 @@ function toSwatch(raw: unknown): LibrarySwatch | null {
     shade,
     buyUrl: httpUrl(r.mfr_purchase_link) ?? httpUrl(r.amazon_purchase_link),
     pageUrl: swatchPageUrl(id),
+    imageUrl: libraryMedia(r.card_img),
   };
+}
+
+/**
+ * A photo URL the library listed, kept only when it is on the library's own
+ * media path. The server fetches it, so it must not be able to point anywhere
+ * else.
+ */
+function libraryMedia(value: unknown): string | null {
+  const href = httpUrl(value);
+  if (!href) return null;
+  const url = new URL(href);
+  return url.protocol === "https:" && url.hostname === "filamentcolors.xyz" && url.pathname.startsWith("/media/")
+    ? url.href
+    : null;
 }
 
 async function fetchPage(page: number): Promise<{ count: number; results: unknown[] }> {
@@ -192,6 +207,53 @@ export function swatchFits(material: string, swatch: LibrarySwatch): boolean {
   if (family) return swatch.family === family;
   const wanted = ` ${words(material)} `;
   return wanted.trim() !== "" && ` ${words(swatch.type)} `.includes(wanted);
+}
+
+/** A swatch photo as fetched: a couple of kilobytes of JPEG. */
+type Photo = { bytes: Uint8Array<ArrayBuffer>; type: string };
+
+/** Photos held in memory, oldest dropped first. At ~2 KB each, about 2 MB. */
+const PHOTO_CACHE = 1000;
+/** Bigger than any thumbnail the library serves; anything larger is refused. */
+const MAX_PHOTO_BYTES = 256 * 1024;
+const photos = new Map<number, Photo>();
+
+/**
+ * A swatch's photo, fetched from the library on first ask and kept. Only a
+ * swatch in the library has one, and only from the library's media path, so
+ * this cannot be steered at another address. Null when there is no photo or
+ * it could not be fetched; the picker then draws the colour instead.
+ */
+export async function swatchPhoto(id: number): Promise<Photo | null> {
+  const held = photos.get(id);
+  if (held) return held;
+  const swatch = (await load()).byId.get(id);
+  if (!swatch?.imageUrl) return null;
+
+  let response: Response;
+  try {
+    response = await fetch(swatch.imageUrl, {
+      headers: { accept: "image/*", "user-agent": userAgent() },
+      redirect: "error",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      cache: "no-store",
+    });
+  } catch (error) {
+    console.error(`[filament-library] photo ${id} unreachable`, error);
+    return null;
+  }
+  const type = response.headers.get("content-type") ?? "";
+  if (!response.ok || !/^image\/(jpeg|png|webp)$/.test(type)) {
+    await response.body?.cancel().catch(() => {});
+    return null;
+  }
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.length === 0 || bytes.length > MAX_PHOTO_BYTES) return null;
+
+  const photo = { bytes, type };
+  photos.set(id, photo);
+  if (photos.size > PHOTO_CACHE) photos.delete(photos.keys().next().value!);
+  return photo;
 }
 
 /** The most swatches one search answers with. */

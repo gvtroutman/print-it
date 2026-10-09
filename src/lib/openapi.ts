@@ -901,6 +901,11 @@ export async function buildOpenApiDocument() {
                             shade: { type: ["string", "null"], enum: [...SWATCH_SHADES.map((s) => s.key), null] },
                             buyUrl: { type: ["string", "null"], format: "uri" },
                             pageUrl: { type: "string", format: "uri" },
+                            image: {
+                              type: ["string", "null"],
+                              description: "This app's path to the library's photo of the swatch card, or null.",
+                              examples: ["/api/filament-library/4039/image"],
+                            },
                           },
                         },
                       },

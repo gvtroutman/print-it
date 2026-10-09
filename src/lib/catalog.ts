@@ -93,7 +93,22 @@ export type LibrarySwatch = {
   buyUrl: string | null;
   /** The swatch's own page on filamentcolors.xyz. */
   pageUrl: string;
+  /**
+   * The library's photo of the printed swatch card. Fetched by the server
+   * only — `img-src 'self'` — and shown through `swatchImagePath`.
+   */
+  imageUrl: string | null;
 };
+
+/** Where the app serves a library swatch's photo from. */
+export const swatchImagePath = (id: number) => `/api/filament-library/${id}/image`;
+
+/**
+ * A library swatch as the browser sees it: what `GET /api/filament-library`
+ * answers with, and what the request form and a ticket hold. `image` is this
+ * app's path to the swatch photo, null when the library has none.
+ */
+export type SwatchChoice = Omit<LibrarySwatch, "family" | "imageUrl"> & { image: string | null };
 
 /** A swatch's page on filamentcolors.xyz. */
 export const swatchPageUrl = (id: number) => `https://filamentcolors.xyz/swatch/${id}/`;
@@ -110,7 +125,7 @@ export function storySwatch(story: {
   swatchBuyUrl: string | null;
   colorName: string;
   colorHex: string;
-}): LibrarySwatch | null {
+}): SwatchChoice | null {
   if (story.swatchId === null) return null;
   let buyUrl: string | null = null;
   try {
@@ -125,10 +140,11 @@ export function storySwatch(story: {
     maker: story.swatchMaker ?? "",
     type: story.swatchType ?? "",
     hex: story.colorHex,
-    family: null,
     shade: null,
     buyUrl,
     pageUrl: swatchPageUrl(story.swatchId),
+    // Served while the library still lists the swatch; the colour stands in when not.
+    image: swatchImagePath(story.swatchId),
   };
 }
 

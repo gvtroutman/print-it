@@ -66,6 +66,12 @@ a "Silk PLA" material offers any PLA swatch (silk ones first), "PLA-CF" only
 fibre-filled PLA, and a name the table does not know has to appear in the
 swatch's type ("Wood" finds "PLA Wood").
 
+Each spool shows as the library's own photo of its printed swatch card,
+with the swatch's colour underneath while it loads or if it fails. The photos
+come through `/api/filament-library/{id}/image`, which fetches only from the
+library's media path and keeps up to 1,000 of them (about 2 KB each) in memory,
+so `img-src` stays at `'self'`.
+
 The browser never calls that site. The server (`src/lib/filament-library.ts`)
 sweeps the whole library into memory, about 25 pages and 30 seconds, when the
 upload page first loads, and keeps it for a day. A failed refresh keeps the old

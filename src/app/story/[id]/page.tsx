@@ -16,6 +16,7 @@ import { OpenInSlicer } from "@/components/open-in-slicer";
 import { DownloadModel } from "@/components/download-model";
 import { Toast } from "@/components/toast";
 import { ColorSwatch } from "@/components/color-swatch";
+import { SwatchPhoto } from "@/components/swatch-photo";
 import { WithdrawStory } from "@/components/withdraw-story";
 import { RequeueStory } from "@/components/requeue-story";
 
@@ -237,6 +238,7 @@ export default async function StoryPage({
               {toBuy && (
                 <div className="mt-[17.6px] flex flex-wrap items-center gap-x-[13.2px] gap-y-[6px] border-t-2 border-dashed border-rule pt-[17.6px]">
                   <SpoolToBuyChip />
+                  <SwatchPhoto swatch={toBuy} className="w-[120px] flex-none" />
                   <span className="text-[14.5px] text-ink-2">
                     <strong className="text-ink">{toBuy.maker}</strong> {toBuy.type} in {toBuy.name}
                   </span>

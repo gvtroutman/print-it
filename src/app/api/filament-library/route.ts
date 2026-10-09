@@ -1,5 +1,5 @@
 import { fail, ok, withActor } from "@/lib/api";
-import { SWATCH_SHADES, type SwatchShade } from "@/lib/catalog";
+import { SWATCH_SHADES, swatchImagePath, type SwatchChoice, type SwatchShade } from "@/lib/catalog";
 import { LibraryUnavailable, searchLibrary } from "@/lib/filament-library";
 
 /**
@@ -43,7 +43,9 @@ export const GET = withActor(async (request) => {
         shade: s.shade,
         buyUrl: s.buyUrl,
         pageUrl: s.pageUrl,
-      })),
+        // This app's copy of the library's photo, not the library's own URL.
+        image: s.imageUrl ? swatchImagePath(s.id) : null,
+      })) satisfies SwatchChoice[],
     });
   } catch (error) {
     if (error instanceof LibraryUnavailable) {
