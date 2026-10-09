@@ -7,6 +7,7 @@ import { Brand } from "@/components/ui";
 import { ActivityMenu, type FeedItem } from "@/components/activity-menu";
 import { UserMenu } from "@/components/user-menu";
 import { MobileMenu, type NavGroup } from "@/components/mobile-menu";
+import { NavIcon } from "@/components/nav-icons";
 import { PasskeyNudge } from "@/components/passkey-nudge";
 
 /**
@@ -18,10 +19,10 @@ const NAV: Record<Actor["role"], NavGroup[]> = {
   client: [
     {
       items: [
-        { label: "New order", href: "/upload" },
-        { label: "My orders", href: "/me" },
-        { label: "Feature requests", href: "/frr" },
-        { label: "Donation bin", href: "/bin" },
+        { label: "New order", href: "/upload", icon: "plus" },
+        { label: "My orders", href: "/me", icon: "stack" },
+        { label: "Feature requests", href: "/frr", icon: "bulb" },
+        { label: "Donation bin", href: "/bin", icon: "jar" },
       ],
     },
   ],
@@ -29,22 +30,22 @@ const NAV: Record<Actor["role"], NavGroup[]> = {
     {
       heading: "Prints",
       items: [
-        { label: "To do", href: "/queue" },
-        { label: "All orders", href: "/me" },
-        { label: "By person", href: "/admin/prints" },
+        { label: "To do", href: "/queue", icon: "check" },
+        { label: "All orders", href: "/me", icon: "stack" },
+        { label: "By person", href: "/admin/prints", icon: "person" },
         // The board, not the triage queue: the owner wants to see everything
         // that has been asked for, and triage is one button away on that page.
-        { label: "Feature requests", href: "/frr" },
+        { label: "Feature requests", href: "/frr", icon: "bulb" },
         // Pledges wait here for the owner to say the money arrived.
-        { label: "Donation bin", href: "/bin" },
+        { label: "Donation bin", href: "/bin", icon: "jar" },
       ],
     },
     {
       heading: "Setup",
       items: [
-        { label: "Materials", href: "/admin/catalog" },
-        { label: "Members", href: "/admin/invites" },
-        { label: "Audit log", href: "/admin/audit" },
+        { label: "Materials", href: "/admin/catalog", icon: "spool" },
+        { label: "Members", href: "/admin/invites", icon: "people" },
+        { label: "Audit log", href: "/admin/audit", icon: "book" },
       ],
     },
   ],
@@ -147,12 +148,13 @@ export async function AppHeader({
                       key={item.href}
                       href={item.href}
                       aria-current={current ? "page" : undefined}
-                      className={`rounded-chip border-2 px-[13px] py-[8px] font-mono text-[12.5px] font-bold uppercase tracking-[0.08em] transition-colors sm:px-[15px] sm:py-[7px] ${
+                      className={`flex items-center gap-[8px] rounded-chip border-2 px-[13px] py-[8px] font-mono text-[12.5px] font-bold uppercase tracking-[0.08em] transition-colors sm:px-[15px] sm:py-[7px] ${
                         current
                           ? "border-ink bg-sun text-ink"
                           : "border-transparent text-ink hover:border-ink hover:bg-cream-2"
                       }`}
                     >
+                      <NavIcon name={item.icon} />
                       {item.label}
                     </Link>
                   );
