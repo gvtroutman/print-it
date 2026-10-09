@@ -47,7 +47,12 @@ export async function currentUser(): Promise<Actor | null> {
 
   const { actor, sessionId } = signedIn;
   if (actor.role === "admin" && (await isPreviewing(sessionId))) {
-    return { ...actor, role: "client", previewing: true };
+    // Not just the role: the name goes too. The preview is "what a member
+    // sees", and the owner reading their own name on the member pages kept
+    // breaking that. Anything written while previewing — a notification
+    // text, say — therefore reads "Member" as well, which is the truth of
+    // who did it.
+    return { ...actor, role: "client", previewing: true, name: "Member", initials: "ME" };
   }
   return actor;
 }

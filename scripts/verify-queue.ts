@@ -204,6 +204,7 @@ async function main() {
 
   const previewHome = rendered(await (await ruben.go(`${APP}/upload`)).text());
   check("the page says it is a preview", previewHome.includes("Previewing as a member"));
+  check("and calls the owner Member rather than by name", previewHome.includes(">Member<"));
   check("with the member's navigation", previewHome.includes("My orders") &&
         !previewHome.includes("Audit log"));
   const previewMine = rendered(await (await ruben.go(`${APP}/me`)).text());
