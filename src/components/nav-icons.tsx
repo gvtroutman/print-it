@@ -126,7 +126,10 @@ export function NavIcon({ name, className = "" }: { name: NavIconName; className
     <svg
       aria-hidden
       viewBox="-3.5 -3.5 27 27"
-      className={`h-[22px] w-[22px] shrink-0 ${className}`}
+      // Bigger than the line it sits on; the negative margin keeps the chip
+      // the height the text alone would give it, so the sticker overhangs
+      // into the padding like one stuck on afterwards.
+      className={`-my-[5px] h-[28px] w-[28px] shrink-0 ${className}`}
       style={{ transform: `rotate(${tilt}deg)` }}
       fill="none"
       stroke="currentColor"
