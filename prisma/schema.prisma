@@ -405,6 +405,14 @@ model CatalogMaterial {
   /// What the material is, in a sentence or two, shown under the upload
   /// form's material picker. Empty means nothing is shown.
   description String @default("")
+  /// The owner's own 1–5 marks for the upload form's comparison chart, one
+  /// per trait. Null means the built-in filament table's mark stands (see
+  /// src/lib/filament-traits.ts), so only the odd case needs touching.
+  strength  Int?
+  flex      Int?
+  heat      Int?
+  finish    Int?
+  outdoors  Int?
   active    Boolean  @default(true)
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())

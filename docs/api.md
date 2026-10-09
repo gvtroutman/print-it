@@ -118,9 +118,13 @@ upload leaves nothing behind. The uploader comes from the session: an
 
 Material and colour values come from the owner's live catalogue, not a fixed
 API enum. `GET /api/catalog` lists the pairs on offer right now — the same read
-the request form makes — as `{ materials: [{ name, colors: [{ name, hex, style,
-mode }] }] }`. The server checks the pair again when the upload arrives, so a
-retired or removed choice is refused even if an older client still posts it.
+the request form makes — as `{ materials: [{ name, description, ratings, colors:
+[{ name, hex, style, mode }] }] }`. `ratings` is what the form's comparison
+chart shows, 1 to 5 per trait (`strength`, `flex`, `heat`, `finish`,
+`outdoors`): the owner's own mark where they set one, the built-in filament
+table's where not, `null` where neither has one. The server checks the pair
+again when the upload arrives, so a retired or removed choice is refused even
+if an older client still posts it.
 
 ```bash
 curl -s https://print.example/api/upload \

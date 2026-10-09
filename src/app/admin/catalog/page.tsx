@@ -7,6 +7,7 @@ import { RemoveColorButton } from "./remove-color-button";
 import { AddColorForm } from "./add-color-form";
 import { EditMaterialInline } from "./edit-material-inline";
 import { EditMaterialDescription } from "./edit-material-description";
+import { EditMaterialRatings } from "./edit-material-ratings";
 import { EditColorInline } from "./edit-color-inline";
 import {
   addMaterialAction,
@@ -111,6 +112,17 @@ export default async function CatalogPage({
               </div>
 
               <EditMaterialDescription id={material.id} name={material.name} description={material.description} />
+              <EditMaterialRatings
+                id={material.id}
+                name={material.name}
+                ratings={{
+                  strength: material.strength,
+                  flex: material.flex,
+                  heat: material.heat,
+                  finish: material.finish,
+                  outdoors: material.outdoors,
+                }}
+              />
 
               <div className="space-y-[8.8px]">
                 {material.colors.map((color, colorIndex) => (

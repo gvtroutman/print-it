@@ -12,6 +12,26 @@ a material is removed, its colour rows go with it. Neither operation changes
 an existing ticket because every request snapshots its material label, colour
 label, representative hex, rendered swatch, and swatch mode when submitted.
 
+## Chart ratings
+
+The request form first asks what the print should be good at, from four
+shelves: Pretty finish, Strong, Heat & outdoors and Bendy. A material sits on
+the shelf where it scores its best mark (heat and outdoors count as one), or
+on every shelf it ties on, so PETG is both Strong and Heat & outdoors; a
+material with no marks sits on all four. The material dropdown then offers
+only that shelf, and until one is picked the form shows the shelf's materials
+side by side, rated 1 to 5 on strength, bendiness, heat, finish and
+outdoors. The marks come from a built-in table of filament families in
+`src/lib/filament-traits.ts`, matched by name: "PLA", "Silk PLA" and "PLA-CF"
+all land on PLA, and a carbon- or glass-fibre variant gets a bump. A name the
+table does not know shows dashes.
+
+The owner can overrule any mark from `/admin/catalog`: under the material's
+description, "Charted as …" opens five selects, one per trait, each defaulting
+to the built-in mark. A mark the owner sets wins for that trait only; the rest
+keep following the table, and "Built-in" hands a trait back. Each change is an
+audit event, and `GET /api/catalog` reports the marks the chart shows.
+
 ## Swatch types
 
 - **Solid** takes one colour.

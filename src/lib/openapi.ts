@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { auth } from "@/lib/auth";
 import { COLOR_MODES, STORY_PRIORITIES, WishSchema } from "@/lib/catalog";
+import { TOP_MARK, TRAITS } from "@/lib/filament-traits";
 import { ACCEPTED_EXTENSIONS, MAX_BYTES, formatBytes } from "@/lib/models";
 import { FLOW } from "@/lib/scope";
 import { IMPORT_SOURCES } from "@/lib/import-source";
@@ -811,6 +812,19 @@ export async function buildOpenApiDocument() {
                               type: "string",
                               description: "What the material is, in the owner's words. Empty when not written.",
                               examples: ["Tougher than PLA: it bends a little instead of snapping."],
+                            },
+                            ratings: {
+                              type: "object",
+                              description:
+                                "What the request form's comparison chart shows, " +
+                                `1 (poor) to ${TOP_MARK} (excellent) per trait: the owner's own mark ` +
+                                "where set, the built-in filament table's where not, null where " +
+                                "neither has one.",
+                              properties: Object.fromEntries(TRAITS.map((trait) => [
+                                trait.key,
+                                { type: ["integer", "null"], minimum: 1, maximum: TOP_MARK, description: trait.blurb },
+                              ])),
+                              examples: [{ strength: 4, flex: 3, heat: 3, finish: 3, outdoors: 4 }],
                             },
                             colors: {
                               type: "array",

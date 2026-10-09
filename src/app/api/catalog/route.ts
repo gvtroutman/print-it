@@ -1,5 +1,6 @@
 import { ok, withActor } from "@/lib/api";
 import { availableCatalog } from "@/lib/catalog-data";
+import { TRAITS, traitsFor } from "@/lib/filament-traits";
 import { enabledSources } from "@/lib/import-source";
 
 /**
@@ -26,15 +27,21 @@ export const GET = withActor(async () => {
     // The other thing a client cannot learn any other way: whether this
     // instance imports from a link, and from where. Empty when it does not.
     importSources: enabledSources(),
-    materials: materials.map((material) => ({
-      name: material.name,
-      description: material.description,
-      colors: material.colors.map((color) => ({
-        name: color.name,
-        hex: color.hex,
-        style: color.style,
-        mode: color.mode,
-      })),
-    })),
+    materials: materials.map((material) => {
+      // The marks the form's comparison chart shows: the owner's where set,
+      // the filament table's where not, null where neither has one.
+      const traits = traitsFor(material.name, material.ratings);
+      return {
+        name: material.name,
+        description: material.description,
+        ratings: Object.fromEntries(TRAITS.map(({ key }) => [key, traits?.ratings[key] ?? null])),
+        colors: material.colors.map((color) => ({
+          name: color.name,
+          hex: color.hex,
+          style: color.style,
+          mode: color.mode,
+        })),
+      };
+    }),
   });
 });

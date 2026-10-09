@@ -40,6 +40,8 @@ const KIND_BADGE: Record<FileKind, { label: string; className: string }> = {
 import { SOURCE_LABEL, identifySource, type ImportSource } from "@/lib/import-source";
 import { Button, Label, Notice } from "@/components/ui";
 import { FilamentSpool } from "@/components/color-swatch";
+import { MaterialChart, TraitSticker } from "@/components/material-chart";
+import { CATEGORIES, categoriesOf, traitsFor, type CategoryKey } from "@/lib/filament-traits";
 import { InkCube } from "@/components/ink-cube";
 
 /**
@@ -100,6 +102,7 @@ type Linked =
  * so the open list wears the same chunky outline as the rest of the form.
  * Arrow keys, Home/End, Enter/Space and Escape work as they do on a select.
  * `hint` puts a short line of small print under each option in the open list.
+ * A null `value` is nothing chosen yet; the trigger shows `placeholder` instead.
  */
 function Dropdown({
   id,
@@ -108,16 +111,19 @@ function Dropdown({
   onChange,
   hint,
   describedBy,
+  placeholder,
 }: {
   id: string;
   options: readonly string[];
-  value: string;
+  value: string | null;
   onChange: (v: string) => void;
   hint?: (option: string) => string;
   describedBy?: string;
+  placeholder?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(() => Math.max(0, options.indexOf(value)));
+  const chosenIndex = () => (value === null ? 0 : Math.max(0, options.indexOf(value)));
+  const [active, setActive] = useState(chosenIndex);
   const wrap = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const listId = `${id}-list`;
@@ -132,7 +138,7 @@ function Dropdown({
   }, [open]);
 
   function show() {
-    setActive(Math.max(0, options.indexOf(value)));
+    setActive(chosenIndex());
     setOpen(true);
   }
 
@@ -188,7 +194,7 @@ function Dropdown({
           open ? "rounded-t-card" : "rounded-card"
         }`}
       >
-        <span className="truncate">{value}</span>
+        <span className={`truncate ${value === null ? "font-normal text-ink-3" : ""}`}>{value ?? placeholder}</span>
         <svg
           aria-hidden
           viewBox="0 0 20 12"
@@ -248,15 +254,21 @@ export function UploadForm({
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
-  // Printing again starts from what was asked for last time — where that is
-  // still on the shelf. A material or colour the owner has since
-  // retired falls back to the usual default, and `gone` says which, because a
-  // choice that quietly changed under someone is one they will not notice
-  // until the print arrives.
+  // A fresh request starts with no material picked: the colour step shows
+  // every filament side by side instead of one material's spools, so the
+  // choice is made against the chart rather than defaulted past. Printing
+  // again starts from what was asked for last time — where that is still on
+  // the shelf. A material or colour the owner has since retired falls back to
+  // the usual default, and `gone` says which, because a choice that quietly
+  // changed under someone is one they will not notice until the print arrives.
   const wanted = catalog.find((item) => item.name === again?.material);
-  const initialMaterial = wanted ?? catalog.find((item) => item.name === "PETG") ?? catalog[0]!;
+  const initialMaterial = again
+    ? wanted ?? catalog.find((item) => item.name === "PETG") ?? catalog[0]!
+    : null;
   const wantedColor = wanted?.colors.find((item) => item.name === again?.colorName);
-  const initialColor = wantedColor ?? initialMaterial.colors.find((item) => item.name === "Slate") ?? initialMaterial.colors[0]!;
+  const initialColor = initialMaterial
+    ? wantedColor ?? initialMaterial.colors.find((item) => item.name === "Slate") ?? initialMaterial.colors[0]!
+    : null;
   const gone = again
     ? [
         !wanted ? again.material : !wantedColor ? `${again.material} in ${again.colorName}` : null,
@@ -281,7 +293,13 @@ export function UploadForm({
   const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
 
   const [title, setTitle] = useState(again?.title ?? "");
-  const [material, setMaterial] = useState<string>(initialMaterial.name);
+  // Which shelf the material comes off: picked first, and the material
+  // dropdown and chart then offer only that shelf's filaments.
+  const shelves = new Map(catalog.map((item) => [item.name, categoriesOf(traitsFor(item.name, item.ratings))]));
+  const [category, setCategory] = useState<CategoryKey | null>(
+    initialMaterial ? shelves.get(initialMaterial.name)![0]! : null,
+  );
+  const [material, setMaterial] = useState<string | null>(initialMaterial?.name ?? null);
   const [quantity, setQuantity] = useState<number>(again?.quantity ?? 1);
   // What is in the amount box while it is being typed in, or null
   // when it simply shows `quantity`. Kept apart from the number because a box
@@ -290,7 +308,7 @@ export function UploadForm({
   // into "1", so clearing it to type 3 produced 13.
   const [quantityDraft, setQuantityDraft] = useState<string | null>(null);
   const [priority, setPriority] = useState<StoryPriorityName>(again?.priority ?? DEFAULT_STORY_PRIORITY);
-  const [color, setColor] = useState<string>(initialColor.name);
+  const [color, setColor] = useState<string | null>(initialColor?.name ?? null);
   const [note, setNote] = useState(again?.note ?? "");
 
   /**
@@ -468,6 +486,12 @@ export function UploadForm({
     // Enter in the quantity box submits without blurring it; show what is
     // actually being sent rather than a half-typed draft.
     setQuantityDraft(null);
+    if (category === null) {
+      return setPhase({ kind: "error", message: "Pick what it should be good at, then a filament from that shelf." });
+    }
+    if (material === null || color === null) {
+      return setPhase({ kind: "error", message: "Pick a material first — the chart shows what each one is good at." });
+    }
     if (again) return void sendAgain(again);
     if (linked.kind === "listed" && picked) {
       // An import is fetched by the server from two ids; there is no upload
@@ -542,13 +566,30 @@ export function UploadForm({
   }
 
   const busy = phase.kind === "uploading";
-  const selectedMaterial = catalog.find((item) => item.name === material) ?? catalog[0]!;
+  const selectedMaterial = catalog.find((item) => item.name === material) ?? null;
+  const onShelf = (key: CategoryKey) => catalog.filter((item) => shelves.get(item.name)!.includes(key));
+  const shelf = category === null ? [] : onShelf(category);
+
+  /**
+   * A new shelf keeps the material when it is on that shelf too (PETG is on
+   * two), and otherwise goes back to the chart with nothing picked.
+   */
+  function chooseCategory(next: CategoryKey) {
+    setCategory(next);
+    if (material !== null && !shelves.get(material)!.includes(next)) compareMaterials();
+  }
 
   function chooseMaterial(next: string) {
     const item = catalog.find((candidate) => candidate.name === next);
     if (!item) return;
     setMaterial(item.name);
     setColor((item.colors.find((candidate) => candidate.name === "Slate") ?? item.colors[0]!).name);
+  }
+
+  /** Back to the chart of the shelf's materials, with nothing picked. */
+  function compareMaterials() {
+    setMaterial(null);
+    setColor(null);
   }
 
   return (
@@ -857,33 +898,91 @@ export function UploadForm({
             className="w-full rounded-card border-[3px] border-ink bg-porcelain px-[15px] py-[12px] text-[16px] text-ink placeholder:text-ink-3"
           />
         </div>
-        <div>
-          <Label htmlFor="material">Material</Label>
-          <Dropdown
-            id="material"
-            options={catalog.map((item) => item.name)}
-            value={material}
-            onChange={chooseMaterial}
-            hint={(name) => catalog.find((item) => item.name === name)?.description ?? ""}
-            describedBy={selectedMaterial.description ? "material-about" : undefined}
-          />
-          {selectedMaterial.description && (
-            <p
-              id="material-about"
-              aria-live="polite"
-              className="m-0 mt-[8px] text-[14px] leading-[1.45] text-ink-2"
-            >
-              {selectedMaterial.description}
-            </p>
-          )}
+      </div>
+
+      {/* ---- what it should be good at: the shelf the filament comes off ---- */}
+      <div className="mt-[22px]">
+        <Label htmlFor="category">What should it be good at?</Label>
+        {/* Two by two on a phone, four across from sm up. */}
+        <div id="category" role="radiogroup" aria-label="What it should be good at" className="grid grid-cols-2 gap-[10px] sm:grid-cols-4">
+          {CATEGORIES.map((c) => {
+            const active = c.key === category;
+            const count = onShelf(c.key).length;
+            return (
+              <button
+                key={c.key}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                disabled={count === 0}
+                onClick={() => chooseCategory(c.key)}
+                className={`flex cursor-pointer flex-col items-start gap-[4px] rounded-card border-[3px] border-ink px-[12px] py-[10px] text-left transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
+                  active ? "bg-cherry-dk text-cream shadow-stamp" : "bg-porcelain text-ink enabled:hover:bg-sun"
+                }`}
+              >
+                <TraitSticker trait={c.sticker} tilt={-6} className="h-[28px] w-[28px]" />
+                <span className="font-display text-[17px] font-bold leading-[1.15]">{c.label}</span>
+                <span className={`text-[13px] leading-[1.35] ${active ? "text-cream/85" : "text-ink-2"}`}>{c.blurb}</span>
+                <span className={`mt-auto pt-[2px] font-mono text-[11px] font-bold uppercase tracking-[0.08em] ${active ? "text-cream/85" : "text-ink-3"}`}>
+                  {count === 0 ? "None on the shelf" : count === 1 ? "1 filament" : `${count} filaments`}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* ---- colour ---- */}
+      {category !== null && (
+        <>
+      {/* ---- material, from the chosen shelf ---- */}
+      <div className="mt-[22px] max-w-[420px]">
+        <Label htmlFor="material">Material</Label>
+        <Dropdown
+          key={category}
+          id="material"
+          options={shelf.map((item) => item.name)}
+          value={material}
+          onChange={chooseMaterial}
+          placeholder="Pick one, or compare them below"
+          hint={(name) => catalog.find((item) => item.name === name)?.description ?? ""}
+          describedBy={selectedMaterial?.description ? "material-about" : undefined}
+        />
+        {selectedMaterial?.description && (
+          <p
+            id="material-about"
+            aria-live="polite"
+            className="m-0 mt-[8px] text-[14px] leading-[1.45] text-ink-2"
+          >
+            {selectedMaterial.description}
+          </p>
+        )}
+      </div>
+
+      {/* ---- colour, or the chart of the shelf's materials until one is picked ---- */}
+      {selectedMaterial === null ? (
+        <section className="mt-[22px]" aria-labelledby="compare-heading">
+          <div className="mb-[8.8px] flex flex-wrap items-baseline justify-between gap-x-[13.2px] gap-y-[4px]">
+            <h2 id="compare-heading" className="m-0 font-mono text-[12px] font-bold uppercase tracking-[0.1em] text-ink-2">
+              Which filament?
+            </h2>
+            <p className="m-0 text-[13px] text-ink-3">Tap one to see its colors. More stickers, more of it. Five is the most.</p>
+          </div>
+          <MaterialChart catalog={shelf} owner={owner} onPick={chooseMaterial} />
+        </section>
+      ) : (
       <fieldset className="mt-[22px] border-0 p-0">
-        <legend className="mb-[8.8px] font-mono text-[12px] font-bold uppercase tracking-[0.1em] text-ink-2">
-          Color
-        </legend>
+        <div className="mb-[8.8px] flex flex-wrap items-baseline justify-between gap-x-[13.2px] gap-y-[4px]">
+          <legend className="float-left font-mono text-[12px] font-bold uppercase tracking-[0.1em] text-ink-2">
+            Color
+          </legend>
+          <button
+            type="button"
+            onClick={compareMaterials}
+            className="cursor-pointer border-0 bg-transparent p-0 font-mono text-[11.5px] font-bold uppercase tracking-[0.08em] text-ink-3 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
+          >
+            Compare this shelf
+          </button>
+        </div>
         {/* Three across on a phone, each spool shrinking to its column; from sm up
             they keep their full size and wrap. */}
         <div className="grid grid-cols-3 gap-x-[10px] gap-y-[13.2px] sm:flex sm:flex-wrap sm:gap-[13.2px]">
@@ -916,6 +1015,9 @@ export function UploadForm({
           })}
         </div>
       </fieldset>
+      )}
+        </>
+      )}
 
       {/* ---- priority ---- */}
       <div className="mt-[22px] max-w-[420px]">

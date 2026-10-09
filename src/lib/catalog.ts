@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { OwnerRatings } from "@/lib/filament-traits";
+
 export const COLOR_MODES = ["solid", "gradient", "whatever", "funfetti"] as const;
 export type ColorMode = (typeof COLOR_MODES)[number];
 
@@ -44,6 +46,11 @@ export type CatalogMaterialChoice = {
   name: string;
   /** What the material is, for the person choosing; empty when not written. */
   description: string;
+  /**
+   * The owner's own 1–5 marks for the comparison chart, null where the
+   * built-in filament table's mark stands. See `traitsFor`.
+   */
+  ratings: OwnerRatings;
   colors: CatalogColorChoice[];
 };
 

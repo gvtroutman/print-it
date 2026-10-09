@@ -9,11 +9,22 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/authz";
 import { record } from "@/lib/audit";
 import { COLOR_MODES, MAX_MATERIAL_DESCRIPTION, funfettiStyle } from "@/lib/catalog";
+import { TOP_MARK, TRAITS, asMark, type OwnerRatings } from "@/lib/filament-traits";
 
 const Name = z.string().trim().min(1).max(40).transform((value) => value.replace(/\s+/g, " "));
 /** One paragraph: line breaks and runs of spaces fold to single spaces. */
 const Description = z.string().transform((value) => value.replace(/\s+/g, " ").trim()).pipe(z.string().max(MAX_MATERIAL_DESCRIPTION));
 const Hex = z.string().regex(/^#[0-9a-f]{6}$/i).transform((value) => value.toLowerCase());
+/** One chart mark from the ratings form: blank hands the trait back to the built-in table. */
+const OwnMark = z.string().trim().transform((value, ctx) => {
+  if (value === "") return null;
+  const mark = asMark(Number(value));
+  if (mark === null) {
+    ctx.addIssue({ code: "custom", message: `A mark is a whole number from 1 to ${TOP_MARK}.` });
+    return z.NEVER;
+  }
+  return mark;
+});
 /**
  * What a "whatever" colour stands for where a single colour is needed: the
  * 3D viewer and the audit tally. A neutral grey, because the colour is by
@@ -137,6 +148,33 @@ export async function describeMaterialAction(formData: FormData): Promise<void> 
   revalidatePath("/admin/catalog");
   revalidatePath("/upload");
   back("toast", parsed.data ? `${material.name}'s description saved.` : `${material.name}'s description removed.`);
+}
+
+export async function rateMaterialAction(formData: FormData): Promise<void> {
+  const admin = await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  const marks: Partial<OwnerRatings> = {};
+  for (const { key, label } of TRAITS) {
+    const parsed = OwnMark.safeParse(formData.get(key) ?? "");
+    if (!parsed.success) back("error", `${label} must be a whole number from 1 to ${TOP_MARK}, or left to the built-in table.`);
+    marks[key] = parsed.data;
+  }
+  const material = await db.catalogMaterial.findUnique({ where: { id }, select: { name: true } });
+  if (!material) back("error", "That material no longer exists.");
+  await db.catalogMaterial.update({ where: { id }, data: marks });
+  await record({
+    action: "catalog.material_updated",
+    actor: admin,
+    subject: material.name,
+    // One entry per trait so the audit page prints "heat: 2" and "flex: built-in".
+    detail: Object.fromEntries(TRAITS.map(({ key }) => [key, marks[key] ?? "built-in"])),
+  });
+  revalidatePath("/admin/catalog");
+  revalidatePath("/upload");
+  const own = TRAITS.filter(({ key }) => marks[key] !== null).length;
+  back("toast", own
+    ? `${material.name}'s chart ratings saved: ${own} of your own, the rest from the built-in table.`
+    : `${material.name} is back on the built-in chart ratings.`);
 }
 
 export async function removeMaterialAction(formData: FormData): Promise<void> {

@@ -12,6 +12,11 @@ export async function availableCatalog(): Promise<CatalogMaterialChoice[]> {
       id: true,
       name: true,
       description: true,
+      strength: true,
+      flex: true,
+      heat: true,
+      finish: true,
+      outdoors: true,
       colors: {
         where: { active: true },
         orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
@@ -19,7 +24,11 @@ export async function availableCatalog(): Promise<CatalogMaterialChoice[]> {
       },
     },
   });
-  return materials;
+  // The five marks are columns on the row; the chart wants them as one object.
+  return materials.map(({ strength, flex, heat, finish, outdoors, ...material }) => ({
+    ...material,
+    ratings: { strength, flex, heat, finish, outdoors },
+  }));
 }
 
 /**

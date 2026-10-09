@@ -223,9 +223,35 @@ async function main() {
   await owner.submit(`${APP}/admin/catalog`, page, findForm(page, [`value="${black.id}"`, ">On<"]), {});
   check("a colour can be turned off", (await db.catalogColor.findUnique({ where: { id: black.id } }))?.active === false);
 
+  section("the owner's own chart ratings");
+  // ASA is in the built-in filament table (strength 4, heat 4, outdoors 5),
+  // so the chart already rates it; the owner overrules one trait and the
+  // rest must keep following the table.
+  page = await (await owner.go(`${APP}/admin/catalog`)).text();
+  const ratingsForm = () => findForm(page, [`value="${asa!.id}"`, 'name="strength"', 'name="outdoors"']);
+  const forms = page.match(/<form\b[\s\S]*?<\/form>/g) ?? [];
+  check("the ratings form offers the built-in mark as the default",
+    forms[ratingsForm()]?.includes("Built-in (4)") === true);
+  await owner.submit(`${APP}/admin/catalog`, page, ratingsForm(), { strength: "", flex: "", heat: "2", finish: "", outdoors: "" });
+  const rated = await db.catalogMaterial.findUnique({ where: { id: asa!.id }, select: { strength: true, heat: true } });
+  check("a mark the owner sets is stored, and the rest stay with the table",
+    rated?.heat === 2 && rated.strength === null, `heat ${rated?.heat}, strength ${rated?.strength}`);
+  check("rating a material is audited",
+    await db.auditEvent.count({ where: { action: "catalog.material_updated", subject: "ASA", detail: { path: ["heat"], equals: 2 } } }) === 1);
+  page = await (await owner.go(`${APP}/admin/catalog`)).text();
+  check("the catalogue page says which marks are the owner's",
+    page.includes("Charted as ASA with 1 of your own") && page.includes("Heat 2/5*"));
+  await owner.submit(`${APP}/admin/catalog`, page, ratingsForm(), { strength: "", flex: "", heat: "9", finish: "", outdoors: "" });
+  check("a mark outside 1 to 5 is refused",
+    (await db.catalogMaterial.findUnique({ where: { id: asa!.id }, select: { heat: true } }))?.heat === 2);
+
   section("the request form and server use the live catalogue");
   const uploadPage = await (await client.go(`${APP}/upload`)).text();
   check("active choices render", uploadPage.includes("Sunset") && uploadPage.includes("Dealer&#x27;s choice"));
+  // The chart itself only appears once a shelf is picked, in the browser; the
+  // marks it draws are checked through GET /api/catalog below.
+  check("the form opens on the four shelves",
+    ["Pretty finish", "Strong", "Heat &amp; outdoors", "Bendy"].every((label) => uploadPage.includes(label)));
   check("an inactive colour is absent", !uploadPage.includes(">Black<"));
   const accepted = await upload(client, "ASA", "Sunset");
   check("an active combination is accepted", accepted.status === 200, `status ${accepted.status}`);
@@ -238,10 +264,17 @@ async function main() {
   const anonymous = await fetch(`${APP}/api/catalog`);
   check("it needs a session", anonymous.status === 401, `status ${anonymous.status}`);
   const listed = await (await client.raw(`${APP}/api/catalog`)).json() as {
-    materials?: { name: string; colors: { name: string; mode: string; id?: string }[] }[];
+    materials?: {
+      name: string;
+      ratings?: Record<string, number | null>;
+      colors: { name: string; mode: string; id?: string }[];
+    }[];
   };
   const listedAsa = listed.materials?.find((m) => m.name === "ASA");
   check("it lists what is on offer", Boolean(listedAsa?.colors.some((c) => c.name === "Sunset" && c.mode === "gradient")));
+  check("it carries the owner's rating over the built-in one",
+    listedAsa?.ratings?.heat === 2 && listedAsa.ratings.strength === 4,
+    JSON.stringify(listedAsa?.ratings));
   check("it leaves out what is turned off", !listedAsa?.colors.some((c) => c.name === "Black"));
   check("it does not hand out row ids", listedAsa?.colors.every((c) => c.id === undefined) === true);
 
