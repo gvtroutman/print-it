@@ -17,11 +17,11 @@ export function PrinterPeek({
 }) {
   if (!src) return <div>{children}</div>;
   return (
-    <div className="relative pt-[184px]">
+    <div className="relative pt-[158px]">
       {/* Cut off just under the card's top edge, so a short card never shows the printer's feet below it. */}
-      <div className="absolute left-1/2 top-0 h-[204px] w-[280px] -translate-x-1/2 overflow-hidden sm:left-auto sm:right-[36px] sm:translate-x-0">
+      <div className="absolute left-1/2 top-0 h-[176px] w-[240px] -translate-x-1/2 overflow-hidden sm:left-auto sm:right-[36px] sm:translate-x-0">
         {/* eslint-disable-next-line @next/next/no-img-element -- a small static cut-out */}
-        <img src={src} alt={alt} width={280} height={380} className="h-[380px] w-[280px] max-w-none object-contain" />
+        <img src={src} alt={alt} width={240} height={326} className="h-[326px] w-[240px] max-w-none object-contain" />
       </div>
       <div className="relative z-[1]">{children}</div>
     </div>
