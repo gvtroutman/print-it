@@ -21,18 +21,9 @@ export default async function UploadPage() {
         <div className="max-w-[780px]">
           {/* Still a sentence someone would say out loud, which was the point
               of the original H1 and survives every rename since. */}
-          <h1 className="m-0 mb-[13.2px] text-[46px] leading-[0.98] text-ink">
+          <h1 className="m-0 mb-[26.4px] text-center text-[46px] leading-[0.98] text-ink">
             Print It!
           </h1>
-          <p className="m-0 mb-[26.4px] text-[16.5px] leading-[1.5] text-ink-2 text-pretty">
-            Say what you need — a few words is enough. Add a 3D model (
-            <span className="font-mono">.stl</span>,{" "}
-            <span className="font-mono">.3mf</span>,{" "}
-            <span className="font-mono">.obj</span>,{" "}
-            <span className="font-mono">.step</span> and more), photos, videos or
-            links if you have them. {owner} gets a ping, and you can follow
-            your order under My orders.
-          </p>
         </div>
         {catalog.length > 0 ? (
           <UploadForm
