@@ -90,9 +90,15 @@ function hslHex(h: number, s: number, l: number): string {
  * enough that each cell is big enough to tap without aiming; the search
  * finds the closest spools, so a cell only has to be near what is wanted.
  */
-const GRID_HUES = [196, 220, 268, 322, 356, 24, 48, 110];
-/** Each hue's rows, darkest to palest, as [saturation, lightness]. */
-const GRID_ROWS: [number, number][] = [[100, 18], [92, 30], [92, 42], [100, 54], [100, 70], [100, 86]];
+const GRID_HUES = [195, 220, 262, 292, 330, 358, 24, 48, 90, 145];
+/**
+ * Each hue's rows, darkest to palest, as [saturation, lightness]. A little
+ * short of fully saturated: filament rarely comes as vivid as a screen can
+ * show, and a cell nothing is near is a cell that finds nothing like it.
+ */
+const GRID_ROWS: [number, number][] = [
+  [70, 16], [72, 25], [75, 34], [80, 43], [85, 52], [88, 62], [90, 72], [90, 81], [90, 90],
+];
 
 /**
  * The "can get" picker's colour grid, row by row, the way a phone's colour

@@ -273,9 +273,25 @@ function labOf(hex: string): [number, number, number] {
   return [116 * y - 16, 500 * (x - y), 200 * (y - z)];
 }
 
-/** How different two colours look (ΔE*76); about 2.3 is just noticeable. */
-function distance(a: [number, number, number], b: [number, number, number]) {
-  return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+/**
+ * How far a swatch is from the colour asked for, judged the way someone
+ * hunting for "a blue like this" would: in L*C*h, with a different hue
+ * counting most, and a swatch duller than the colour asked for forgiven half
+ * of that dullness, because filament rarely comes as vivid as a screen.
+ * Plain ΔE*76 put greys and the neighbouring hue ahead of a muted spool of
+ * the right hue whenever the cell was vivid.
+ */
+function distance(target: [number, number, number], swatch: [number, number, number]) {
+  const [l1, a1, b1] = target;
+  const [l2, a2, b2] = swatch;
+  const c1 = Math.hypot(a1, b1);
+  const c2 = Math.hypot(a2, b2);
+  const dC = c1 - c2;
+  let dh = Math.atan2(b1, a1) - Math.atan2(b2, a2);
+  if (dh > Math.PI) dh -= 2 * Math.PI;
+  if (dh < -Math.PI) dh += 2 * Math.PI;
+  const dH = 2 * Math.sqrt(c1 * c2) * Math.sin(dh / 2);
+  return Math.hypot(0.8 * (l1 - l2), (dC > 0 ? 0.5 : 1) * dC, 1.6 * dH);
 }
 
 /** A swatch this far from the colour asked for still counts as near it. */

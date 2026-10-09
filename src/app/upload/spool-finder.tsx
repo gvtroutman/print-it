@@ -232,8 +232,8 @@ export function SpoolFinder({
 }
 
 /** What a screen reader hears for each column, then each row of `COLOR_GRID`. */
-const HUE_NAMES = ["cyan", "blue", "purple", "pink", "red", "orange", "yellow", "green"];
-const ROW_NAMES = ["darkest", "dark", "deep", "bright", "light", "pale"];
+const HUE_NAMES = ["sky blue", "blue", "violet", "purple", "pink", "red", "orange", "yellow", "lime", "green"];
+const ROW_NAMES = ["darkest", "very dark", "dark", "deep", "bright", "light", "soft", "pale", "palest"];
 
 function cellLabel(row: number, col: number) {
   if (row === 0) {
