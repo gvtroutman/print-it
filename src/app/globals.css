@@ -320,6 +320,12 @@
   transform: translate(3px, 3px);
   box-shadow: 0 0 0 var(--color-ink);
 }
+/* A stamp that stays down: the owner's card while the member view is on. */
+.stamp-pressed,
+.stamp-pressed:hover {
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 var(--color-ink);
+}
 
 @media (prefers-reduced-motion: reduce) {
   .ppp-in,
@@ -330,7 +336,8 @@
   }
   .stamp,
   .stamp:hover,
-  .stamp:active {
+  .stamp:active,
+  .stamp-pressed {
     transform: none;
     transition: background-color 160ms ease-out;
   }

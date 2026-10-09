@@ -79,8 +79,13 @@ export function UserMenu({
  * phone, the hamburger menu that stands in for it.
  *
  * For the printer owner the card with their name is also the switch between
- * the owner view and the member view. There is no banner while the member
- * view is on: the card says so, and the way back is one click on it.
+ * the owner view and the member view: a stamp that sits raised in the owner
+ * view and pressed in while the member view is on. There is no banner and no
+ * labelled link — the card says which view this is, and one click on it is
+ * the way across in either direction.
+ *
+ * A member's email is not shown here. It is not how they sign in and not how
+ * anybody reaches them in the app, so on their own card it was only clutter.
  */
 export function AccountPanel({
   name,
@@ -112,7 +117,7 @@ export function AccountPanel({
       )}
       <span className="block min-w-0">
         <span className="block font-display text-[17px] text-ink">{name}</span>
-        {email && (
+        {email && role === "admin" && !previewing && (
           <span className="mt-[2px] block break-all font-mono text-[11.5px] text-ink-3">{email}</span>
         )}
         <span className="mt-[8.8px] inline-block rounded-chip border-2 border-ink bg-cream-2 px-[8px] font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink">
@@ -125,16 +130,21 @@ export function AccountPanel({
   return (
     <>
       {role === "admin" || previewing ? (
-        // A plain server-action form, so it works before hydration.
+        // A plain server-action form, so it works before hydration. The
+        // button is a toggle: raised when the owner view is on, pressed in
+        // while the member view is. `aria-pressed` says so to a screen
+        // reader, and the label is the only wording there is.
         <form action={previewing ? endPreviewAction : startPreviewAction}>
           <button
             type="submit"
-            className="-m-[8px] block w-[calc(100%+16px)] cursor-pointer rounded-panel border-2 border-transparent bg-transparent p-[8px] text-left hover:border-ink hover:bg-cream-2"
+            aria-pressed={previewing ? true : false}
+            aria-label={previewing ? "Back to the owner view" : "Switch to the member view"}
+            title={previewing ? "Back to the owner view" : "Switch to the member view"}
+            className={`stamp block w-full cursor-pointer rounded-panel border-[3px] border-ink p-[11px] text-left ${
+              previewing ? "stamp-pressed bg-sun" : "bg-cream-2 hover:bg-sun"
+            }`}
           >
             {card}
-            <span className="mt-[8.8px] block font-bold text-[14px] text-cherry-dk underline underline-offset-2">
-              {previewing ? "Back to the owner view ⇄" : "Switch to the member view ⇄"}
-            </span>
           </button>
         </form>
       ) : (
