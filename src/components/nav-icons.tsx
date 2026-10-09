@@ -22,8 +22,10 @@ const PATHS: Record<NavIconName, string> = {
   stack: "M5 7.5h10v9H5zM3 4.5h10M4 2h10",
   // A light bulb: an idea someone had.
   bulb: "M7.5 15.5h5M8 18h4M10 2.5a5 5 0 0 0-3 9c.5.5 1 1.3 1 2h4c0-.7.5-1.5 1-2a5 5 0 0 0-3-9Z",
-  // A jar with a coin going in.
-  jar: "M6 7h8l1 10.5H5zM7 4.5h6M10 1.5v3M7.5 11a2.5 1 0 1 0 5 0 2.5 1 0 1 0-5 0",
+  // A collection box with a heart on the front: the usual "donate" mark. A
+  // coin in a slot looked like the handle on a lunchbox at 16px. The heart
+  // is solid (see FILLS) because an outlined one is a blob at that size.
+  jar: "M3 6.5h14V17H3zM2 6.5h16",
   // A box with a tick: to do.
   check: "M4 4h12v12H4zM7 10.2l2.2 2.3L13.5 7.5",
   // One person.
@@ -35,6 +37,11 @@ const PATHS: Record<NavIconName, string> = {
   people: "M7.5 3.5a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6ZM2 17c.5-3 2.8-5 5.5-5s5 2 5.5 5M13 4a2.6 2.6 0 0 1 0 5.2M14.5 12.2c2.1.4 3.4 2.2 3.8 4.8",
   // A page of lines: the log.
   book: "M5 2.5h7l3.5 3.5v11.5H5zM12 2.5V6h3.5M7.5 10h5M7.5 13h5",
+};
+
+/** Solid shapes drawn on top of the strokes, for the few that need one. */
+const FILLS: Partial<Record<NavIconName, string>> = {
+  jar: "M10 15.5c-2.4-1.7-4-3.1-4-4.8a2.1 2.1 0 0 1 4-1 2.1 2.1 0 0 1 4 1c0 1.7-1.6 3.1-4 4.8Z",
 };
 
 export function NavIcon({ name, className = "" }: { name: NavIconName; className?: string }) {
@@ -50,6 +57,7 @@ export function NavIcon({ name, className = "" }: { name: NavIconName; className
       strokeLinejoin="round"
     >
       <path d={PATHS[name]} />
+      {FILLS[name] && <path d={FILLS[name]} fill="currentColor" stroke="none" />}
     </svg>
   );
 }
