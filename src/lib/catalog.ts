@@ -85,12 +85,14 @@ function hslHex(h: number, s: number, l: number): string {
   return `#${channel(0)}${channel(8)}${channel(4)}`;
 }
 
-/** The hues across the colour grid, left to right: cyan round to green. */
-const GRID_HUES = [196, 214, 248, 276, 322, 356, 14, 28, 40, 52, 62, 96];
+/**
+ * The hues across the colour grid, left to right: cyan round to green. Few
+ * enough that each cell is big enough to tap without aiming; the search
+ * finds the closest spools, so a cell only has to be near what is wanted.
+ */
+const GRID_HUES = [196, 220, 268, 322, 356, 24, 48, 110];
 /** Each hue's rows, darkest to palest, as [saturation, lightness]. */
-const GRID_ROWS: [number, number][] = [
-  [100, 13], [100, 20], [95, 27], [90, 35], [92, 43], [100, 50], [100, 61], [100, 71], [100, 81], [100, 91],
-];
+const GRID_ROWS: [number, number][] = [[100, 18], [92, 30], [92, 42], [100, 54], [100, 70], [100, 86]];
 
 /**
  * The "can get" picker's colour grid, row by row, the way a phone's colour

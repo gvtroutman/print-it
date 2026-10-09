@@ -232,8 +232,8 @@ export function SpoolFinder({
 }
 
 /** What a screen reader hears for each column, then each row of `COLOR_GRID`. */
-const HUE_NAMES = ["cyan", "blue", "indigo", "purple", "magenta", "red", "red-orange", "orange", "amber", "yellow", "lime", "green"];
-const ROW_NAMES = ["darkest", "very dark", "dark", "deep", "rich", "bright", "light", "soft", "pale", "palest"];
+const HUE_NAMES = ["cyan", "blue", "purple", "pink", "red", "orange", "yellow", "green"];
+const ROW_NAMES = ["darkest", "dark", "deep", "bright", "light", "pale"];
 
 function cellLabel(row: number, col: number) {
   if (row === 0) {
@@ -278,7 +278,7 @@ function ColorGrid({ value, onChange }: { value: string | null; onChange: (hex: 
     <div
       role="radiogroup"
       aria-label="Color to search by"
-      className="mt-[6px] grid overflow-hidden rounded-[12px] border-[3px] border-ink"
+      className="mt-[6px] grid overflow-hidden rounded-[14px] border-[3px] border-ink"
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
     >
       {COLOR_GRID.flatMap((row, r) =>
@@ -301,8 +301,8 @@ function ColorGrid({ value, onChange }: { value: string | null; onChange: (hex: 
                 onChange(active ? null : hex);
               }}
               onKeyDown={(e) => move(e, index)}
-              className={`relative aspect-square cursor-pointer border-0 p-0 transition-transform focus-visible:z-20 ${
-                active ? "z-10 scale-[1.18] rounded-[5px]" : "hover:z-10 hover:scale-[1.12] hover:rounded-[4px]"
+              className={`relative aspect-square min-h-[40px] cursor-pointer sm:aspect-[4/3] border-0 p-0 transition-transform focus-visible:z-20 ${
+                active ? "z-10 scale-[1.08] rounded-[6px]" : "hover:z-10 hover:scale-[1.05] hover:rounded-[5px]"
               }`}
               style={{
                 background: hex,
