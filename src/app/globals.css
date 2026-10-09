@@ -290,43 +290,43 @@
   }
 }
 
-/* The dropzone's Necker cube: a wireframe turning on its vertical axis. No
-   perspective on purpose — drawn orthographic, either square can be the front,
-   so it seems to flip direction as you watch. */
-@keyframes ppp-necker {
+/* The dropzone's toy block: a solid cube turning on its vertical axis, one
+   face per letter colour of the wordmark (print-it-wordmark-arched.png), each
+   with an ink outline like the rest of the cut-outs. Drawn orthographic, no
+   perspective, so it stays a flat toy rather than a render. */
+@keyframes ppp-cube {
   to {
     transform: rotateY(360deg);
   }
 }
 
-.ppp-necker {
-  --s: 48px;
-  --b: 3px;
+.ppp-cube {
+  --s: 46px;
+  --b: 2.5px;
   position: relative;
   width: var(--s);
   height: var(--s);
   transform-style: preserve-3d;
   transform: rotateX(-24deg);
 }
-.ppp-necker > span {
+.ppp-cube > span {
   position: absolute;
   inset: 0;
   transform-style: preserve-3d;
-  animation: ppp-necker 16s linear infinite;
+  animation: ppp-cube 16s linear infinite;
 }
-/* Each face is the square grown by half a line on every side, so its border
-   sits centred on the cube's true edge and neighbouring faces' lines meet. */
-.ppp-necker > span > span {
+.ppp-cube > span > span {
   position: absolute;
-  inset: calc(var(--b) / -2);
-  border: var(--b) solid var(--color-sun);
+  inset: 0;
+  border: var(--b) solid var(--color-ink);
+  backface-visibility: hidden;
 }
-.ppp-necker > span > span:nth-child(1) { transform: translateZ(calc(var(--s) / 2)); }
-.ppp-necker > span > span:nth-child(2) { transform: rotateY(180deg) translateZ(calc(var(--s) / 2)); }
-.ppp-necker > span > span:nth-child(3) { transform: rotateY(90deg) translateZ(calc(var(--s) / 2)); }
-.ppp-necker > span > span:nth-child(4) { transform: rotateY(-90deg) translateZ(calc(var(--s) / 2)); }
-.ppp-necker > span > span:nth-child(5) { transform: rotateX(90deg) translateZ(calc(var(--s) / 2)); }
-.ppp-necker > span > span:nth-child(6) { transform: rotateX(-90deg) translateZ(calc(var(--s) / 2)); }
+.ppp-cube > span > span:nth-child(1) { background: #cc0000; transform: translateZ(calc(var(--s) / 2)); }
+.ppp-cube > span > span:nth-child(2) { background: #1450d8; transform: rotateY(90deg) translateZ(calc(var(--s) / 2)); }
+.ppp-cube > span > span:nth-child(3) { background: #fbd84b; transform: rotateY(180deg) translateZ(calc(var(--s) / 2)); }
+.ppp-cube > span > span:nth-child(4) { background: #22c022; transform: rotateY(-90deg) translateZ(calc(var(--s) / 2)); }
+.ppp-cube > span > span:nth-child(5) { background: #7a1cd8; transform: rotateX(90deg) translateZ(calc(var(--s) / 2)); }
+.ppp-cube > span > span:nth-child(6) { background: #f89060; transform: rotateX(-90deg) translateZ(calc(var(--s) / 2)); }
 
 .ppp-in {
   animation: ppp-in 180ms ease-out;
@@ -364,11 +364,11 @@
   .ppp-toast,
   .ppp-neon,
   .ppp-extrude,
-  .ppp-necker > span {
+  .ppp-cube > span {
     animation: none;
   }
   /* Parked at a three-quarter turn, so it still reads as a cube. */
-  .ppp-necker > span {
+  .ppp-cube > span {
     transform: rotateY(35deg);
   }
   .stamp,
