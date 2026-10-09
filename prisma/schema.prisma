@@ -624,3 +624,40 @@ model Donation {
   @@index([donorId])
   @@map("donation")
 }
+
+// ===========================================================================
+// Printers
+//
+// The machines on the owner's home, each with an hour meter. The owner reads
+// the total hours off the printer and logs them, like a car's odometer; the
+// newest reading is the one shown, and the older ones show how fast it climbs.
+// ===========================================================================
+
+/// A machine the owner runs. Rows come from migrations, not the app: the
+/// first, the P1S Combo, is seeded by the printer_hours migration.
+model Printer {
+  id        String   @id @default(cuid())
+  /// What it is, as the shop names it.
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  readings PrinterReading[]
+
+  @@map("printer")
+}
+
+/// One look at the hour meter. Readings only go up, and are never edited.
+model PrinterReading {
+  id        String   @id @default(cuid())
+  printerId String
+  printer   Printer  @relation(fields: [printerId], references: [id], onDelete: Cascade)
+  /// Total hours the printer has run, to a tenth.
+  hours     Float
+  /// Optional: "new nozzle", "after the big batch".
+  note      String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([printerId, createdAt])
+  @@map("printerReading")
+}

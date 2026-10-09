@@ -11,6 +11,8 @@ import { Kicker, Notice, StatusChip, PriorityChip } from "@/components/ui";
 import { Toast } from "@/components/toast";
 import { FilamentSpool } from "@/components/color-swatch";
 
+import { PrinterHours } from "./printer-hours";
+
 export const dynamic = "force-dynamic";
 
 /**
@@ -171,6 +173,10 @@ export default async function QueuePage({
               </div>
             ))
           )}
+        </div>
+
+        <div className="mt-[35.2px]">
+          <PrinterHours />
         </div>
       </main>
 
