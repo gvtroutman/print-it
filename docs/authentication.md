@@ -193,8 +193,8 @@ top-level domain reserved never to resolve (RFC 6761 §6.4), the same device
 Better Auth's own anonymous plugin uses. It is marked unverified. Everything
 that would show an address or mail one goes through `contactEmail()` in
 [`src/lib/contact-email.ts`](../src/lib/contact-email.ts), which turns the
-placeholder back into "none": the menus show no address, the guest list says
-*No email on file*, and a reset or device link for that member is handed to the
+placeholder back into "none": the menus and the guest list show no address
+line at all, and a reset or device link for that member is handed to the
 admin rather than mailed. The gate computes the same placeholder from the
 invitation id, so a sign-up body carrying it without the link is refused like
 any other.

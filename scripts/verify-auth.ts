@@ -434,8 +434,9 @@ async function main() {
         noeHome.includes('data-authenticated="true"') && !noeHome.includes("placeholder.invalid"));
 
   const guestListNow = await (await ruben.go(`${APP}/admin/invites`)).text();
-  check("the guest list shows the member with no address, and no placeholder",
-        guestListNow.includes("No email on file") && !guestListNow.includes("placeholder.invalid"));
+  check("the guest list shows the member with no address line and no placeholder",
+        guestListNow.includes("Noe Mail") && !guestListNow.includes("No email") &&
+        !guestListNow.includes("placeholder.invalid"));
 
   // The link is still the credential. Knowing how a placeholder is built does
   // not let anybody post one at the sign-up endpoint.

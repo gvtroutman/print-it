@@ -128,9 +128,11 @@ export default async function InvitesPage() {
                         </span>
                       )}
                     </p>
-                    <p className="m-0 font-mono text-[11.5px] text-ink-3">
-                      {contactEmail(m.email) ?? "No email on file"}
-                    </p>
+                    {/* Only when there is one: a member invited by name has
+                        nothing to show here, and a label saying so is noise. */}
+                    {contactEmail(m.email) && (
+                      <p className="m-0 font-mono text-[11.5px] text-ink-3">{contactEmail(m.email)}</p>
+                    )}
                   </div>
                   <div className="flex flex-wrap items-center gap-[8.8px]">
                     {/* What this person has sent — the first thing to look at
