@@ -6,6 +6,11 @@ import { logHoursAction } from "./actions";
 
 const WEEK_MS = 7 * 86_400_000;
 
+/** Cut-out photos in public/printers, by printer id. Bambu Lab's product shots. */
+const PHOTOS: Record<string, string> = {
+  "p1s-combo": "/printers/p1s-combo.webp",
+};
+
 /**
  * The hour meter for each printer, on the owner's home. The owner reads the
  * total hours off the machine and logs them; the card shows the newest
@@ -40,6 +45,16 @@ export async function PrinterHours() {
             </div>
 
             <div className="flex flex-wrap items-end gap-[22px] p-[22px]">
+              {PHOTOS[printer.id] && (
+                // eslint-disable-next-line @next/next/no-img-element -- a small static cut-out
+                <img
+                  src={PHOTOS[printer.id]}
+                  alt={printer.name}
+                  width={104}
+                  height={150}
+                  className="h-[150px] w-[104px] flex-none object-contain"
+                />
+              )}
               <div className="flex-[1_1_260px]">
                 <p className="m-0 mb-[8px] font-mono text-[11.5px] uppercase tracking-[0.05em] text-ink-3">
                   Hours on the clock
