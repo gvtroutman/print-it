@@ -3,13 +3,13 @@
 import { useEffect, useRef } from "react";
 
 /**
- * The dropzone's colour-mixing cube: a see-through cube of printer's inks,
- * balanced on one corner and turning on the axis through it. Opposite faces
- * share an ink — cyan front and back, magenta left and right, yellow top and
- * bottom — and every face is multiplied onto what is behind it, like ink on
- * paper. Every point of the cube is seen through two faces, so you see them
- * mix (cyan + magenta = blue, magenta + yellow = red, yellow + cyan = green),
- * and the mixes slide about as it turns.
+ * The dropzone's colour-mixing cube: a see-through cube of coloured glass,
+ * balanced on one corner and turning on the axis through it. Each face is its
+ * own colour, the wordmark's six (red, orange, yellow, green, blue, purple),
+ * and every face is multiplied onto what is behind it, like ink on paper.
+ * Every point of the cube is seen through two faces, so the far face tints
+ * the near one and the mixes slide about as it turns. The far faces are laid
+ * on paler, so each near face still reads as its own colour. No outline.
  *
  * A canvas, not CSS 3D: `mix-blend-mode` flattens a preserve-3d face, so the
  * CSS cube could not mix. Multiply is order-free, so the faces need no depth
@@ -19,12 +19,15 @@ import { useEffect, useRef } from "react";
 const SIZE = 80; // CSS px, square
 const HALF = 21; // half the cube's edge
 const TURN_MS = 16000;
-const LINE = 1;
-const INK = "#221a14"; // --color-ink
 
-// Opposite faces share an ink: x magenta, y yellow, z cyan. Laid on at about
-// half strength, so the mixes come out light too (cyan + magenta = #7373ff).
-const INKS = ["#ff73ff", "#ffff73", "#73ffff"];
+// One per face, in FACES order: left, right, top, bottom, back, front.
+const COLORS = ["#ff6b6b", "#6b9bff", "#ffe94d", "#c38bff", "#ffb347", "#6bdc7a"];
+// The far faces, halfway to white.
+const PALE = COLORS.map((hex) => {
+  const n = parseInt(hex.slice(1), 16);
+  const half = (c: number) => Math.round(c + (255 - c) / 2);
+  return `rgb(${half(n >> 16)}, ${half((n >> 8) & 255)}, ${half(n & 255)})`;
+});
 
 // The six faces as [axis, sign], each with its four corners in order round.
 const FACES: { axis: number; corners: number[][] }[] = [];
@@ -66,7 +69,7 @@ function draw(ctx: CanvasRenderingContext2D, turn: number) {
   const faces = FACES.map(({ axis, corners }) => {
     const pts = corners.map((c) => place(c, turn));
     const n = place(corners[0].map((_, i) => (i === axis ? corners[0][axis] : 0)), turn);
-    return { axis, pts, front: n[2] > 0 };
+    return { pts, front: n[2] > 0 };
   });
   const path = (pts: V[]) => {
     ctx.beginPath();
@@ -75,25 +78,12 @@ function draw(ctx: CanvasRenderingContext2D, turn: number) {
   };
 
   ctx.globalCompositeOperation = "multiply";
-  for (const f of faces) {
+  faces.forEach((f, i) => {
     path(f.pts);
-    ctx.fillStyle = INKS[f.axis];
+    ctx.fillStyle = f.front ? COLORS[i] : PALE[i];
     ctx.fill();
-  }
-
-  // Edges: the far ones faint, so you can see through it; near ones on top.
+  });
   ctx.globalCompositeOperation = "source-over";
-  ctx.lineWidth = LINE;
-  ctx.lineJoin = "round";
-  ctx.strokeStyle = INK;
-  for (const front of [false, true]) {
-    ctx.globalAlpha = front ? 1 : 0.3;
-    for (const f of faces.filter((f) => f.front === front)) {
-      path(f.pts);
-      ctx.stroke();
-    }
-  }
-  ctx.globalAlpha = 1;
 }
 
 export function InkCube({ className = "" }: { className?: string }) {
