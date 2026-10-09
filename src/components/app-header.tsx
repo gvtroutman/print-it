@@ -45,7 +45,8 @@ const NAV: Record<Actor["role"], NavGroup[]> = {
       items: [
         { label: "Materials", href: "/admin/catalog", icon: "spool" },
         { label: "Members", href: "/admin/invites", icon: "people" },
-        { label: "Audit log", href: "/admin/audit", icon: "book" },
+        // The audit log is in the Activity menu, with History: it is the
+        // record of what happened, not a place the work lives.
       ],
     },
   ],
@@ -111,6 +112,7 @@ export async function AppHeader({
                 items={items}
                 unread={unread}
                 title={user.role === "admin" ? "New from the group" : "Updates on your prints"}
+                role={user.role}
               />
               <UserMenu
                 name={user.name}
@@ -187,6 +189,7 @@ export async function AppHeader({
               items={items}
               unread={unread}
               title={user.role === "admin" ? "New from the group" : "Updates on your prints"}
+              role={user.role}
             />
           </div>
         </div>

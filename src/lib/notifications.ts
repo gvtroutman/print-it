@@ -61,3 +61,18 @@ export async function markNotificationsRead(
   revalidatePath("/", "layout");
   return count;
 }
+
+/**
+ * Dismiss one notification: the X on a row in the Activity panel.
+ *
+ * `deleteMany` for the same reason `markNotificationsRead` uses `updateMany`:
+ * scoped by `recipientId`, somebody else's id deletes nothing and says so
+ * with a count, rather than throwing and confirming the row exists.
+ */
+export async function deleteNotification(actor: Actor, id: string): Promise<number> {
+  const { count } = await db.notification.deleteMany({
+    where: { recipientId: actor.id, id },
+  });
+  revalidatePath("/", "layout");
+  return count;
+}

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { markAllRead, markRead } from "@/app/actions/notifications";
+import { dismiss, markAllRead, markRead } from "@/app/actions/notifications";
 
 export type FeedItem = {
   id: string;
@@ -16,16 +16,19 @@ export type FeedItem = {
 /**
  * The Activity panel. Handoff §1: 360px, radius 14, lg shadow, a 160ms
  * fade-and-rise, an 8px dot per row, and a count badge that fills teal only
- * when something is unread.
+ * when something is unread. Each row has an X that takes it off the feed for
+ * good, and the panel's foot holds the places the activity leads to.
  */
 export function ActivityMenu({
   items,
   unread,
   title,
+  role,
 }: {
   items: FeedItem[];
   unread: number;
   title: string;
+  role: "client" | "admin";
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -91,56 +94,81 @@ export function ActivityMenu({
               </p>
             )}
             {items.map((item) => (
-              <button
+              // A row is two buttons side by side, not one inside the other:
+              // the text opens what it is about, the X dismisses it.
+              <div
                 key={item.id}
-                type="button"
-                onClick={() => {
-                  if (!item.read) startTransition(() => void markRead(item.id));
-                  // Take them to whatever the notification is about. A feature
-                  // request goes to /frr, a print to /story; a reference-less
-                  // one (a withdrawal) just marks read.
-                  const href =
-                    item.featureId !== null
-                      ? `/frr/${item.featureId}`
-                      : item.storyId !== null
-                        ? `/story/${item.storyId}`
-                        : null;
-                  if (href) window.location.assign(href);
-                }}
-                className={`flex cursor-pointer gap-[13.2px] rounded-card border-2 border-transparent px-[13.2px] py-[11px] text-left hover:border-ink hover:bg-cream-2 ${
+                className={`flex items-stretch rounded-card border-2 border-transparent hover:border-ink hover:bg-cream-2 ${
                   item.read ? "bg-transparent" : "bg-sun-wash"
                 }`}
               >
-                <span
-                  aria-hidden
-                  className={`mt-[6px] h-[8px] w-[8px] flex-none rounded-full ${
-                    item.read ? "bg-chrome" : "bg-cherry"
-                  }`}
-                />
-                <span>
-                  <span className="block text-[14px] leading-[1.35]">
-                    {item.text}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!item.read) startTransition(() => void markRead(item.id));
+                    // Take them to whatever the notification is about. A feature
+                    // request goes to /frr, a print to /story; a reference-less
+                    // one (a withdrawal) just marks read.
+                    const href =
+                      item.featureId !== null
+                        ? `/frr/${item.featureId}`
+                        : item.storyId !== null
+                          ? `/story/${item.storyId}`
+                          : null;
+                    if (href) window.location.assign(href);
+                  }}
+                  className="flex min-w-0 flex-1 cursor-pointer gap-[13.2px] py-[11px] pl-[13.2px] pr-[6px] text-left"
+                >
+                  <span
+                    aria-hidden
+                    className={`mt-[6px] h-[8px] w-[8px] flex-none rounded-full ${
+                      item.read ? "bg-chrome" : "bg-cherry"
+                    }`}
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-[14px] leading-[1.35]">
+                      {item.text}
+                    </span>
+                    <span className="mt-[2px] block font-mono text-[11px] text-ink-3">
+                      {item.when}
+                      {item.read ? "" : " · unread"}
+                    </span>
                   </span>
-                  <span className="mt-[2px] block font-mono text-[11px] text-ink-3">
-                    {item.when}
-                    {item.read ? "" : " · unread"}
-                  </span>
-                </span>
-              </button>
+                </button>
+                <button
+                  type="button"
+                  disabled={pending}
+                  aria-label={`Dismiss: ${item.text}`}
+                  title="Dismiss"
+                  onClick={() => startTransition(() => void dismiss(item.id))}
+                  className="flex w-[34px] flex-none cursor-pointer items-center justify-center rounded-r-card font-mono text-[14px] font-bold text-ink-3 hover:bg-cherry-wash hover:text-cherry-dk disabled:opacity-50"
+                >
+                  <span aria-hidden>&times;</span>
+                </button>
+              </div>
             ))}
           </div>
 
-          {/* History lives here rather than in the nav: it is where the
-              activity ends up once a print is finished. */}
-          <div className="mt-[8.8px] border-t-2 border-ink pt-[8.8px]">
-            <Link
-              href="/history"
-              onClick={() => setOpen(false)}
-              className="flex items-center justify-between rounded-card border-2 border-transparent px-[13.2px] py-[8px] font-mono text-[12px] font-bold uppercase tracking-[0.08em] text-ink hover:border-ink hover:bg-cream-2"
-            >
-              History
-              <span aria-hidden>&rarr;</span>
-            </Link>
+          {/* The places the activity leads to live here rather than in the
+              nav: History is where it ends up once a print is finished, the
+              audit log is the owner's full record of it, and the API console
+              is for anyone who wants the same feed over HTTP. */}
+          <div className="mt-[8.8px] flex flex-col gap-[2px] border-t-2 border-ink pt-[8.8px]">
+            {[
+              { label: "History", href: "/history" },
+              ...(role === "admin" ? [{ label: "Audit log", href: "/admin/audit" }] : []),
+              { label: "API & docs", href: "/docs" },
+            ].map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setOpen(false)}
+                className="flex items-center justify-between rounded-card border-2 border-transparent px-[13.2px] py-[8px] font-mono text-[12px] font-bold uppercase tracking-[0.08em] text-ink hover:border-ink hover:bg-cream-2"
+              >
+                {link.label}
+                <span aria-hidden>&rarr;</span>
+              </Link>
+            ))}
           </div>
         </div>
       )}

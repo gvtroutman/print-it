@@ -69,6 +69,7 @@ no header that names a user.
 | `POST` | `/api/stories/{id}/requeue` | Print your own ticket again from the same file, changing what you like. |
 | `GET` | `/api/notifications` | Your Activity feed. |
 | `POST` | `/api/notifications/read` | Mark one read, or all of them. |
+| `DELETE` | `/api/notifications/{id}` | Dismiss one. |
 | `GET` | `/api/catalog` | The materials and colours on offer right now, and which sites — if any — this instance imports from. |
 | `POST` | `/api/upload` | Upload a model and open a request. Multipart. |
 | `POST` | `/api/import/files` | What a link to a model offers: the model and its printable files. `501` unless the instance imports. |

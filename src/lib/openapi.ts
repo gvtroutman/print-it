@@ -927,6 +927,38 @@ export async function buildOpenApiDocument() {
         },
       },
 
+      "/api/notifications/{id}": {
+        delete: {
+          tags: ["activity"],
+          summary: "Dismiss one",
+          description:
+            "Take a notification off your feed for good — the X on a row in " +
+            "the Activity panel.\n\n" +
+            "Somebody else's id is a no-op rather than a 404, for the same " +
+            "reason as marking read.",
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: {
+            "200": {
+              description: "Whether a row went, and what is left unread.",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      dismissed: { type: "boolean" },
+                      unread: { type: "integer" },
+                    },
+                  },
+                },
+              },
+            },
+            ...COMMON_ERRORS,
+          },
+        },
+      },
+
       "/api/upload": {
         post: {
           tags: ["files"],
