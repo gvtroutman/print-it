@@ -38,6 +38,8 @@ on:
     branches: [main]
     # Nothing in these reaches an image (see .dockerignore), so a push that
     # only touches them has nothing to build or deploy.
+    # An empty commit counts as touching only these, so it does not build
+    # either: to rebuild without a change, re-run the last run or dispatch it.
     paths-ignore:
       - "docs/**"
       - "**.md"
