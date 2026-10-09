@@ -500,5 +500,5 @@ benefit publicly, and nothing from those who merely use it.
 If your organisation's policy forbids AGPL software — some do, blanket-style —
 you are welcome to ask about other terms.
 
-Built from the design handoff in `Pretty Please Print/`, which is why story refs
-read `PPP-104` and the copy sounds like a diner.
+Built from the design handoff in `Pretty Please Print/`, which is why the copy
+sounds like a diner.

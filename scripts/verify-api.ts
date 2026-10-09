@@ -445,14 +445,14 @@ async function main() {
         (await db.notification.count({ where: { recipientId: admin.id, storyId: urgent.id } })) === 1);
   check("and it is in the trail with where it came from",
         (await db.auditEvent.count({
-          where: { action: "story.priority_changed", subject: `PPP-${100 + urgent.id}`, actorId: ayla.id },
+          where: { action: "story.priority_changed", subject: `PI-${100 + urgent.id}`, actorId: ayla.id },
         })) === 1);
 
   const same = await setPriority(client, urgent.id, "high");
   check("setting it to what it already is changes nothing and tells nobody",
         same.status === 200 && same.body.changed?.unchanged === true &&
         (await db.notification.count({ where: { recipientId: admin.id, storyId: urgent.id } })) === 1 &&
-        (await db.auditEvent.count({ where: { action: "story.priority_changed", subject: `PPP-${100 + urgent.id}` } })) === 1,
+        (await db.auditEvent.count({ where: { action: "story.priority_changed", subject: `PI-${100 + urgent.id}` } })) === 1,
         `status ${same.status}`);
 
   const lowered = await setPriority(ruben, urgent.id, "low");

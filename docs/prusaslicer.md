@@ -37,7 +37,7 @@ only new moving part, and it talks to nothing but this app's own API.
  click ─ppp://slice/104?t=…─▶ prusa-open.sh
                             GET /api/models/104?t=…  ───────▶  (link credential)
                             ◀───────────────────── the .stl bytes
-                            writes /tmp/…/PPP-104-clip.stl
+                            writes /tmp/…/PI-104-clip.stl
                             prusa-slicer --single-instance <that file>
 ```
 

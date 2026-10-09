@@ -32,6 +32,12 @@ Notable changes. Every entry names a released version; deployments pin
 
 ### Changed
 
+- **Tickets are numbered `PI-` now**, not `PPP-`: PI-104 is the ticket that
+  was PPP-104, only the prefix changed. It shows on the board, the ticket
+  page, API responses (`ref`), the audit trail and slicer download filenames.
+  The `audit_story_ref_prefix` migration rewrites the refs already in the
+  audit trail; it changes data only.
+
 - **The "Order up" tab is now "New order".**
 
 ### Removed

@@ -237,7 +237,7 @@ model AuditEvent {
   /// Kept even if the account is later removed.
   actorEmail String?
 
-  /// What was acted on, in human terms: "PPP-104", "ayla@office.example".
+  /// What was acted on, in human terms: "PI-104", "ayla@office.example".
   subject String?
 
   ip        String?
@@ -288,7 +288,7 @@ enum CatalogColorMode {
 }
 
 model Story {
-  /// Autoincrement so the display ref stays "PPP-" + (100 + id).
+  /// Autoincrement so the display ref stays "PI-" + (100 + id).
   id     Int         @id @default(autoincrement())
   title  String
   status StoryStatus @default(Requested)

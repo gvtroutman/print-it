@@ -34,7 +34,7 @@ export function WithdrawStory({
   from,
 }: {
   storyId: number;
-  /** The display ref, e.g. "PPP-104". NOT named `ref` — React reserves that,
+  /** The display ref, e.g. "PI-104". NOT named `ref` — React reserves that,
    *  and in a server component the element is dropped rather than rendered. */
   label: string;
   from: string;

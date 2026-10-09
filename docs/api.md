@@ -78,7 +78,7 @@ no header that names a user.
 | `GET` | `/api/openapi.json` | This surface, machine-readable. |
 | | `/api/auth/*` | Every Better Auth endpoint — sign-in, passkeys, admin, reset. |
 
-`{id}` is the numeric id — `4`, not `PPP-104`. The display ref comes back on
+`{id}` is the numeric id — `4`, not `PI-104`. The display ref comes back on
 every ticket as `ref`.
 
 ## Five things that will otherwise surprise you
@@ -139,7 +139,7 @@ curl -s https://print.example/api/upload \
 One shape, everywhere, and the message is written for a person:
 
 ```json
-{ "error": "PPP-104 is already printing — ask Ruben instead." }
+{ "error": "PI-104 is already printing — ask Ruben instead." }
 ```
 
 | | |

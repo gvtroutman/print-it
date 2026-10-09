@@ -87,8 +87,8 @@ const STORY_SCHEMA = {
     id: { type: "integer", examples: [4] },
     ref: {
       type: "string",
-      description: "The display reference, `PPP-` + (100 + id). What people paste into chat.",
-      examples: ["PPP-104"],
+      description: "The display reference, `PI-` + (100 + id). What people paste into chat.",
+      examples: ["PI-104"],
     },
     title: { type: "string", examples: ["Cable clip"] },
     status: { type: "string", enum: [...FLOW, "Declined"] },
@@ -176,7 +176,7 @@ const COMMENT_SCHEMA = {
   properties: {
     id: { type: "string" },
     storyId: { type: "integer" },
-    ref: { type: "string", examples: ["PPP-104"] },
+    ref: { type: "string", examples: ["PI-104"] },
     body: { type: "string" },
     author: {
       type: "object",
@@ -210,7 +210,7 @@ const storyIdParam = {
   name: "id",
   in: "path",
   required: true,
-  description: "The numeric story id — `4`, not `PPP-104`.",
+  description: "The numeric story id — `4`, not `PI-104`.",
   schema: { type: "integer", minimum: 1 },
 } as const;
 
@@ -710,7 +710,7 @@ export async function buildOpenApiDocument() {
           },
           responses: {
             "201": storyResponse("The new ticket.", {
-              from: { type: "string", examples: ["PPP-104"] },
+              from: { type: "string", examples: ["PI-104"] },
             }),
             "400": errorResponse("A field did not parse."),
             "403": errorResponse("Only the person who asked for it can print it again."),
@@ -1022,7 +1022,7 @@ export async function buildOpenApiDocument() {
                     type: "object",
                     properties: {
                       id: { type: "integer" },
-                      ref: { type: "string", examples: ["PPP-104"] },
+                      ref: { type: "string", examples: ["PI-104"] },
                       title: { type: "string" },
                       dims: { type: ["string", "null"] },
                     },
