@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
-import { hslHex, type CatalogColorChoice, type SwatchChoice } from "@/lib/catalog";
+import { fromSpoolman, hslHex, type CatalogColorChoice, type SwatchChoice } from "@/lib/catalog";
 import { SwatchPhoto } from "@/components/swatch-photo";
 
 /** What `GET /api/filament-library` answers with. */
@@ -19,7 +19,8 @@ const DEBOUNCE_MS = 300;
 
 /**
  * Spools the owner does not have but can buy, under the shelf colours: the
- * filamentcolors.xyz library for one material. Folded to a button until it
+ * filamentcolors.xyz library for one material, filled in from SpoolmanDB
+ * where it has too few. Folded to a button until it
  * is wanted, so the library is not asked for nothing; it opens on its own
  * when a spool to buy is already picked, or when `suggested` says nothing on
  * the shelf looks like the colour picked up top. Key it by material: another
@@ -168,7 +169,7 @@ function SpoolFinder({
             <p className="m-0 text-[13px] text-ink-2">
               {picked.maker} · {picked.type} ·{" "}
               <a href={picked.pageUrl} target="_blank" rel="noreferrer noopener" className="font-bold underline underline-offset-2">
-                see the real swatch ↗
+                {fromSpoolman(picked.id) ? "look it up ↗" : "see the real swatch ↗"}
               </a>
             </p>
             <button
@@ -293,6 +294,15 @@ function SpoolFinder({
               <a href="https://filamentcolors.xyz/" target="_blank" rel="noreferrer noopener" className="underline underline-offset-2">
                 filamentcolors.xyz
               </a>
+              {search.found.swatches.some((s) => fromSpoolman(s.id)) && (
+                <>
+                  {" and "}
+                  <a href="https://github.com/Donkie/SpoolmanDB" target="_blank" rel="noreferrer noopener" className="underline underline-offset-2">
+                    SpoolmanDB
+                  </a>
+                  {" (as the makers list them)"}
+                </>
+              )}
               {" · screens are not spools, so check the real swatch"}
             </p>
           </>

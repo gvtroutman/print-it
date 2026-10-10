@@ -125,8 +125,8 @@ const STORY_SCHEMA = {
         toBuy: {
           type: ["object", "null"],
           description:
-            "A spool the owner does not have yet, picked from the filamentcolors.xyz library " +
-            "(`swatchId` on the request). Null for a color on the shelf.",
+            "A spool the owner does not have yet, picked from the filamentcolors.xyz library, " +
+            "or SpoolmanDB when the id is negative (`swatchId` on the request). Null for a color on the shelf.",
           properties: {
             swatchId: { type: "integer" },
             maker: { type: "string", examples: ["Polymaker"] },
@@ -873,7 +873,10 @@ export async function buildOpenApiDocument() {
             "material that the owner does not have but can get. Send a swatch's " +
             "`id` as `swatchId` on a request instead of `colorName`; the server " +
             "reads the swatch back from its own copy of the library and refuses " +
-            "one that is not the material's kind of filament. At most 60 come back.",
+            "one that is not the material's kind of filament. At most 60 come back. " +
+            "When filamentcolors.xyz finds fewer than 12, or cannot be reached, SpoolmanDB's " +
+            "listings fill in: those have a negative `id`, the maker's listed color as `hex`, " +
+            "no photo, and a web search as `pageUrl`.",
           parameters: [
             { name: "material", in: "query", required: true, schema: { type: "string" }, description: "A material from `GET /api/catalog`." },
             { name: "q", in: "query", schema: { type: "string" }, description: "Words that must all appear in the color name, maker or type." },
@@ -907,7 +910,7 @@ export async function buildOpenApiDocument() {
                         items: {
                           type: "object",
                           properties: {
-                            id: { type: "integer" },
+                            id: { type: "integer", description: "Negative for a SpoolmanDB spool." },
                             name: { type: "string", examples: ["Galaxy Black"] },
                             maker: { type: "string", examples: ["Prusament"] },
                             type: { type: "string", examples: ["PLA"] },

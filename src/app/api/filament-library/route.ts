@@ -4,8 +4,9 @@ import { LibraryUnavailable, searchLibrary, swatchColour } from "@/lib/filament-
 
 /**
  * Spools the owner does not have but can buy, for one material: the
- * filamentcolors.xyz library, searched on the server because the browser may
- * not talk to that site (`connect-src 'self'`).
+ * filamentcolors.xyz library, with SpoolmanDB filling in where it finds too
+ * few (negative ids), searched on the server because the browser may not
+ * talk to either site (`connect-src 'self'`).
  *
  * `material` is a catalogue material's name and decides which kind of
  * filament is listed; `q` narrows by words in the name, maker or type, and
@@ -57,7 +58,7 @@ export const GET = withActor(async (request) => {
     });
   } catch (error) {
     if (error instanceof LibraryUnavailable) {
-      return fail(503, "The filamentcolors.xyz library cannot be reached right now. Try again in a minute.");
+      return fail(503, "The spool libraries cannot be reached right now. Try again in a minute.");
     }
     throw error;
   }

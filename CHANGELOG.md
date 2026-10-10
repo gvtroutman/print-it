@@ -17,6 +17,11 @@ Notable changes. Every entry names a released version; deployments pin
   a colour or a kind of filament the library does not list. New
   `GET /api/filament-library`, and `swatchId` on the wish. Needs the
   `story_spool_to_buy` migration, which is additive.
+- **SpoolmanDB fills in the spool search.** When filamentcolors.xyz finds
+  fewer than 12 spools, or cannot be reached, the search also lists
+  SpoolmanDB's spools (the makers' own listings; about 70 brands), shown by
+  colour with no photo. They have negative `swatchId`s. CoPE and CPE
+  materials now count as PETG-family, so they find spools at all.
 - **An invitation no longer needs an email address.** The printer owner can
   invite somebody by name alone; the link is shown once to hand over, and the
   member signs up with just that name. Such an account carries a non-routable

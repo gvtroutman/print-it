@@ -236,7 +236,8 @@ export function PriorityChip({
 
 /**
  * A ticket whose colour the owner does not have yet: they picked a spool to
- * buy from the filamentcolors.xyz library rather than one on the shelf.
+ * buy from the filamentcolors.xyz library (or SpoolmanDB) rather than one on
+ * the shelf.
  */
 export function SpoolToBuyChip() {
   return (

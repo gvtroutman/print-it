@@ -95,7 +95,7 @@ export type SelectionResult =
 /**
  * A wish's material and colour, held to what can be had today: a shelf
  * colour from the catalogue, or a spool to buy from the filamentcolors.xyz
- * library. A spool to buy still needs its material on offer — the owner
+ * library (or SpoolmanDB). A spool to buy still needs its material on offer — the owner
  * prints the materials they print — and has to be that kind of filament.
  * Its name and colour come from the library, never from the form.
  */
@@ -170,10 +170,10 @@ async function autoSelection(colorName: string, colorHex: string | null): Promis
 /** What to tell the requester when `resolveSelection` says no. */
 export const SELECTION_REFUSAL: Record<Exclude<SelectionResult, { ok: true }>["reason"], { status: number; message: string }> = {
   off: { status: 400, message: "That material and color combination is no longer available." },
-  gone: { status: 409, message: "That spool is not in the filamentcolors.xyz library any more — pick another." },
+  gone: { status: 409, message: "That spool is not in the spool library any more — pick another." },
   misfit: { status: 400, message: "That spool is a different kind of filament from the material picked." },
   unreachable: {
     status: 503,
-    message: "The filamentcolors.xyz library cannot be reached right now. Pick a color on the shelf, or try again later.",
+    message: "The spool library cannot be reached right now. Pick a color on the shelf, or try again later.",
   },
 };

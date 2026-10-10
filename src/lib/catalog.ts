@@ -144,9 +144,11 @@ export const NEAR_ENOUGH = 28;
 
 /**
  * A spool the owner does not have but can buy, as the filamentcolors.xyz
- * library describes it. See src/lib/filament-library.ts.
+ * library describes it, or SpoolmanDB where that library falls short. See
+ * src/lib/filament-library.ts and src/lib/spoolman-library.ts.
  */
 export type LibrarySwatch = {
+  /** Positive for a filamentcolors.xyz swatch, negative for a SpoolmanDB spool. */
   id: number;
   name: string;
   maker: string;
@@ -159,7 +161,10 @@ export type LibrarySwatch = {
   shade: SwatchShade | null;
   /** Where to buy it: the maker's shop when listed, else the library's Amazon link. */
   buyUrl: string | null;
-  /** The swatch's own page on filamentcolors.xyz. */
+  /**
+   * The swatch's own page on filamentcolors.xyz, or for a SpoolmanDB spool,
+   * which has no page of its own, a web search for it.
+   */
   pageUrl: string;
   /**
    * The library's photo of the printed swatch card. Fetched by the server
@@ -191,6 +196,16 @@ export type SwatchChoice = Omit<LibrarySwatch, "family" | "imageUrl" | "photoUrl
 export const swatchPageUrl = (id: number) => `https://filamentcolors.xyz/swatch/${id}/`;
 
 /**
+ * Whether a swatch id is a SpoolmanDB spool: a maker's listed colour, with no
+ * photo of a printed swatch behind it.
+ */
+export const fromSpoolman = (id: number) => id < 0;
+
+/** A web search for a SpoolmanDB spool, which has no page of its own. */
+export const spoolSearchUrl = (spool: { maker: string; type: string; name: string }) =>
+  `https://duckduckgo.com/?q=${encodeURIComponent(`${spool.maker} ${spool.type} ${spool.name} filament`)}`;
+
+/**
  * The spool a ticket asks the owner to buy, from the ticket's own snapshot,
  * or null for a shelf colour. The buy link was checked when the library was
  * read, and is checked again here because it ends up in an `href`.
@@ -204,6 +219,8 @@ export function storySwatch(story: {
   colorHex: string;
 }): SwatchChoice | null {
   if (story.swatchId === null) return null;
+  const spool = { maker: story.swatchMaker ?? "", type: story.swatchType ?? "", name: story.colorName };
+  const spoolman = fromSpoolman(story.swatchId);
   let buyUrl: string | null = null;
   try {
     const url = story.swatchBuyUrl ? new URL(story.swatchBuyUrl) : null;
@@ -213,15 +230,14 @@ export function storySwatch(story: {
   }
   return {
     id: story.swatchId,
-    name: story.colorName,
-    maker: story.swatchMaker ?? "",
-    type: story.swatchType ?? "",
+    ...spool,
     hex: story.colorHex,
     shade: null,
     buyUrl,
-    pageUrl: swatchPageUrl(story.swatchId),
-    // Served while the library still lists the swatch; the colour stands in when not.
-    image: swatchImagePath(story.swatchId),
+    pageUrl: spoolman ? spoolSearchUrl(spool) : swatchPageUrl(story.swatchId),
+    // Served while the library still lists the swatch; the colour stands in
+    // when not, and for a SpoolmanDB spool, which has no photo.
+    image: spoolman ? null : swatchImagePath(story.swatchId),
   };
 }
 
@@ -286,10 +302,12 @@ export const WishSchema = z.object({
   swatchId: z.coerce
     .number("That is not a swatch.")
     .int("That is not a swatch.")
-    .positive("That is not a swatch.")
+    // Negative ids are SpoolmanDB spools; see `fromSpoolman`.
+    .refine((id) => id !== 0, "That is not a swatch.")
     .nullish()
     .describe(
-      "A spool to buy instead of a shelf color: an id from GET /api/filament-library. " +
+      "A spool to buy instead of a shelf color: an id from GET /api/filament-library " +
+        "(negative for a SpoolmanDB spool). " +
         "Replaces colorName; the swatch has to be the kind of filament `material` is.",
     ),
   quantity: QuantitySchema,

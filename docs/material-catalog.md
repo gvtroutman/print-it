@@ -80,7 +80,8 @@ measured colour is also what a ticket snapshots as its hex.
 The kind of filament is matched with the filament table in `src/lib/filament-traits.ts`:
 a "Silk PLA" material offers any PLA swatch (silk ones first), "PLA-CF" only
 fibre-filled PLA, and a name the table does not know has to appear in the
-swatch's type ("Wood" finds "PLA Wood").
+swatch's type ("Wood" finds "PLA Wood"). CoPE and CPE count as PETG: they are
+co-polyester, like PETG and PCTG.
 
 Each spool shows as the library's own photo of its printed swatch card,
 with the swatch's colour underneath while it loads or if it fails. The photos
@@ -96,6 +97,29 @@ sweeps the whole library into memory, about 25 pages and 30 seconds, when the
 upload page first loads, and keeps it for a day. A failed refresh keeps the old
 copy; with no copy at all, picking a spool is refused with 503 and the shelf
 still works.
+
+### SpoolmanDB, where filamentcolors.xyz falls short
+
+When filamentcolors.xyz finds fewer than 12 spools for a search, or cannot be
+reached, the search also takes in [SpoolmanDB](https://github.com/Donkie/SpoolmanDB)
+(MIT): the makers' own listings, about 70 brands and 4,700 colours, which
+reaches brands and engineering materials filamentcolors.xyz has not swatched.
+The server fetches its one ~5 MB `filaments.json` from GitHub Pages and keeps
+it for a day (`src/lib/spoolman-library.ts`). A spool filamentcolors.xyz already
+has under the same maker, kind of filament and colour name is left out, and filamentcolors.xyz's
+spools still come first unless a colour was picked, when the closest come first.
+
+These spools are weaker evidence. The colour is the hex the maker lists, not a
+measured swatch, there is no photo (the tile shows the colour) and no buy
+link, and the link to the spool is a web search, since SpoolmanDB has no page
+per spool. The picker credits SpoolmanDB when any are shown. The shade filter
+works on them through a colour rule tuned to how filamentcolors.xyz files its
+own swatches (it agrees nine times in ten). Each colour is listed once, not
+per spool size, and multi-colour spools are left out.
+
+Their ids are negative, so `swatchId` alone says which library a ticket's spool
+came from: a hash of the maker, material, finish and colour name, stable
+across refreshes so printing a ticket again finds the same spool.
 
 The form sends only the swatch's id. At submission the server reads it back
 from its copy, checks the material is still on offer and is the swatch's kind

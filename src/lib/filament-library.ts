@@ -11,6 +11,7 @@ import {
   type SwatchShade,
 } from "@/lib/catalog";
 import { sourceUrl as appSourceUrl } from "@/lib/runtime";
+import { SpoolmanUnavailable, spoolmanSwatches } from "@/lib/spoolman-library";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
@@ -28,6 +29,11 @@ import { dirname, join, resolve } from "node:path";
  * a page, so it is fetched once in a sweep of pages and kept for a day. A
  * failed refresh keeps the old copy; with no copy at all, callers get
  * `LibraryUnavailable` and say the library cannot be reached right now.
+ *
+ * SpoolmanDB (src/lib/spoolman-library.ts) is the fallback: a search that
+ * finds too few here, or cannot reach this library at all, is filled from
+ * there. Its spools have negative ids, and `librarySwatch` reads them back
+ * from that copy the same way.
  */
 
 const API = "https://filamentcolors.xyz/api/swatch/";
@@ -198,14 +204,24 @@ async function load(): Promise<Library> {
   }
 }
 
-/** Fetch the library in the background, so the first search finds it ready. */
+/** Fetch both libraries in the background, so the first search finds them ready. */
 export function warmLibrary() {
   load().catch(() => {});
+  spoolmanSwatches().catch(() => {});
 }
 
-/** One swatch, by the id the form sent; null when the library has no such swatch. */
+/**
+ * One swatch, by the id the form sent — a SpoolmanDB spool when negative;
+ * null when its library has no such swatch.
+ */
 export async function librarySwatch(id: number): Promise<LibrarySwatch | null> {
-  return (await load()).byId.get(id) ?? null;
+  if (id > 0) return (await load()).byId.get(id) ?? null;
+  try {
+    return (await spoolmanSwatches()).get(id) ?? null;
+  } catch (error) {
+    if (error instanceof SpoolmanUnavailable) throw new LibraryUnavailable();
+    throw error;
+  }
 }
 
 /**
@@ -504,6 +520,8 @@ const labFor = (swatch: LibrarySwatch) => {
 const seeThrough = (swatch: LibrarySwatch) =>
   swatch.shade === "TRN" || /translu|transparent|clear|glass|crystal|see.?through/i.test(`${swatch.name} ${swatch.type}`);
 
+type SearchOptions = { query?: string; shade?: SwatchShade | null; near?: string | null; clear?: boolean };
+
 /**
  * Swatches that fit a material, narrowed by search words (every word has to
  * appear in the name, maker or type) and an optional shade.
@@ -511,23 +529,63 @@ const seeThrough = (swatch: LibrarySwatch) =>
  * With `near`, a colour picked from the rainbow, they come closest first, and
  * only those that look near it — or, where the material has few spools that
  * colour, the closest dozen, so a pick never comes back empty. Otherwise
- * swatches whose type is the material's own name come first, then by maker
- * and name. With `clear`, see-through spools go ahead of the rest, each
- * group kept in that order.
+ * swatches whose type is the material's own name come first, then
+ * filamentcolors.xyz's ahead of SpoolmanDB's, then by maker and name. With
+ * `clear`, see-through spools go ahead of the rest, each group kept in that
+ * order.
+ *
+ * filamentcolors.xyz is searched first. Only when it finds fewer than a
+ * dozen, or cannot be reached, are SpoolmanDB's spools searched alongside —
+ * less a spool the first library already has under the same maker, kind and
+ * name.
  */
 export async function searchLibrary(
   material: string,
-  {
-    query = "",
-    shade = null,
-    near = null,
-    clear = false,
-  }: { query?: string; shade?: SwatchShade | null; near?: string | null; clear?: boolean } = {},
+  options: SearchOptions = {},
 ): Promise<{ total: number; swatches: LibrarySwatch[] }> {
-  const { byId } = await load();
+  let primary: LibrarySwatch[] = [];
+  let reached = true;
+  try {
+    primary = [...(await load()).byId.values()];
+  } catch (error) {
+    if (!(error instanceof LibraryUnavailable)) throw error;
+    reached = false;
+  }
+
+  let matches = searchIn(primary, material, options);
+  if (reached && matches.length >= AT_LEAST) return { total: matches.length, swatches: matches.slice(0, SEARCH_LIMIT) };
+
+  let fallback: Map<number, LibrarySwatch>;
+  try {
+    fallback = await spoolmanSwatches();
+  } catch (error) {
+    if (!(error instanceof SpoolmanUnavailable)) throw error;
+    if (!reached) throw new LibraryUnavailable();
+    return { total: matches.length, swatches: matches.slice(0, SEARCH_LIMIT) };
+  }
+  const held = new Set(primary.map(sameSpool));
+  const extra = [...fallback.values()].filter((swatch) => !held.has(sameSpool(swatch)));
+  matches = searchIn([...primary, ...extra], material, options);
+  return { total: matches.length, swatches: matches.slice(0, SEARCH_LIMIT) };
+}
+
+/**
+ * Maker, kind of filament and colour name, squashed, to tell the same spool
+ * in both libraries. The kind, because a maker's "Black" PLA is not its
+ * "Black" PA-CF.
+ */
+const sameSpool = (swatch: LibrarySwatch) =>
+  `${words(swatch.maker).replace(/ /g, "")}|${swatch.family ?? words(swatch.type)}|${words(swatch.name)}`;
+
+/** `searchLibrary`'s filtering and ordering, over one list of swatches. */
+function searchIn(
+  swatches: LibrarySwatch[],
+  material: string,
+  { query = "", shade = null, near = null, clear = false }: SearchOptions,
+): LibrarySwatch[] {
   const terms = words(query).split(" ").filter(Boolean);
   const exact = words(material);
-  let matches = [...byId.values()].filter((swatch) => {
+  let matches = swatches.filter((swatch) => {
     if (!swatchFits(material, swatch)) return false;
     if (shade && swatch.shade !== shade) return false;
     if (terms.length === 0) return true;
@@ -546,10 +604,11 @@ export async function searchLibrary(
     matches.sort(
       (a, b) =>
         Number(words(b.type) === exact) - Number(words(a.type) === exact) ||
+        Number(a.id < 0) - Number(b.id < 0) ||
         a.maker.localeCompare(b.maker) ||
         a.name.localeCompare(b.name),
     );
   }
   if (clear) matches = [...matches.filter(seeThrough), ...matches.filter((swatch) => !seeThrough(swatch))];
-  return { total: matches.length, swatches: matches.slice(0, SEARCH_LIMIT) };
+  return matches;
 }

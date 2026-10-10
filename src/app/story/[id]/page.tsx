@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getStoryOr404, printerName, requireUser, storyRef, FLOW } from "@/lib/authz";
-import { PRIORITY_CHIP, STORY_PRIORITIES, quantityText, relativeTime, storySwatch } from "@/lib/catalog";
+import { PRIORITY_CHIP, STORY_PRIORITIES, fromSpoolman, quantityText, relativeTime, storySwatch } from "@/lib/catalog";
 import { changeStoryPriority } from "@/app/actions/stories";
 import { formatBytes } from "@/lib/models";
 import { trustedSourceLink } from "@/lib/import-source";
@@ -249,7 +249,7 @@ export default async function StoryPage({
                       </a>
                     )}
                     <a href={toBuy.pageUrl} target="_blank" rel="noreferrer noopener" className="text-ink-2 underline underline-offset-4 hover:text-cherry-dk">
-                      Real swatch on filamentcolors.xyz ↗
+                      {fromSpoolman(toBuy.id) ? "Look it up online ↗" : "Real swatch on filamentcolors.xyz ↗"}
                     </a>
                   </span>
                 </div>

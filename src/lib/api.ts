@@ -187,7 +187,7 @@ export function storyResource(story: StoryRow) {
       style: story.colorStyle ?? story.colorHex,
       mode: story.colorMode,
       // A spool the owner has to buy first, from the filamentcolors.xyz
-      // library; null for a colour on the shelf.
+      // library or SpoolmanDB; null for a colour on the shelf.
       toBuy: (() => {
         const swatch = storySwatch(story);
         return swatch
