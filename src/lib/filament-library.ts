@@ -1,6 +1,6 @@
 import "server-only";
 
-import { builtInTraits } from "@/lib/filament-traits";
+import { builtInTraits, ownKind } from "@/lib/filament-traits";
 import {
   NEAR_ENOUGH,
   SWATCH_SHADES,
@@ -227,12 +227,13 @@ export async function librarySwatch(id: number): Promise<LibrarySwatch | null> {
 /**
  * Whether a swatch is the same kind of filament as a catalogue material. By
  * family where the table knows the material ("Silk PLA" takes any PLA, and
- * "PLA-CF" only fibre-filled PLA); otherwise the material's name has to
- * appear in the swatch's type, so a "Wood" material finds "Wood PLA".
+ * "PLA-CF" only fibre-filled PLA), and by kind within it, so "CoPE" takes
+ * only CoPE and "PETG" no CoPE; otherwise the material's name has to appear
+ * in the swatch's type, so a "Wood" material finds "Wood PLA".
  */
 export function swatchFits(material: string, swatch: LibrarySwatch): boolean {
   const family = builtInTraits(material)?.family;
-  if (family) return swatch.family === family;
+  if (family) return swatch.family === family && ownKind(swatch.type) === ownKind(material);
   const wanted = ` ${words(material)} `;
   return wanted.trim() !== "" && ` ${words(swatch.type)} `.includes(wanted);
 }
@@ -572,10 +573,10 @@ export async function searchLibrary(
 /**
  * Maker, kind of filament and colour name, squashed, to tell the same spool
  * in both libraries. The kind, because a maker's "Black" PLA is not its
- * "Black" PA-CF.
+ * "Black" PA-CF, nor its "Black" CPE its "Black" PETG.
  */
 const sameSpool = (swatch: LibrarySwatch) =>
-  `${words(swatch.maker).replace(/ /g, "")}|${swatch.family ?? words(swatch.type)}|${words(swatch.name)}`;
+  `${words(swatch.maker).replace(/ /g, "")}|${swatch.family ?? words(swatch.type)}|${ownKind(swatch.type) ?? ""}|${words(swatch.name)}`;
 
 /** `searchLibrary`'s filtering and ordering, over one list of swatches. */
 function searchIn(

@@ -71,6 +71,12 @@ export function asMark(n: unknown): Mark | null {
 type Family = BuiltInTraits & {
   /** Names that mean this family, matched as whole words, case-insensitive. */
   aliases: string[];
+  /**
+   * Aliases that are a filament of their own: charted as the family, but a
+   * spool search for one finds only that one, and the family's own search
+   * leaves them out. See `ownKind`.
+   */
+  kinds?: string[];
 };
 
 const FAMILIES: Family[] = [
@@ -84,6 +90,8 @@ const FAMILIES: Family[] = [
     family: "PETG",
     // CPE and CoPE are co-polyester, the same family PETG and PCTG belong to.
     aliases: ["PETG", "PET", "PCTG", "CPE", "CoPE", "Copolyester", "Co-polyester"],
+    // Rated like PETG, but a CoPE spool is not a PETG one.
+    kinds: ["CPE", "CoPE", "Copolyester", "Co-polyester"],
     ratings: { strength: 4, flex: 3, heat: 3, finish: 3, outdoors: 4 },
     goodFor: "Hooks, brackets, bottles, parts that get knocked about.",
   },
@@ -170,6 +178,22 @@ export function builtInTraits(name: string): BuiltInTraits | null {
     },
     goodFor,
   };
+}
+
+/**
+ * The filament of its own a name says ("cope" for "CoPE Black"), squashed so
+ * "Co-polyester" and "Copolyester" are one; null for a plain family name.
+ * Longer kinds win, as with families.
+ */
+export function ownKind(name: string): string | null {
+  let best: string | null = null;
+  for (const family of FAMILIES) {
+    for (const kind of family.kinds ?? []) {
+      if (!spaced(name).includes(spaced(kind))) continue;
+      if (!best || kind.length > best.length) best = kind;
+    }
+  }
+  return best && spaced(best).replace(/ /g, "");
 }
 
 /**

@@ -80,8 +80,11 @@ measured colour is also what a ticket snapshots as its hex.
 The kind of filament is matched with the filament table in `src/lib/filament-traits.ts`:
 a "Silk PLA" material offers any PLA swatch (silk ones first), "PLA-CF" only
 fibre-filled PLA, and a name the table does not know has to appear in the
-swatch's type ("Wood" finds "PLA Wood"). CoPE and CPE count as PETG: they are
-co-polyester, like PETG and PCTG.
+swatch's type ("Wood" finds "PLA Wood"). CoPE and CPE are charted as PETG
+(they are co-polyester), but each is a filament of its own to the spool
+search: a "CoPE" material offers only CoPE spools, never PETG ones, and a
+"PETG" material no CoPE or CPE. Neither library lists a CoPE spool yet, so
+that search comes back empty.
 
 Each spool shows as the library's own photo of its printed swatch card,
 with the swatch's colour underneath while it loads or if it fails. The photos
