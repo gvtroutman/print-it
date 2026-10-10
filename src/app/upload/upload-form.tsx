@@ -24,7 +24,6 @@ import {
   MAX_FILES_PER_ORDER,
   MAX_LINKS_PER_ORDER,
   MAX_UPLOAD_BYTES,
-  MODEL_FORMATS_TEXT,
   VIDEO_EXTENSIONS,
   extensionOf,
   formatBytes,
@@ -437,6 +436,8 @@ export function UploadForm({
   const [links, setLinks] = useState<string[]>([]);
   const [linkDraft, setLinkDraft] = useState("");
   const [linkError, setLinkError] = useState<string | null>(null);
+  // Whether the box for a reference link is showing.
+  const [addingLink, setAddingLink] = useState(false);
 
   const primary = files.find((f) => kindOf(f.name) === "model") ?? null;
   const extras = files.filter((f) => f !== primary);
@@ -532,6 +533,7 @@ export function UploadForm({
     setLinks([...links, parsed.href]);
     setLinkDraft("");
     setLinkError(null);
+    setAddingLink(false);
   }
 
   const sourceNames = importSources.map((s) => SOURCE_LABEL[s]).join(" or ");
@@ -919,7 +921,7 @@ export function UploadForm({
            * label carries the visuals, so the label shows the focus. Same colour
            * and offset as the global ring in globals.css.
            */
-          className={`mt-[22px] block cursor-pointer rounded-panel border-[3px] border-dashed px-[26.4px] py-[35.2px] text-center transition-colors focus-within:outline focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-cherry-dk ${
+          className={`mt-[22px] block cursor-pointer rounded-panel border-[3px] border-dashed px-[26.4px] py-[13.2px] text-center transition-colors focus-within:outline focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-cherry-dk ${
             dragging
               ? "border-ink bg-sun"
               : "border-ink-3 bg-porcelain hover:border-ink hover:bg-sun-wash"
@@ -948,16 +950,17 @@ export function UploadForm({
             disabled={busy}
             onChange={(e) => accept(Array.from(e.target.files ?? []))}
           />
-          <InkCube className="mx-auto mb-[13.2px] block" />
+          {/* Important classes, because the cube sets its own size inline. */}
+          <InkCube className="mx-auto mb-[8.8px] block !h-[72px] !w-[72px]" />
           <span className="block font-display text-[19px] text-ink">
-            {files.length > 0 ? "Drop more, or click to add" : "Drop a 3D model, photos or videos here (optional)"}
+            {files.length > 0 ? "Drop more, or click to add" : "Drop files here, or click to choose (optional)"}
           </span>
           <span className="mt-[6px] block font-mono text-[12px] uppercase tracking-[0.04em] text-ink-3">
             {busy && !picked
               ? `Uploading… ${phase.percent}%`
               : files.length > 0
                 ? `${formatBytes(totalBytes)} of ${formatBytes(MAX_UPLOAD_BYTES)} · checked on the server when you send it`
-                : `or click to choose · ${MODEL_FORMATS_TEXT} · photos · videos · ${formatBytes(MAX_UPLOAD_BYTES)} in all`}
+                : `3D models, photos or videos – up to ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB`}
           </span>
 
           {busy && !picked && (
@@ -1015,36 +1018,59 @@ export function UploadForm({
         {/* ---- links that explain the job ---- */}
         {!again && (
           <div className="mt-[17.6px]">
-            <Label htmlFor="order-link">Links (optional)</Label>
-            <div className="flex flex-wrap gap-[8.8px]">
-              <input
-                id="order-link"
-                type="url"
-                inputMode="url"
-                value={linkDraft}
-                disabled={busy}
-                onChange={(e) => {
-                  setLinkDraft(e.target.value);
-                  setLinkError(null);
-                }}
-                // Enter adds the link; it does not move to the next card.
-                onKeyDown={(e) => {
-                  if (e.key !== "Enter") return;
-                  e.preventDefault();
-                  addLink();
-                }}
-                placeholder="https://… the product it fits, a video, a forum post"
-                className="min-w-[240px] flex-1 rounded-card border-[3px] border-ink bg-porcelain px-[15px] py-[12px] text-[16px] text-ink placeholder:text-ink-3"
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={busy || !linkDraft.trim() || links.length >= MAX_LINKS_PER_ORDER}
-                onClick={addLink}
-              >
-                Add link
-              </Button>
-            </div>
+            {/* Folded to one line until wanted: most orders carry no link. */}
+            {addingLink ? (
+              <>
+                <Label htmlFor="order-link">Link (optional)</Label>
+                <div className="flex flex-wrap gap-[8.8px]">
+                  <input
+                    id="order-link"
+                    type="url"
+                    inputMode="url"
+                    autoFocus
+                    value={linkDraft}
+                    disabled={busy}
+                    onChange={(e) => {
+                      setLinkDraft(e.target.value);
+                      setLinkError(null);
+                    }}
+                    // Enter adds the link; it does not move to the next card.
+                    // Escape on an empty box folds it away again.
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape" && !linkDraft.trim()) {
+                        e.preventDefault();
+                        setAddingLink(false);
+                        setLinkError(null);
+                      }
+                      if (e.key !== "Enter") return;
+                      e.preventDefault();
+                      addLink();
+                    }}
+                    placeholder="https://… the product it fits, a video, a forum post"
+                    className="min-w-[240px] flex-1 rounded-card border-[3px] border-ink bg-porcelain px-[15px] py-[12px] text-[16px] text-ink placeholder:text-ink-3"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={busy || !linkDraft.trim() || links.length >= MAX_LINKS_PER_ORDER}
+                    onClick={addLink}
+                  >
+                    Add link
+                  </Button>
+                </div>
+              </>
+            ) : (
+              links.length < MAX_LINKS_PER_ORDER && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setAddingLink(true)}
+                  className="cursor-pointer border-0 bg-transparent p-0 font-mono text-[12px] font-bold uppercase tracking-[0.08em] text-ink-2 underline decoration-2 underline-offset-4 hover:text-cherry-dk disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {links.length > 0 ? "+ Add another link" : "+ Add a link (optional)"}
+                </button>
+              )
+            )}
             {linkError && (
               <p role="alert" className="m-0 mt-[6px] font-mono text-[11.5px] uppercase tracking-[0.04em] text-cherry-dk">
                 {linkError}
