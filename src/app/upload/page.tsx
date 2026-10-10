@@ -19,10 +19,8 @@ export default async function UploadPage() {
       <AppHeader user={user} active="/upload" />
       <main className="mx-auto w-full max-w-[1180px] px-[26.4px] pb-[80px] pt-[35.2px]">
         <div>
-          {/* Still a sentence someone would say out loud, which was the point
-              of the original H1 and survives every rename since. */}
           <h1 className="m-0 mb-[26.4px] text-center text-[46px] leading-[0.98] text-ink">
-            Print It!
+            New Order
           </h1>
         </div>
         {catalog.length > 0 ? (

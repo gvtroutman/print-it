@@ -891,12 +891,12 @@ export function UploadForm({
         onOpen={() => goTo(1)}
         cardRef={(el) => void (cards.current[0] = el)}
         footer={
-          <>
-            <span className="text-[13px] text-ink-3">A few words is enough. Files and links are welcome.</span>
+          // A lone child in the footer's justify-between row; mx-auto centres it.
+          <div className="mx-auto">
             <Button type="submit" disabled={busy}>
               Next: color
             </Button>
-          </>
+          </div>
         }
       >
         {again && (
@@ -914,18 +914,18 @@ export function UploadForm({
         )}
 
         <div>
-          <Label htmlFor="title">
-            What is it? <span aria-hidden className="text-cherry-dk">*</span>
-          </Label>
-          {/* aria-required, not `required`: the browser's own check would block
+          {/* The question is the placeholder now; aria-label keeps it named
+              for a screen reader once something is typed over it.
+              aria-required, not `required`: the browser's own check would block
               Send while this card is folded, with nowhere visible to say why. */}
           <input
             id="title"
+            aria-label="What is it?"
             aria-required
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             maxLength={120}
-            placeholder="Hook for the monitor arm"
+            placeholder="What is it? *"
             className="w-full rounded-card border-[3px] border-ink bg-porcelain px-[15px] py-[12px] text-[16px] text-ink placeholder:text-ink-3"
           />
         </div>
@@ -1088,9 +1088,22 @@ export function UploadForm({
                   type="button"
                   disabled={busy}
                   onClick={() => void pasteLink()}
-                  className="cursor-pointer border-0 bg-transparent p-0 font-mono text-[12px] font-bold uppercase tracking-[0.08em] text-ink-2 underline decoration-2 underline-offset-4 hover:text-cherry-dk disabled:cursor-not-allowed disabled:opacity-50"
+                  className="mx-auto flex w-fit cursor-pointer items-center gap-[6px] border-0 bg-transparent p-0 font-mono text-[12px] font-bold uppercase tracking-[0.08em] text-ink-2 underline decoration-2 underline-offset-4 hover:text-cherry-dk disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {links.length > 0 ? "+ Paste another link" : "+ Paste a link"}
+                  <svg
+                    aria-hidden
+                    viewBox="0 0 24 24"
+                    className="h-[15px] w-[15px] flex-none"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2.5}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" />
+                    <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
+                  </svg>
+                  {links.length > 0 ? "Paste another link" : "Paste link"}
                 </button>
               )
             )}
