@@ -48,7 +48,7 @@ import { Button, Label, Notice } from "@/components/ui";
 import { MaterialFacts } from "@/components/material-chart";
 import { InkCube } from "@/components/ink-cube";
 
-import { ColorMenu, OtherColors, SwipePair, colorNameOf } from "./spool-finder";
+import { ColorMenu, OtherColors, SLIDER, SwipePair, colorNameOf } from "./spool-finder";
 
 /**
  * The shelf colour of a material that looks most like `hex`, or null when
@@ -1499,25 +1499,34 @@ export function UploadForm({
       >
         {/* ---- priority ---- */}
         <div className="max-w-[420px]">
-          <Label htmlFor="priority">How much does it matter?</Label>
-          <div role="radiogroup" aria-label="Priority" className="flex flex-wrap gap-[6px]">
-            {STORY_PRIORITIES.map((p) => {
-              const active = p === priority;
-              return (
-                <button
-                  key={p}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  onClick={() => setPriority(p)}
-                  className={`flex-1 cursor-pointer rounded-chip border-[3px] border-ink px-[10px] py-[8px] font-mono text-[12.5px] font-bold uppercase tracking-[0.06em] transition-colors ${
-                    active ? "bg-cherry-dk text-cream" : "bg-porcelain text-ink hover:bg-sun"
-                  }`}
-                >
-                  {PRIORITY_CHIP[p]?.label ?? p}
-                </button>
-              );
-            })}
+          <Label htmlFor="priority">Priority</Label>
+          {/* Low to high, quiet grey warming to cherry; the words under it are stops too. */}
+          <input
+            id="priority"
+            type="range"
+            min={0}
+            max={STORY_PRIORITIES.length - 1}
+            step={1}
+            value={STORY_PRIORITIES.indexOf(priority)}
+            aria-valuetext={PRIORITY_CHIP[priority]?.label ?? priority}
+            onChange={(e) => setPriority(STORY_PRIORITIES[Number(e.target.value)] ?? priority)}
+            className={SLIDER}
+            style={{ background: "linear-gradient(to right, var(--color-chrome), var(--color-sun), var(--color-cherry))" }}
+          />
+          <div className="mt-[6px] flex justify-between" aria-hidden="true">
+            {STORY_PRIORITIES.map((p) => (
+              <button
+                key={p}
+                type="button"
+                tabIndex={-1}
+                onClick={() => setPriority(p)}
+                className={`cursor-pointer border-0 bg-transparent px-[2px] font-mono text-[11px] font-bold uppercase tracking-[0.08em] ${
+                  p === priority ? "text-cherry-dk" : "text-ink-3 hover:text-ink"
+                }`}
+              >
+                {PRIORITY_CHIP[p]?.label ?? p}
+              </button>
+            ))}
           </div>
         </div>
 

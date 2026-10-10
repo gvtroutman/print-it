@@ -365,7 +365,7 @@ const PAD_BACKGROUND = [
 const CHECKER = "repeating-conic-gradient(#d4d9dd 0% 25%, #ffffff 0% 50%) 0 0 / 12px 12px";
 
 /** A range input as a thick bar with a ringed thumb; its track is its own background. */
-const SLIDER =
+export const SLIDER =
   "h-[26px] w-full cursor-pointer appearance-none rounded-full border-[3px] border-ink disabled:cursor-not-allowed disabled:opacity-40 " +
   "[&::-webkit-slider-thumb]:h-[20px] [&::-webkit-slider-thumb]:w-[20px] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-[3px] [&::-webkit-slider-thumb]:border-solid [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-transparent [&::-webkit-slider-thumb]:shadow-[0_0_0_2.5px_#1b2126] " +
   "[&::-moz-range-thumb]:h-[14px] [&::-moz-range-thumb]:w-[14px] [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-[3px] [&::-moz-range-thumb]:border-solid [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:bg-transparent [&::-moz-range-thumb]:shadow-[0_0_0_2.5px_#1b2126]";

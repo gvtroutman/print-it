@@ -538,7 +538,7 @@ async function main() {
         sillyUp.status === 400 && (await db.story.count({ where: { title: "Silly part" } })) === 0,
         `status ${sillyUp.status}`);
   const rushForm = rendered(await (await aylaB.go(`${APP}/upload`)).text());
-  check("the request form asks", rushForm.includes("How much does it matter?"));
+  check("the request form asks", rushForm.includes(">Priority<") && /<input[^>]*id="priority"[^>]*type="range"/.test(rushForm));
 
   section("printing again with the settings tuned");
 
