@@ -2,7 +2,8 @@ import { jsonBody, ok, storyResource, withActor } from "@/lib/api";
 import { changeStoryPriority, getStory, storyIdOr400 } from "@/lib/stories";
 
 /**
- * Set how much a print matters: `{ "priority": "low" | "medium" | "high" }`.
+ * Set how much a print matters: `{ "priority": 1–100 }`, or one of the old
+ * words `"low" | "medium" | "high"` (25, 50, 75).
  *
  * Unlike the status, this *is* set rather than derived — there is no order to
  * skip a step of, and the person asking is the one who knows. The requester

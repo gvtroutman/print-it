@@ -134,7 +134,7 @@ export async function changeStoryPriority(formData: FormData): Promise<void> {
   try {
     const done = await reprioritise(user, id, formData.get("priority") ?? "");
     back(`/story/${id}`, {
-      toast: done.unchanged ? `Already ${done.to} priority.` : `Priority → ${done.to}.`,
+      toast: done.unchanged ? `Already priority ${done.to}.` : `Priority → ${done.to}.`,
     });
   } catch (error) {
     if (error instanceof StoryProblem) back(`/story/${id}`, { toast: error.message });

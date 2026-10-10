@@ -246,9 +246,9 @@ async function main() {
   section("priority orders the queue, and is changed on the ticket");
   const routine = await makeStory(ayla.id, "Routine drawer organiser");
   const rush = await makeStory(ayla.id, "Rush job for Friday");
-  await db.story.update({ where: { id: rush.id }, data: { priority: "high" } });
+  await db.story.update({ where: { id: rush.id }, data: { priority: 90 } });
   const someday = await makeStory(ayla.id, "Someday desk toy");
-  await db.story.update({ where: { id: someday.id }, data: { priority: "low" } });
+  await db.story.update({ where: { id: someday.id }, data: { priority: 10 } });
 
   const ordered = rendered(await (await ruben.go(`${APP}/queue`)).text());
   const at = (title: string) => ordered.indexOf(title);
@@ -261,10 +261,12 @@ async function main() {
   const prioForm = (ticket.match(/<form\b[\s\S]*?<\/form>/g) ?? [])
     .findIndex((f) => f.includes('name="priority"'));
   check("the requester's ticket offers a priority control", prioForm >= 0);
-  const set = await client.submit(`${APP}/story/${routine.id}`, ticket, prioForm, { priority: "high" });
+  check("and it is the slider, turtle to rabbit",
+        /<input[^>]*name="priority"[^>]*type="range"[^>]*min="1"[^>]*max="100"/.test(ticket));
+  const set = await client.submit(`${APP}/story/${routine.id}`, ticket, prioForm, { priority: "72" });
   check("submitting it is accepted", set.status >= 300 && set.status < 400, `status ${set.status}`);
   check("and the ticket's priority changed",
-        (await db.story.findUnique({ where: { id: routine.id } }))?.priority === "high");
+        (await db.story.findUnique({ where: { id: routine.id } }))?.priority === 72);
   await db.story.update({ where: { id: routine.id }, data: { status: "Done" } });
   const done = await (await client.go(`${APP}/story/${routine.id}`)).text();
   check("a finished ticket no longer offers the control", !done.includes('name="priority"'));

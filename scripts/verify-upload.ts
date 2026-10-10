@@ -211,8 +211,8 @@ async function main() {
         story?.colorName === "Slate" && story?.colorHex === "#4a5d78",
         JSON.stringify({ m: story?.material, q: story?.quantity, c: story?.colorName }));
 
-  check("with no priority sent it is medium — older clients keep working",
-        story?.priority === "medium", `${story?.priority}`);
+  check("with no priority sent it is 50, the middle — older clients keep working",
+        story?.priority === 50, `${story?.priority}`);
 
   check("the storage key is generated, not derived from the filename",
         !!story?.storageKey && !story.storageKey.includes("monitor-hook") &&
@@ -529,14 +529,22 @@ async function main() {
   check("re-queue carries the print settings onto the copy", copy2?.printSettings === SETTINGS, copy2?.printSettings);
 
   section("priority rides on the request");
-  const rushUp = await upload(aylaB, "rush.stl", binaryStl(12, 12, 12), { title: "Rush part", priority: "high" });
+  const rushUp = await upload(aylaB, "rush.stl", binaryStl(12, 12, 12), { title: "Rush part", priority: "88" });
   const rushRow = await db.story.findFirst({ where: { title: "Rush part" } });
-  check("an upload can say how much it matters", rushUp.status < 300 && rushRow?.priority === "high",
+  check("an upload can say how much it matters", rushUp.status < 300 && rushRow?.priority === 88,
         `status ${rushUp.status} ${rushRow?.priority}`);
-  const sillyUp = await upload(aylaB, "silly.stl", binaryStl(12, 12, 12), { title: "Silly part", priority: "URGENT!!" });
-  check("a priority that is not one is refused, and files nothing",
-        sillyUp.status === 400 && (await db.story.count({ where: { title: "Silly part" } })) === 0,
-        `status ${sillyUp.status}`);
+  check("and the retired three-step column follows it, for a rolled-back image",
+        rushRow?.legacyPriority === "high", `${rushRow?.legacyPriority}`);
+  const wordUp = await upload(aylaB, "word.stl", binaryStl(12, 12, 12), { title: "Worded part", priority: "low" });
+  const wordRow = await db.story.findFirst({ where: { title: "Worded part" } });
+  check("an old client's word still files, at the middle of its third",
+        wordUp.status < 300 && wordRow?.priority === 25, `status ${wordUp.status} ${wordRow?.priority}`);
+  for (const silly of ["URGENT!!", "0", "101"]) {
+    const sillyUp = await upload(aylaB, "silly.stl", binaryStl(12, 12, 12), { title: "Silly part", priority: silly });
+    check(`a priority that is not one (${silly}) is refused, and files nothing`,
+          sillyUp.status === 400 && (await db.story.count({ where: { title: "Silly part" } })) === 0,
+          `status ${sillyUp.status}`);
+  }
   const rushForm = rendered(await (await aylaB.go(`${APP}/upload`)).text());
   check("the request form asks", rushForm.includes(">Priority<") && /<input[^>]*id="priority"[^>]*type="range"/.test(rushForm));
 
@@ -560,12 +568,12 @@ async function main() {
   const rushCopy = await db.story.findUnique({
     where: { id: Number(((await rushAgain.json()) as { story?: { id?: number } }).story?.id) },
   });
-  check("printing again keeps the priority unless it is changed", rushCopy?.priority === "high", `${rushCopy?.priority}`);
-  const calmer = await requeue(aylaB, rushRow!.id, { priority: "low" });
+  check("printing again keeps the priority unless it is changed", rushCopy?.priority === 88, `${rushCopy?.priority}`);
+  const calmer = await requeue(aylaB, rushRow!.id, { priority: 12 });
   const calmCopy = await db.story.findUnique({
     where: { id: Number(((await calmer.json()) as { story?: { id?: number } }).story?.id) },
   });
-  check("and takes a new one when it is", calmCopy?.priority === "low", `${calmCopy?.priority}`);
+  check("and takes a new one when it is", calmCopy?.priority === 12, `${calmCopy?.priority}`);
 
   const stillOld = await db.story.findUnique({ where: { id: psStory!.id } });
   check("the old ticket is exactly as it was",

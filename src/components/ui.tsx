@@ -1,6 +1,6 @@
 import type { ComponentProps, ReactNode } from "react";
 
-import { PRIORITY_CHIP } from "@/lib/catalog";
+import { PRIORITY_CHIP, priorityBand } from "@/lib/catalog";
 
 /**
  * The logotype: the block-letter wordmark on its own — the sign over the
@@ -209,30 +209,37 @@ const CHIP_SKIN: Record<string, string> = {
 };
 
 /**
- * A ticket's priority, in the colours a feature request already uses.
+ * A ticket's priority, 1–100, coloured by its third in the colours a feature
+ * request already uses.
  *
- * `quiet` leaves `medium` undrawn. On a board card almost everything is
- * medium, and a chip on every card is a chip nobody reads — there the mark
- * should mean "this one is not like the others". In a list the owner is
- * triaging, every row says what it is.
+ * `quiet` leaves the middle third undrawn. On a board card almost everything
+ * sits in the middle, and a chip on every card is a chip nobody reads — there
+ * the mark should mean "this one is not like the others". In a list the owner
+ * is triaging, every row says what it is.
  */
 export function PriorityChip({
   priority,
   quiet = false,
 }: {
-  priority: string;
+  priority: number;
   quiet?: boolean;
 }) {
-  if (quiet && priority === "medium") return null;
-  const chip = PRIORITY_CHIP[priority] ?? PRIORITY_CHIP.medium!;
+  const band = priorityBand(priority);
+  if (quiet && band === "medium") return null;
   return (
     <span
-      className={`inline-block flex-none rounded-chip border-2 border-ink px-[8px] py-[1px] font-mono text-[10.5px] font-bold uppercase tracking-[0.06em] text-ink ${chip.bg}`}
+      className={`inline-block flex-none rounded-chip border-2 border-ink px-[8px] py-[1px] font-mono text-[10.5px] font-bold uppercase tracking-[0.06em] text-ink ${PRIORITY_CHIP[band]!.bg}`}
     >
-      {chip.label}
+      Priority {priority}
     </span>
   );
 }
+
+/** A range input as a thick bar with a ringed thumb; its track is its own background. */
+export const SLIDER =
+  "h-[26px] w-full cursor-pointer appearance-none rounded-full border-[3px] border-ink disabled:cursor-not-allowed disabled:opacity-40 " +
+  "[&::-webkit-slider-thumb]:h-[20px] [&::-webkit-slider-thumb]:w-[20px] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-[3px] [&::-webkit-slider-thumb]:border-solid [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-transparent [&::-webkit-slider-thumb]:shadow-[0_0_0_2.5px_#1b2126] " +
+  "[&::-moz-range-thumb]:h-[14px] [&::-moz-range-thumb]:w-[14px] [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-[3px] [&::-moz-range-thumb]:border-solid [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:bg-transparent [&::-moz-range-thumb]:shadow-[0_0_0_2.5px_#1b2126]";
 
 /**
  * A ticket whose colour the owner does not have yet: they picked a spool to

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getStoryOr404, printerName, requireUser, storyRef, FLOW } from "@/lib/authz";
-import { PRIORITY_CHIP, STORY_PRIORITIES, fromSpoolman, quantityText, relativeTime, storySwatch } from "@/lib/catalog";
+import { MAX_STORY_PRIORITY, fromSpoolman, quantityText, relativeTime, storySwatch } from "@/lib/catalog";
 import { changeStoryPriority } from "@/app/actions/stories";
 import { formatBytes } from "@/lib/models";
 import { trustedSourceLink } from "@/lib/import-source";
@@ -17,6 +17,7 @@ import { DownloadModel } from "@/components/download-model";
 import { Toast } from "@/components/toast";
 import { ColorSwatch } from "@/components/color-swatch";
 import { SwatchPhoto } from "@/components/swatch-photo";
+import { PrioritySlider } from "@/components/priority-slider";
 import { WithdrawStory } from "@/components/withdraw-story";
 import { RequeueStory } from "@/components/requeue-story";
 
@@ -220,7 +221,7 @@ export default async function StoryPage({
               <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-[17.6px]">
                 <Fact label="Asked by">{story.uploader.name}</Fact>
                 <Fact label="Quantity">{quantityText(story.quantity)}</Fact>
-                <Fact label="Priority">{PRIORITY_CHIP[story.priority]?.label ?? story.priority}</Fact>
+                <Fact label="Priority">{story.priority} of {MAX_STORY_PRIORITY}</Fact>
                 <Fact label="Material">{story.material}</Fact>
                 <Fact label="Color wish">
                   <span className="flex items-center gap-[8.8px]">
@@ -265,25 +266,14 @@ export default async function StoryPage({
                   className="mt-[17.6px] flex flex-wrap items-end gap-[8.8px] border-t-2 border-dashed border-rule pt-[17.6px]"
                 >
                   <input type="hidden" name="storyId" value={story.id} />
-                  <div>
+                  <div className="min-w-[240px] max-w-[420px] flex-1">
                     <label
                       htmlFor="priority"
                       className="mb-[4px] block font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-ink-3"
                     >
                       Change priority
                     </label>
-                    <select
-                      id="priority"
-                      name="priority"
-                      defaultValue={story.priority}
-                      className="rounded-card border-[3px] border-ink bg-porcelain px-[13px] py-[8px] text-[15px] font-bold text-ink"
-                    >
-                      {STORY_PRIORITIES.map((p) => (
-                        <option key={p} value={p}>
-                          {PRIORITY_CHIP[p]?.label ?? p}
-                        </option>
-                      ))}
-                    </select>
+                    <PrioritySlider id="priority" name="priority" defaultValue={story.priority} />
                   </div>
                   <button
                     type="submit"

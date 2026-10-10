@@ -225,7 +225,7 @@ async function main() {
     "/api/stories/{id}/requeue", "/api/stories/{id}/priority",
     "/api/notifications", "/api/notifications/read",
     "/api/catalog", "/api/upload", "/api/models/{id}",
-    "/api/import", "/api/import/files",
+    "/api/import", "/api/import/files", "/api/import/search",
   ]) {
     check(`it documents ${expected}`, paths.includes(expected));
   }
@@ -437,17 +437,17 @@ async function main() {
 
   const urgent = await makeStory(ayla.id, "Bracket holding up the build");
   const setPriority = (b: Client, id: number, priority: unknown) =>
-    b.json<{ story?: { priority?: string }; changed?: { from?: string; to?: string; unchanged?: boolean }; error?: string }>(
+    b.json<{ story?: { priority?: number }; changed?: { from?: number; to?: number; unchanged?: boolean }; error?: string }>(
       `${APP}/api/stories/${id}/priority`, { method: "POST", body: JSON.stringify({ priority }) });
 
-  const starting = await client.json<{ priority?: string }>(`${APP}/api/stories/${urgent.id}`);
-  check("a ticket starts at medium", starting.body.priority === "medium", `${starting.body.priority}`);
+  const starting = await client.json<{ priority?: number }>(`${APP}/api/stories/${urgent.id}`);
+  check("a ticket starts in the middle, at 50", starting.body.priority === 50, `${starting.body.priority}`);
 
   await db.notification.deleteMany({ where: { storyId: urgent.id } });
-  const raised = await setPriority(client, urgent.id, "high");
+  const raised = await setPriority(client, urgent.id, 90);
   check("the requester raises their own ticket",
-        raised.status === 200 && raised.body.story?.priority === "high" &&
-        raised.body.changed?.from === "medium" && raised.body.changed?.to === "high",
+        raised.status === 200 && raised.body.story?.priority === 90 &&
+        raised.body.changed?.from === 50 && raised.body.changed?.to === 90,
         `status ${raised.status} ${JSON.stringify(raised.body.changed)}`);
   check("the printer owner is told, because it changes what they do next",
         (await db.notification.count({ where: { recipientId: admin.id, storyId: urgent.id } })) === 1);
@@ -456,31 +456,40 @@ async function main() {
           where: { action: "story.priority_changed", subject: `PI-${urgent.id}`, actorId: ayla.id },
         })) === 1);
 
-  const same = await setPriority(client, urgent.id, "high");
+  check("the retired three-step column is kept in step, for a rolled-back image",
+        (await db.story.findUnique({ where: { id: urgent.id } }))?.legacyPriority === "high");
+
+  const same = await setPriority(client, urgent.id, 90);
   check("setting it to what it already is changes nothing and tells nobody",
         same.status === 200 && same.body.changed?.unchanged === true &&
         (await db.notification.count({ where: { recipientId: admin.id, storyId: urgent.id } })) === 1 &&
         (await db.auditEvent.count({ where: { action: "story.priority_changed", subject: `PI-${urgent.id}` } })) === 1,
         `status ${same.status}`);
 
-  const lowered = await setPriority(ruben, urgent.id, "low");
+  const lowered = await setPriority(ruben, urgent.id, 10);
   check("the printer owner can set anybody's",
-        lowered.status === 200 && lowered.body.story?.priority === "low", `status ${lowered.status}`);
+        lowered.status === 200 && lowered.body.story?.priority === 10, `status ${lowered.status}`);
   check("and then it is the requester who is told",
         (await db.notification.count({ where: { recipientId: ayla.id, storyId: urgent.id } })) === 1);
 
   const nonsense = await setPriority(client, urgent.id, "yesterday");
   check("a priority that is not one is refused", nonsense.status === 400, `status ${nonsense.status}`);
+  const outside = await Promise.all([0, 101, 50.5].map((p) => setPriority(client, urgent.id, p)));
+  check("and so is one off the slider, or between its stops",
+        outside.every((r) => r.status === 400), outside.map((r) => r.status).join(" "));
   const noPriority = await setPriority(client, urgent.id, undefined);
   check("and so is none at all", noPriority.status === 400, `status ${noPriority.status}`);
-  const notTheirs = await setPriority(other, urgent.id, "high");
+  const notTheirs = await setPriority(other, urgent.id, 90);
   check("another client's attempt finds no such ticket",
         notTheirs.status === 404 &&
-        (await db.story.findUnique({ where: { id: urgent.id } }))?.priority === "low",
+        (await db.story.findUnique({ where: { id: urgent.id } }))?.priority === 10,
         `status ${notTheirs.status}`);
+  const worded = await setPriority(client, urgent.id, "high");
+  check("an old client's word still lands, at the middle of its third",
+        worded.status === 200 && worded.body.story?.priority === 75, `status ${worded.status} ${worded.body.story?.priority}`);
 
   await db.story.update({ where: { id: urgent.id }, data: { status: "Done" } });
-  const finished = await setPriority(client, urgent.id, "high");
+  const finished = await setPriority(client, urgent.id, 90);
   check("a finished ticket's priority is not rewritten", finished.status === 409, `status ${finished.status}`);
   await db.story.update({ where: { id: urgent.id }, data: { status: "Declined" } });
   check("nor a declined one's, even by the owner",

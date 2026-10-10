@@ -18,7 +18,7 @@ import {
 import { copyModel, deleteModel, storageKeyFor } from "@/lib/storage";
 import { extensionOf } from "@/lib/models";
 import { SELECTION_REFUSAL, resolveSelection } from "@/lib/catalog-data";
-import { STORY_PRIORITIES, WishSchema } from "@/lib/catalog";
+import { MAX_STORY_PRIORITY, StoryPrioritySchema, WishSchema, priorityBand } from "@/lib/catalog";
 
 /**
  * Everything that can happen to a ticket, in one place.
@@ -741,6 +741,7 @@ export async function requeueStory(
       status: "Requested",
       quantity: wish.quantity,
       priority: wish.priority,
+      legacyPriority: priorityBand(wish.priority),
       material: wish.material,
       colorName: selection.colorName,
       colorHex: selection.hex,
@@ -821,14 +822,14 @@ export async function requeueStory(
  * edit in any status; a closed request there is still a statement of what
  * someone wants. A printed part is finished.)
  *
- * It orders the owner's queue and promises nothing else: `high` is a request,
- * not a booking.
+ * It orders the owner's queue and promises nothing else: 100 is a request,
+ * not a booking. 1–100, or one of the old words for a client that still
+ * sends them.
  */
 export async function changeStoryPriority(actor: Actor, id: number, rawPriority: unknown) {
-  const priority = typeof rawPriority === "string" ? rawPriority : "";
-  if (!(STORY_PRIORITIES as readonly string[]).includes(priority)) {
-    throw problem(400, "That is not a priority.");
-  }
+  const parsed = StoryPrioritySchema.safeParse(rawPriority);
+  if (!parsed.success) throw problem(400, "That is not a priority.");
+  const priority = parsed.data;
 
   const story = await db.story.findFirst({
     where: { AND: [{ id }, storyScope(actor)] },
@@ -845,14 +846,14 @@ export async function changeStoryPriority(actor: Actor, id: number, rawPriority:
 
   const result = {
     id: story.id, ref: storyRef(story.id), title: story.title,
-    from: story.priority as string, to: priority,
+    from: story.priority, to: priority,
   };
   // Setting it to what it already is writes nothing and tells nobody.
   if (priority === story.priority) return { ...result, unchanged: true };
 
   await db.story.update({
     where: { id: story.id },
-    data: { priority: priority as Prisma.StoryUpdateInput["priority"] },
+    data: { priority, legacyPriority: priorityBand(priority) },
   });
 
   // The other side, the same direction a comment travels.
@@ -862,7 +863,7 @@ export async function changeStoryPriority(actor: Actor, id: number, rawPriority:
     await notify({
       recipientId,
       storyId: story.id,
-      text: `${firstName(actor.name)} set “${story.title}” to ${priority} priority.`,
+      text: `${firstName(actor.name)} set “${story.title}” to priority ${priority} of ${MAX_STORY_PRIORITY}.`,
     });
   }
 

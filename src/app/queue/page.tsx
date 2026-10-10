@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { nextStatus, storyRef } from "@/lib/scope";
 import { printerName, requireAdmin } from "@/lib/authz";
 import { formatBytes } from "@/lib/models";
-import { PRIORITY_RANK, quantityText, relativeTime } from "@/lib/catalog";
+import { quantityText, relativeTime } from "@/lib/catalog";
 import { tornClass } from "@/lib/torn";
 import { AppHeader } from "@/components/app-header";
 import { AdminActions } from "@/components/admin-actions";
@@ -41,12 +41,11 @@ export default async function QueuePage({
     include: { uploader: { select: { name: true, initials: true } } },
   });
 
-  // High first, then oldest first within a priority — the query is already
-  // oldest-first and the sort is stable. The same order the feature-request
-  // queue reads in.
+  // Highest priority first, then oldest first among equals — the query is
+  // already oldest-first and the sort is stable.
   const waiting = stories
     .filter((s) => s.status === "Requested")
-    .sort((a, b) => (PRIORITY_RANK[a.priority] ?? 1) - (PRIORITY_RANK[b.priority] ?? 1));
+    .sort((a, b) => b.priority - a.priority);
   const working = stories.filter(
     (s) => s.status !== "Requested" && s.status !== "Declined",
   );

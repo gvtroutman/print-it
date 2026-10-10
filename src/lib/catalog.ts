@@ -257,16 +257,37 @@ export const STATUS_CHIP: Record<
 };
 
 /**
- * How much a print matters to the person asking. The same three steps a
- * feature request uses (`FEATURE_PRIORITIES`, below) and drawn with the same
- * `PRIORITY_CHIP`, but its own list: the two backlogs are parallel, not shared.
+ * How much a print matters to the person asking: 1, the turtle (whenever),
+ * to 100, the rabbit (now). A feature request still has three steps
+ * (`FEATURE_PRIORITIES`, below); the two backlogs are parallel, not shared.
  */
-export const STORY_PRIORITIES = ["low", "medium", "high"] as const;
-export type StoryPriorityName = (typeof STORY_PRIORITIES)[number];
-export const DEFAULT_STORY_PRIORITY: StoryPriorityName = "medium";
+export const MIN_STORY_PRIORITY = 1;
+export const MAX_STORY_PRIORITY = 100;
+export const DEFAULT_STORY_PRIORITY = 50;
 
-/** Loudest first: the order the owner's queue reads in. */
-export const PRIORITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
+/**
+ * The three steps priority used to be, still accepted on the wire from
+ * clients written before the slider, each at the middle of its third.
+ */
+export const LEGACY_STORY_PRIORITY: Record<string, number> = { low: 25, medium: 50, high: 75 };
+
+/**
+ * Which third a priority falls in: the colour its chip wears, and what the
+ * retired three-step column is kept at for a rolled-back image.
+ */
+export function priorityBand(priority: number): "low" | "medium" | "high" {
+  return priority <= 33 ? "low" : priority >= 67 ? "high" : "medium";
+}
+
+/** A priority from a form or a JSON body: 1–100, or one of the old words. */
+export const StoryPrioritySchema = z.preprocess(
+  (v) => (typeof v === "string" ? LEGACY_STORY_PRIORITY[v.trim()] ?? (v.trim() === "" ? v : Number(v)) : v),
+  z
+    .number("That is not a priority.")
+    .int("That is not a priority.")
+    .min(MIN_STORY_PRIORITY, "That is not a priority.")
+    .max(MAX_STORY_PRIORITY, "That is not a priority."),
+);
 
 export const QuantitySchema = z.coerce
   .number()
@@ -312,8 +333,9 @@ export const WishSchema = z.object({
     ),
   quantity: QuantitySchema,
   // Optional on the wire, so a client written before priority existed still
-  // files a request — it comes out `medium`, which is what it would have meant.
-  priority: z.enum(STORY_PRIORITIES, "That is not a priority.").optional().default(DEFAULT_STORY_PRIORITY),
+  // files a request — it comes out in the middle, which is what it would have
+  // meant. The old words still work, for a client written before the slider.
+  priority: StoryPrioritySchema.optional().default(DEFAULT_STORY_PRIORITY),
   note: z.string().trim().max(2000, "That note is very long.").optional().default(""),
   // Optional free-text print settings (FRR-103 option A). Shown to the owner so
   // slicer specifics live on the ticket rather than in a chat thread.

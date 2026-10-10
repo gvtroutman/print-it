@@ -8,14 +8,11 @@ import {
   AUTO_MATERIAL,
   DEFAULT_STORY_PRIORITY,
   NEAR_ENOUGH,
-  PRIORITY_CHIP,
-  STORY_PRIORITIES,
   colourDistance,
   labOf,
   type CatalogColorChoice,
   type CatalogMaterialChoice,
   type SwatchChoice,
-  type StoryPriorityName,
 } from "@/lib/catalog";
 // The same numbers the server enforces. `models.ts` cannot be imported here —
 // it would pull `fflate` and the mesh parser into the browser bundle — which
@@ -48,8 +45,9 @@ import { Button, Label, Notice } from "@/components/ui";
 import { MaterialFacts } from "@/components/material-chart";
 import { InkCube } from "@/components/ink-cube";
 import { NavIcon } from "@/components/nav-icons";
+import { PrioritySlider } from "@/components/priority-slider";
 
-import { ColorMenu, OtherColors, SLIDER, SwipePair, colorNameOf } from "./spool-finder";
+import { ColorMenu, OtherColors, SwipePair, colorNameOf } from "./spool-finder";
 
 /**
  * The shelf colour of a material that looks most like `hex`, or null when
@@ -84,7 +82,7 @@ export type Again = {
   /** The spool the old ticket asked the owner to buy, or null for a shelf colour. */
   swatch: SwatchChoice | null;
   quantity: number;
-  priority: StoryPriorityName;
+  priority: number;
   note: string;
 };
 
@@ -471,7 +469,7 @@ export function UploadForm({
   // obviously. Coercing each keystroke turned an emptied box straight back
   // into "1", so clearing it to type 3 produced 13.
   const [quantityDraft, setQuantityDraft] = useState<string | null>(null);
-  const [priority, setPriority] = useState<StoryPriorityName>(again?.priority ?? DEFAULT_STORY_PRIORITY);
+  const [priority, setPriority] = useState<number>(again?.priority ?? DEFAULT_STORY_PRIORITY);
   const [color, setColor] = useState<string | null>(initialColor?.name ?? null);
   // A spool the owner can get instead of one on the shelf. One or the other:
   // picking either clears the other.
@@ -788,7 +786,7 @@ export function UploadForm({
     else if (wishColor.colorName) body.set("colorName", wishColor.colorName);
     if (wishColor.colorHex) body.set("colorHex", wishColor.colorHex);
     body.set("quantity", String(quantity));
-    body.set("priority", priority);
+    body.set("priority", String(priority));
     body.set("note", note);
 
     // XHR rather than fetch: it is still the only way to observe upload
@@ -945,7 +943,7 @@ export function UploadForm({
       {byCircle ? autoColorName : toBuy ? `${toBuy.name}, to get` : color ?? "No color yet"}
     </>
   );
-  const sendSummary = `${PRIORITY_CHIP[priority]?.label ?? priority} priority · ${quantity} ${quantity === 1 ? "copy" : "copies"}`;
+  const sendSummary = `Priority ${priority} · ${quantity} ${quantity === 1 ? "copy" : "copies"}`;
 
   const back = (to: StepNo) => (
     <Button type="button" variant="ghost" disabled={busy} onClick={() => goTo(to)}>
@@ -1504,34 +1502,7 @@ export function UploadForm({
         {/* ---- priority ---- */}
         <div className="max-w-[420px]">
           <Label htmlFor="priority">Priority</Label>
-          {/* Low to high, quiet grey warming to cherry; the words under it are stops too. */}
-          <input
-            id="priority"
-            type="range"
-            min={0}
-            max={STORY_PRIORITIES.length - 1}
-            step={1}
-            value={STORY_PRIORITIES.indexOf(priority)}
-            aria-valuetext={PRIORITY_CHIP[priority]?.label ?? priority}
-            onChange={(e) => setPriority(STORY_PRIORITIES[Number(e.target.value)] ?? priority)}
-            className={SLIDER}
-            style={{ background: "linear-gradient(to right, var(--color-chrome), var(--color-sun), var(--color-cherry))" }}
-          />
-          <div className="mt-[6px] flex justify-between" aria-hidden="true">
-            {STORY_PRIORITIES.map((p) => (
-              <button
-                key={p}
-                type="button"
-                tabIndex={-1}
-                onClick={() => setPriority(p)}
-                className={`cursor-pointer border-0 bg-transparent px-[2px] font-mono text-[11px] font-bold uppercase tracking-[0.08em] ${
-                  p === priority ? "text-cherry-dk" : "text-ink-3 hover:text-ink"
-                }`}
-              >
-                {PRIORITY_CHIP[p]?.label ?? p}
-              </button>
-            ))}
-          </div>
+          <PrioritySlider id="priority" value={priority} onChange={setPriority} />
         </div>
 
         {/* ---- note ---- */}

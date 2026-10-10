@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { notify, printerOwner, storyRef } from "@/lib/authz";
 import type { Actor } from "@/lib/scope";
 import { record } from "@/lib/audit";
-import { WishSchema, type Wish } from "@/lib/catalog";
+import { WishSchema, priorityBand, type Wish } from "@/lib/catalog";
 import { SELECTION_REFUSAL, resolveSelection, type Selection } from "@/lib/catalog-data";
 import { REJECTION_COPY, extensionOf, inspectModel, safeFilename } from "@/lib/models";
 import { MEDIA_REJECTION_COPY, inspectMedia } from "@/lib/media";
@@ -234,6 +234,7 @@ export async function openRequest(
         status: "Requested",
         quantity: wish.quantity,
         priority: wish.priority,
+        legacyPriority: priorityBand(wish.priority),
         material: wish.material,
         colorName: selection.colorName,
         colorHex: selection.hex,

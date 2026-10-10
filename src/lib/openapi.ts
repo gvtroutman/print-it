@@ -2,7 +2,14 @@ import "server-only";
 import { z } from "zod";
 
 import { auth } from "@/lib/auth";
-import { COLOR_MODES, STORY_PRIORITIES, SWATCH_SHADES, WishSchema } from "@/lib/catalog";
+import {
+  COLOR_MODES,
+  LEGACY_STORY_PRIORITY,
+  MAX_STORY_PRIORITY,
+  MIN_STORY_PRIORITY,
+  SWATCH_SHADES,
+  WishSchema,
+} from "@/lib/catalog";
 import { TOP_MARK, TRAITS } from "@/lib/filament-traits";
 import { ACCEPTED_EXTENSIONS, MAX_BYTES, formatBytes } from "@/lib/models";
 import { FLOW } from "@/lib/scope";
@@ -96,9 +103,12 @@ const STORY_SCHEMA = {
     flagReason: { type: ["string", "null"] },
     quantity: { type: "integer", minimum: 1 },
     priority: {
-      type: "string",
-      enum: [...STORY_PRIORITIES],
-      description: "How much it matters to the requester. Orders the owner's queue; promises nothing else.",
+      type: "integer",
+      minimum: MIN_STORY_PRIORITY,
+      maximum: MAX_STORY_PRIORITY,
+      description:
+        "How much it matters to the requester, 1 (whenever) to 100 (right now). " +
+        "Orders the owner's queue, highest first; promises nothing else.",
     },
     material: {
       type: "string",
@@ -675,9 +685,20 @@ export async function buildOpenApiDocument() {
                 schema: {
                   type: "object",
                   required: ["priority"],
-                  properties: { priority: { type: "string", enum: [...STORY_PRIORITIES] } },
+                  properties: {
+                    priority: {
+                      type: "integer",
+                      minimum: MIN_STORY_PRIORITY,
+                      maximum: MAX_STORY_PRIORITY,
+                      description: `1 (whenever) to 100 (right now). The old words still work: ${Object.entries(
+                        LEGACY_STORY_PRIORITY,
+                      )
+                        .map(([word, n]) => `"${word}" is ${n}`)
+                        .join(", ")}.`,
+                    },
+                  },
                 },
-                example: { priority: "high" },
+                example: { priority: 80 },
               },
             },
           },
@@ -686,13 +707,13 @@ export async function buildOpenApiDocument() {
               changed: {
                 type: "object",
                 properties: {
-                  from: { type: "string" },
-                  to: { type: "string" },
+                  from: { type: "integer" },
+                  to: { type: "integer" },
                   unchanged: { type: "boolean" },
                 },
               },
             }),
-            "400": errorResponse("Not one of low, medium, high."),
+            "400": errorResponse("Not a whole number from 1 to 100 (or one of the old words)."),
             "404": errorResponse("No such ticket, or not one you may see."),
             "409": errorResponse("The ticket is Done or Declined."),
             ...COMMON_ERRORS,

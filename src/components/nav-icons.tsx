@@ -16,7 +16,9 @@ export type NavIconName =
   | "people"
   | "book"
   | "bell"
-  | "pencil";
+  | "pencil"
+  | "turtle"
+  | "rabbit";
 
 /**
  * The wordmark's magnet letters, for the ones the theme has no token for.
@@ -132,6 +134,29 @@ const STICKERS: Record<NavIconName, Sticker> = {
       ["M11.2 4.2l3-3 4.5 4.5-3 3Z", MAGNET.red],
     ],
     tilt: 4,
+  },
+  // A turtle plodding right: the bottom of the priority slider, whenever.
+  turtle: {
+    parts: [
+      ["M3.4 12h4.6v5.6H3.4z", MAGNET.yellow],
+      ["M10.6 12h4.6v5.6h-4.6z", MAGNET.yellow],
+      ["M16.4 6.8a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 0 0 0-6.8Z", MAGNET.yellow],
+      ["M1.2 13.6a7.6 7.4 0 0 1 15.2 0Z", MAGNET.green],
+    ],
+    lines: "M6.6 6.6l1.3 7M11 6.6l-1.3 7M1.3 12.8L-.6 14M17.2 9.6h.01",
+    tilt: -6,
+  },
+  // A rabbit mid-bound: the top of the priority slider, now.
+  rabbit: {
+    parts: [
+      ["M13.4 7.2C10.8 5.9 9 2.6 10.1 1.2c1.2-1.4 4.2 1.2 5.4 4.8Z", MAGNET.paper],
+      ["M15.6 6.2c-.8-2.8-.3-5.9 1.4-6.1 1.8-.2 2.6 3.1 1.5 6.4Z", MAGNET.paper],
+      ["M1.8 12.6a6.8 4.8 0 1 0 13.6 0 6.8 4.8 0 1 0-13.6 0Z", MAGNET.paper],
+      ["M2.1 8.4a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4Z", MAGNET.paper],
+      ["M15.8 5.4a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6Z", MAGNET.paper],
+    ],
+    lines: "M17 8.6h.01M4.8 16.9l-2.6 1.7M12.6 17l2.6 1.5",
+    tilt: 6,
   },
 };
 
