@@ -348,9 +348,6 @@ function StepCard({
               <span id={headingId} className="min-w-0 flex-1 font-display text-[22px] leading-tight">
                 {title}
               </span>
-              <span className="flex-none font-mono text-[11.5px] font-bold uppercase tracking-[0.1em]">
-                {n} of 4
-              </span>
             </button>
           </h2>
         ) : (
