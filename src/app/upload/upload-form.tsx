@@ -45,8 +45,7 @@ const KIND_BADGE: Record<FileKind, { label: string; className: string }> = {
 import { SOURCE_LABEL, identifySource, type ImportSource } from "@/lib/import-source";
 import { Button, Label, Notice } from "@/components/ui";
 import { FilamentSpool } from "@/components/color-swatch";
-import { MaterialChart, TraitSticker } from "@/components/material-chart";
-import { CATEGORIES, categoriesOf, traitsFor, type CategoryKey } from "@/lib/filament-traits";
+import { MaterialChart } from "@/components/material-chart";
 import { InkCube } from "@/components/ink-cube";
 
 import { ColorGrid, SpoolFinder } from "./spool-finder";
@@ -324,12 +323,6 @@ export function UploadForm({
   const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
 
   const [title, setTitle] = useState(again?.title ?? "");
-  // Which shelf the material comes off: picked first, and the material
-  // dropdown and chart then offer only that shelf's filaments.
-  const shelves = new Map(catalog.map((item) => [item.name, categoriesOf(traitsFor(item.name, item.ratings))]));
-  const [category, setCategory] = useState<CategoryKey | null>(
-    initialMaterial ? shelves.get(initialMaterial.name)![0]! : null,
-  );
   const [material, setMaterial] = useState<string | null>(initialMaterial?.name ?? null);
   const [quantity, setQuantity] = useState<number>(again?.quantity ?? 1);
   // What is in the amount box while it is being typed in, or null
@@ -527,9 +520,6 @@ export function UploadForm({
     // Enter in the quantity box submits without blurring it; show what is
     // actually being sent rather than a half-typed draft.
     setQuantityDraft(null);
-    if (category === null) {
-      return setPhase({ kind: "error", message: "Pick what it should be good at, then a filament from that shelf." });
-    }
     if (material === null) {
       return setPhase({ kind: "error", message: "Pick a material first — the chart shows what each one is good at." });
     }
@@ -612,18 +602,6 @@ export function UploadForm({
 
   const busy = phase.kind === "uploading";
   const selectedMaterial = catalog.find((item) => item.name === material) ?? null;
-  const onShelf = (key: CategoryKey) => catalog.filter((item) => shelves.get(item.name)!.includes(key));
-  const shelf = category === null ? [] : onShelf(category);
-
-  /**
-   * A new shelf keeps the material when it is on that shelf too (PETG is on
-   * two), and otherwise goes back to the chart with nothing picked.
-   */
-  function chooseCategory(next: CategoryKey) {
-    setCategory(next);
-    if (material !== null && !shelves.get(material)!.includes(next)) compareMaterials();
-  }
-
   function chooseMaterial(next: string) {
     const item = catalog.find((candidate) => candidate.name === next);
     if (!item) return;
@@ -652,7 +630,7 @@ export function UploadForm({
     else if (color === null) setColor(shelfColorFor(selectedMaterial, null)!.name);
   }
 
-  /** Back to the chart of the shelf's materials, with nothing picked. */
+  /** Back to the chart of the materials, with nothing picked. */
   function compareMaterials() {
     setMaterial(null);
     setColor(null);
@@ -998,50 +976,15 @@ export function UploadForm({
         <ColorGrid value={near} onChange={chooseNear} />
       </section>
 
-      {/* ---- what it should be good at: the shelf the filament comes off ---- */}
-      <div className="mt-[22px]">
-        <Label htmlFor="category">What should it be good at?</Label>
-        {/* Two by two on a phone, four across from sm up. */}
-        <div id="category" role="radiogroup" aria-label="What it should be good at" className="grid grid-cols-2 gap-[10px] sm:grid-cols-4">
-          {CATEGORIES.map((c) => {
-            const active = c.key === category;
-            const count = onShelf(c.key).length;
-            return (
-              <button
-                key={c.key}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                disabled={count === 0}
-                onClick={() => chooseCategory(c.key)}
-                className={`flex cursor-pointer flex-col items-start gap-[4px] rounded-card border-[3px] border-ink px-[12px] py-[10px] text-left transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
-                  active ? "bg-cherry-dk text-cream shadow-stamp" : "bg-porcelain text-ink enabled:hover:bg-sun"
-                }`}
-              >
-                <TraitSticker trait={c.sticker} tilt={-6} className="h-[28px] w-[28px]" />
-                <span className="font-display text-[17px] font-bold leading-[1.15]">{c.label}</span>
-                <span className={`text-[13px] leading-[1.35] ${active ? "text-cream/85" : "text-ink-2"}`}>{c.blurb}</span>
-                <span className={`mt-auto pt-[2px] font-mono text-[11px] font-bold uppercase tracking-[0.08em] ${active ? "text-cream/85" : "text-ink-3"}`}>
-                  {count === 0 ? "None on the shelf" : count === 1 ? "1 filament" : `${count} filaments`}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {category !== null && (
-        <>
-      {/* ---- material, from the chosen shelf ---- */}
+      {/* ---- material ---- */}
       <div className="mt-[22px] max-w-[420px]">
         <Label htmlFor="material">Material</Label>
         <Dropdown
-          key={category}
           id="material"
           // With a colour picked, the materials that have it on the shelf come first.
           options={(near
-            ? [...shelf].sort((a, b) => Number(closestShelfColor(b, near) !== null) - Number(closestShelfColor(a, near) !== null))
-            : shelf
+            ? [...catalog].sort((a, b) => Number(closestShelfColor(b, near) !== null) - Number(closestShelfColor(a, near) !== null))
+            : catalog
           ).map((item) => item.name)}
           value={material}
           onChange={chooseMaterial}
@@ -1067,7 +1010,7 @@ export function UploadForm({
         )}
       </div>
 
-      {/* ---- colour, or the chart of the shelf's materials until one is picked ---- */}
+      {/* ---- colour, or the chart of the materials until one is picked ---- */}
       {selectedMaterial === null ? (
         <section className="mt-[22px]" aria-labelledby="compare-heading">
           <div className="mb-[8.8px] flex flex-wrap items-baseline justify-between gap-x-[13.2px] gap-y-[4px]">
@@ -1076,7 +1019,7 @@ export function UploadForm({
             </h2>
             <p className="m-0 text-[13px] text-ink-3">Tap one to see its colors. More stickers, more of it. Five is the most.</p>
           </div>
-          <MaterialChart catalog={shelf} owner={owner} onPick={chooseMaterial} />
+          <MaterialChart catalog={catalog} owner={owner} onPick={chooseMaterial} />
         </section>
       ) : (
       <fieldset className="mt-[22px] border-0 p-0">
@@ -1089,7 +1032,7 @@ export function UploadForm({
             onClick={compareMaterials}
             className="cursor-pointer border-0 bg-transparent p-0 font-mono text-[11.5px] font-bold uppercase tracking-[0.08em] text-ink-3 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
           >
-            Compare this shelf
+            Compare materials
           </button>
         </div>
         {/* Three across on a phone, each spool shrinking to its column; from sm up
@@ -1144,8 +1087,6 @@ export function UploadForm({
           suggested={near !== null && closestShelfColor(selectedMaterial, near) === null}
         />
       </fieldset>
-      )}
-        </>
       )}
 
       {/* ---- priority ---- */}
