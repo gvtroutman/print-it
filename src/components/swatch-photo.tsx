@@ -22,7 +22,7 @@ export function SwatchPhoto({
   return (
     <span
       aria-hidden
-      className={`block aspect-[288/89] overflow-hidden rounded-[6px] border-2 border-ink ${className}`}
+      className={`block aspect-[288/89] overflow-hidden rounded-[6px] ${className}`}
       style={{ background: swatch.hex }}
     >
       {swatch.image && !failed && (

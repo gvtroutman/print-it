@@ -188,7 +188,7 @@ export function SpoolFinder({
               role="radiogroup"
               aria-label="Spools to buy"
               aria-busy={search.stale ?? false}
-              className={`${search.stale ? "opacity-50" : ""} grid max-h-[360px] grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-[8px] overflow-y-auto pr-[2px] transition-opacity`}
+              className={`${search.stale ? "opacity-50" : ""} grid max-h-[360px] grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-x-[14px] gap-y-[16px] overflow-y-auto p-[8px] transition-opacity`}
             >
               {search.found.swatches.map((s) => {
                 const active = s.id === picked?.id;
@@ -200,12 +200,21 @@ export function SpoolFinder({
                     aria-checked={active}
                     aria-label={`${s.name} by ${s.maker}, ${s.type}`}
                     onClick={() => onPick(s)}
-                    className={`flex min-w-0 cursor-pointer flex-col items-center gap-[5px] rounded-card border-[3px] px-[6px] py-[8px] transition-colors ${
-                      active ? "border-ink bg-sun" : "border-transparent bg-transparent hover:border-ink/40 hover:bg-cream-2"
-                    }`}
+                    // No box around it: the photo, with its name and maker under.
+                    // The chosen one's photo wears a ring.
+                    className="group flex min-w-0 cursor-pointer flex-col items-center gap-[5px] border-0 bg-transparent p-0"
                   >
-                    <SwatchPhoto swatch={s} className="w-full" />
-                    <span className="line-clamp-2 text-center text-[12px] font-bold leading-[1.2] text-ink">{s.name}</span>
+                    <SwatchPhoto
+                      swatch={s}
+                      className={`w-full transition-transform ${
+                        active ? "scale-[1.04] shadow-[0_0_0_3px_#ffffff,0_0_0_6px_#1b2126]" : "group-hover:scale-[1.04]"
+                      }`}
+                    />
+                    <span
+                      className={`line-clamp-2 text-center text-[12px] leading-[1.2] text-ink ${active ? "font-extrabold text-cherry-dk" : "font-bold"}`}
+                    >
+                      {s.name}
+                    </span>
                     <span className="line-clamp-1 text-center font-mono text-[10px] uppercase tracking-[0.04em] text-ink-3">
                       {s.maker}
                     </span>
