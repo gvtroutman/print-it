@@ -523,17 +523,36 @@ export function UploadForm({
     setFiles((current) => current.filter((f) => f !== target));
   }
 
-  function addLink() {
-    const parsed = parseLink(linkDraft);
-    if (!parsed.ok) return setLinkError(parsed.error);
-    if (links.includes(parsed.href)) return setLinkError("That link is already on the order.");
-    if (links.length >= MAX_LINKS_PER_ORDER) {
-      return setLinkError(`Up to ${MAX_LINKS_PER_ORDER} links per order.`);
-    }
+  /** Puts `raw` on the order; false, with the reason shown, when it can't go. */
+  function addLink(raw = linkDraft): boolean {
+    const fail = (message: string) => (setLinkError(message), false);
+    const parsed = parseLink(raw);
+    if (!parsed.ok) return fail(parsed.error);
+    if (links.includes(parsed.href)) return fail("That link is already on the order.");
+    if (links.length >= MAX_LINKS_PER_ORDER) return fail(`Up to ${MAX_LINKS_PER_ORDER} links per order.`);
     setLinks([...links, parsed.href]);
     setLinkDraft("");
     setLinkError(null);
     setAddingLink(false);
+    return true;
+  }
+
+  /**
+   * One tap: the link already copied, read straight off the clipboard. Where
+   * the browser won't hand it over (refused, or a plain-http page, where there
+   * is no clipboard API) or what was copied isn't a link, the box opens
+   * instead, to paste into by hand.
+   */
+  async function pasteLink() {
+    let copied = "";
+    try {
+      copied = await navigator.clipboard.readText();
+    } catch {
+      /* no clipboard to read: the box below is the way in */
+    }
+    if (copied.trim() && addLink(copied)) return;
+    if (!copied.trim()) setLinkError("Couldn't read a copied link. Paste it here instead.");
+    setAddingLink(true);
   }
 
   const sourceNames = importSources.map((s) => SOURCE_LABEL[s]).join(" or ");
@@ -1057,7 +1076,7 @@ export function UploadForm({
                     type="button"
                     variant="secondary"
                     disabled={busy || !linkDraft.trim() || links.length >= MAX_LINKS_PER_ORDER}
-                    onClick={addLink}
+                    onClick={() => addLink()}
                   >
                     Add link
                   </Button>
@@ -1068,10 +1087,10 @@ export function UploadForm({
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => setAddingLink(true)}
+                  onClick={() => void pasteLink()}
                   className="cursor-pointer border-0 bg-transparent p-0 font-mono text-[12px] font-bold uppercase tracking-[0.08em] text-ink-2 underline decoration-2 underline-offset-4 hover:text-cherry-dk disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {links.length > 0 ? "+ Add another link" : "+ Add a link"}
+                  {links.length > 0 ? "+ Paste another link" : "+ Paste a link"}
                 </button>
               )
             )}
