@@ -1,6 +1,6 @@
 import { fail, ok, withActor } from "@/lib/api";
 import { SWATCH_SHADES, swatchImagePath, type SwatchChoice, type SwatchShade } from "@/lib/catalog";
-import { LibraryUnavailable, searchLibrary } from "@/lib/filament-library";
+import { LibraryUnavailable, searchLibrary, swatchColour } from "@/lib/filament-library";
 
 /**
  * Spools the owner does not have but can buy, for one material: the
@@ -44,7 +44,8 @@ export const GET = withActor(async (request) => {
         name: s.name,
         maker: s.maker,
         type: s.type,
-        hex: s.hex,
+        // As photographed, which is what the grid sorted by.
+        hex: swatchColour(s),
         shade: s.shade,
         buyUrl: s.buyUrl,
         pageUrl: s.pageUrl,

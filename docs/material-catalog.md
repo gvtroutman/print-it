@@ -64,8 +64,20 @@ swatch library for that kind of filament, by words (colour, maker, type) and
 by colour: a grid laid out like a phone's colour picker, where tapping a cell
 lists the spools that look closest to it first (ΔE in CIE L\*a\*b\*). Spools that
 look nothing like it are left out, unless fewer than 12 are near, in which case
-the 12 closest show. Real filament is rarely as vivid as the grid's bright
-blues and purples, so those cells often land on that fallback. The match uses the filament table in `src/lib/filament-traits.ts`:
+the 12 closest show. Hue counts most, and a spool duller than the cell is
+forgiven half of that dullness.
+
+The colour compared is measured by the app, not taken from the library. The
+hex the library lists is darker and duller than its own photos, and off in hue
+for some blues, so a grid sorted by it showed photos that did not match the
+cell. Instead the server reads each swatch's thumbnail once and takes the
+per-channel median of the card's thick section. After the library loads, all
+~2,300 are measured in the background (about 45 seconds; the listed hex stands
+in until then). The results are kept in `cache/filament-colours.json` on the
+uploads volume (`MODELS_ROOT`), so a redeploy only measures new swatches. The
+measured colour is also what a ticket snapshots as its hex.
+
+The kind of filament is matched with the filament table in `src/lib/filament-traits.ts`:
 a "Silk PLA" material offers any PLA swatch (silk ones first), "PLA-CF" only
 fibre-filled PLA, and a name the table does not know has to appear in the
 swatch's type ("Wood" finds "PLA Wood").

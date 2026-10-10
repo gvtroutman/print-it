@@ -2,7 +2,7 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import type { CatalogMaterialChoice, ColorMode, Wish } from "@/lib/catalog";
-import { LibraryUnavailable, librarySwatch, swatchFits } from "@/lib/filament-library";
+import { LibraryUnavailable, librarySwatch, swatchColour, swatchFits } from "@/lib/filament-library";
 
 /** Only materials with at least one available colour can be requested. */
 export async function availableCatalog(): Promise<CatalogMaterialChoice[]> {
@@ -113,12 +113,15 @@ export async function resolveSelection(wish: Pick<Wish, "material" | "colorName"
   if (!swatch) return { ok: false, reason: "gone" };
   if (!swatchFits(material.name, swatch)) return { ok: false, reason: "misfit" };
 
+  // The colour as photographed: what the requester saw when they picked it,
+  // and what the 3D viewer should paint the model with.
+  const hex = swatchColour(swatch);
   return {
     ok: true,
     selection: {
       colorName: swatch.name,
-      hex: swatch.hex,
-      style: swatch.hex,
+      hex,
+      style: hex,
       mode: "solid",
       toBuy: {
         swatchId: swatch.id,

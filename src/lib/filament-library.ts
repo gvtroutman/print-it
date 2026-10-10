@@ -3,6 +3,8 @@ import "server-only";
 import { builtInTraits } from "@/lib/filament-traits";
 import { SWATCH_SHADES, swatchPageUrl, type LibrarySwatch, type SwatchShade } from "@/lib/catalog";
 import { sourceUrl as appSourceUrl } from "@/lib/runtime";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 
 /**
  * Filament the owner does not have but can buy: the swatch library at
@@ -157,6 +159,7 @@ function refresh(): Promise<Library> {
   sweeping ??= sweep()
     .then((fresh) => {
       library = fresh;
+      measureColours(fresh);
       return fresh;
     })
     .catch((error) => {
@@ -350,6 +353,128 @@ export async function swatchPhoto(id: number): Promise<Photo | null> {
   return pending;
 }
 
+// ---------------------------------------------------------------------------
+// Colour, as the photos show it
+//
+// The library lists a hex per swatch, but it is darker and duller than the
+// library's own photos, and off in hue for some blues ("Jessie Bold Blue" is
+// listed #0851a6, a teal, and photographed a royal blue). People pick by the
+// photos, so the grid sorts by the colour measured from each photo: the
+// median of the card's thick section in the library's thumbnail. Measured
+// once per swatch, in the background after a sweep, and kept in a file on
+// the uploads volume so a redeploy does not fetch 2,000 thumbnails again.
+// Until a swatch is measured its listed hex stands in.
+// ---------------------------------------------------------------------------
+
+const COLOURS_FILE = join(resolve(process.env.MODELS_ROOT ?? "/uploads"), "cache", "filament-colours.json");
+/** Thumbnails measured at once: each is ~2 KB and quick to read. */
+const PARALLEL_MEASURES = 4;
+/** Written to disk after this many new measurements, and at the end. */
+const SAVE_EVERY = 200;
+
+const measured = new Map<number, string>();
+let coloursRead: Promise<void> | null = null;
+let measuring: Promise<void> | null = null;
+
+/** Settles when no measuring is running — for scripts that need the colours in. */
+export const coloursMeasured = async () => {
+  await load();
+  await measuring;
+};
+
+/** The colour to match and draw a swatch by: as photographed, else as listed. */
+export function swatchColour(swatch: LibrarySwatch): string {
+  return measured.get(swatch.id) ?? swatch.hex;
+}
+
+async function readColours() {
+  try {
+    const saved = JSON.parse(await readFile(COLOURS_FILE, "utf8")) as Record<string, unknown>;
+    for (const [id, hex] of Object.entries(saved)) {
+      if (Number(id) > 0 && typeof hex === "string" && /^#[0-9a-f]{6}$/.test(hex)) measured.set(Number(id), hex);
+    }
+  } catch {
+    // None yet, or unreadable: they are measured again.
+  }
+}
+
+async function saveColours() {
+  try {
+    await mkdir(dirname(COLOURS_FILE), { recursive: true });
+    const temporary = `${COLOURS_FILE}.${process.pid}.tmp`;
+    await writeFile(temporary, JSON.stringify(Object.fromEntries(measured)));
+    await rename(temporary, COLOURS_FILE);
+  } catch (error) {
+    console.error("[filament-library] could not save measured colours", error);
+  }
+}
+
+/**
+ * The colour a thumbnail shows: the per-channel median of the card's thick
+ * section, left of the three thinner squares and right of the hanging hole,
+ * kept clear of the edges. The median, so glare and print lines do not drag it.
+ */
+async function measureColour(swatch: LibrarySwatch): Promise<string | null> {
+  const sharp = await loadSharp();
+  if (!sharp || !swatch.imageUrl) return null;
+  const thumb = await fetchImage(swatch.imageUrl, MAX_THUMB_BYTES);
+  if (!thumb) return null;
+  try {
+    const image = sharp(thumb.bytes);
+    const { width, height } = await image.metadata();
+    if (!width || !height) return null;
+    const { data, info } = await image
+      .extract({
+        left: Math.round(width * 0.2),
+        top: Math.round(height * 0.3),
+        width: Math.max(1, Math.round(width * 0.2)),
+        height: Math.max(1, Math.round(height * 0.4)),
+      })
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const pixels = info.width * info.height;
+    const channel = (c: number) => {
+      const values = Array.from({ length: pixels }, (_, i) => data[i * 3 + c]!).sort((a, b) => a - b);
+      return values[Math.floor(pixels / 2)]!.toString(16).padStart(2, "0");
+    };
+    return `#${channel(0)}${channel(1)}${channel(2)}`;
+  } catch (error) {
+    console.error(`[filament-library] could not measure swatch ${swatch.id}`, error);
+    return null;
+  }
+}
+
+/** Measure every swatch not yet measured, in the background, once at a time. */
+function measureColours(lib: Library) {
+  measuring ??= (async () => {
+    await (coloursRead ??= readColours());
+    const todo = [...lib.byId.values()].filter((s) => s.imageUrl && !measured.has(s.id));
+    let unsaved = 0;
+    for (let i = 0; i < todo.length; i += PARALLEL_MEASURES) {
+      const batch = todo.slice(i, i + PARALLEL_MEASURES);
+      const colours = await Promise.all(batch.map(measureColour));
+      batch.forEach((swatch, j) => {
+        const hex = colours[j];
+        if (hex) {
+          measured.set(swatch.id, hex);
+          unsaved += 1;
+        }
+      });
+      if (unsaved >= SAVE_EVERY) {
+        await saveColours();
+        unsaved = 0;
+      }
+    }
+    if (unsaved > 0) await saveColours();
+    if (todo.length > 0) console.log(`[filament-library] measured ${todo.length} swatch colours`);
+  })()
+    .catch((error) => console.error("[filament-library] measuring colours failed", error))
+    .finally(() => {
+      measuring = null;
+    });
+}
+
 /** The most swatches one search answers with. */
 export const SEARCH_LIMIT = 60;
 
@@ -393,10 +518,11 @@ const NEAR_ENOUGH = 28;
 /** When fewer than this are near enough, the closest this many are shown anyway. */
 const AT_LEAST = 12;
 
-const labs = new WeakMap<LibrarySwatch, [number, number, number]>();
+const labs = new Map<string, [number, number, number]>();
 const labFor = (swatch: LibrarySwatch) => {
-  let lab = labs.get(swatch);
-  if (!lab) labs.set(swatch, (lab = labOf(swatch.hex)));
+  const hex = swatchColour(swatch);
+  let lab = labs.get(hex);
+  if (!lab) labs.set(hex, (lab = labOf(hex)));
   return lab;
 };
 
