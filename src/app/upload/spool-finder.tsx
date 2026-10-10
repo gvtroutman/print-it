@@ -512,25 +512,22 @@ export function ColorMenu({
  * Two panels sharing one spot, with two rounded lines above them saying
  * which is showing. The second slides in from the right as the first slides
  * off to the left; tapping a line, or dragging sideways, swaps them. The
- * spot grows or shrinks to the panel showing. `spill` lets a popup inside a
- * panel (a dropdown's open list) hang out below it rather than be clipped.
+ * spot grows or shrinks to the panel showing.
  * `onShow` says whether a line was tapped, so the caller can move focus;
  * a drag leaves focus where it was.
  */
-export function SwipePair({
+function SwipePair({
   second,
   onShow,
   labels,
   first,
   secondPanel,
-  spill = false,
 }: {
   second: boolean;
   onShow: (second: boolean, tapped: boolean) => void;
   labels: [string, string];
   first: ReactNode;
   secondPanel: ReactNode;
-  spill?: boolean;
 }) {
   const firstRef = useRef<HTMLDivElement>(null);
   const secondRef = useRef<HTMLDivElement>(null);
@@ -642,9 +639,7 @@ export function SwipePair({
           e.preventDefault();
           e.stopPropagation();
         }}
-        className={`relative -m-[10px] touch-pan-y select-none transition-[height] duration-[400ms] ease-out motion-reduce:transition-none ${
-          spill ? "overflow-x-clip" : "overflow-hidden"
-        }`}
+        className="relative -m-[10px] touch-pan-y select-none overflow-hidden transition-[height] duration-[400ms] ease-out motion-reduce:transition-none"
         style={pull ? { height: pull.h, transition: "none" } : height === null ? undefined : { height }}
       >
         {/* ---- the first: slides off to the left for the second ---- */}

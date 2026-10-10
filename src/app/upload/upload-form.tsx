@@ -47,7 +47,7 @@ import { InkCube } from "@/components/ink-cube";
 import { NavIcon } from "@/components/nav-icons";
 import { PrioritySlider } from "@/components/priority-slider";
 
-import { ColorMenu, OtherColors, SwipePair, colorNameOf } from "./spool-finder";
+import { ColorMenu, OtherColors, colorNameOf } from "./spool-finder";
 
 /**
  * The shelf colour of a material that looks most like `hex`, or null when
@@ -485,7 +485,7 @@ export function UploadForm({
 
   const [title, setTitle] = useState(again?.title ?? "");
   const [material, setMaterial] = useState<string | null>(initialMaterial?.name ?? AUTO_MATERIAL);
-  // Whether the material's facts are showing rather than its dropdown.
+  // Whether the material's facts are open below its dropdown.
   const [aboutMaterial, setAboutMaterial] = useState(false);
   const [quantity, setQuantity] = useState<number>(again?.quantity ?? 1);
   // What is in the amount box while it is being typed in, or null
@@ -1505,28 +1505,40 @@ export function UploadForm({
           </div>
         )}
 
-        {/* ---- the dropdown, then what the one picked is like ---- */}
-        <SwipePair
-          spill
-          second={aboutMaterial}
-          onShow={(next) => setAboutMaterial(next)}
-          labels={["Pick a filament", "About this filament"]}
-          first={
-            <div className="max-w-[420px]">
-              <label htmlFor="material" className="sr-only">
-                Material
-              </label>
-              <Dropdown
-                id="material"
-                options={[AUTO_MATERIAL, ...catalog.map((item) => item.name)]}
-                value={material}
-                onChange={chooseMaterial}
-                placeholder="Pick a filament, or Auto"
-              />
-            </div>
-          }
-          secondPanel={<MaterialFacts item={selectedMaterial} auto={auto} owner={owner} />}
-        />
+        {/* ---- the dropdown, and an info button that opens what the one picked is like below it ---- */}
+        <div className="flex max-w-[480px] items-start gap-[10px]">
+          <div className="min-w-0 flex-1">
+            <label htmlFor="material" className="sr-only">
+              Material
+            </label>
+            <Dropdown
+              id="material"
+              options={[AUTO_MATERIAL, ...catalog.map((item) => item.name)]}
+              value={material}
+              onChange={chooseMaterial}
+              placeholder="Pick a filament, or Auto"
+            />
+          </div>
+          <button
+            type="button"
+            aria-label="About this filament"
+            aria-expanded={aboutMaterial}
+            aria-controls="material-about"
+            onClick={() => setAboutMaterial((on) => !on)}
+            className={`grid h-[54px] w-[54px] flex-none cursor-pointer place-items-center rounded-full border-[3px] border-ink font-display text-[22px] font-bold leading-none text-ink hover:bg-sun ${
+              aboutMaterial ? "bg-sun" : "bg-porcelain"
+            }`}
+          >
+            <span aria-hidden>i</span>
+          </button>
+        </div>
+        <div
+          id="material-about"
+          hidden={!aboutMaterial}
+          className="mt-[14px] rounded-card border-[3px] border-ink bg-cream-2 px-[18px] py-[16px]"
+        >
+          <MaterialFacts item={selectedMaterial} auto={auto} owner={owner} />
+        </div>
 
         {step === 2 && error}
       </StepCard>
