@@ -131,11 +131,14 @@ export function NavIcon({
   name,
   className = "",
   fill,
+  flip = false,
 }: {
   name: NavIconName;
   className?: string;
   /** Paint every part this colour instead of its own, e.g. a quiet bell. */
   fill?: string;
+  /** Mirror it left to right, tilt and all: the bell swinging the other way. */
+  flip?: boolean;
 }) {
   const { parts, lines, tilt } = STICKERS[name];
   return (
@@ -146,7 +149,7 @@ export function NavIcon({
       // the height the text alone would give it, so the sticker overhangs
       // into the padding like one stuck on afterwards.
       className={`-my-[5px] h-[28px] w-[28px] shrink-0 ${className}`}
-      style={{ transform: `rotate(${tilt}deg)` }}
+      style={{ transform: `${flip ? "scaleX(-1) " : ""}rotate(${tilt}deg)` }}
       fill="none"
       stroke="currentColor"
       strokeWidth={2}
