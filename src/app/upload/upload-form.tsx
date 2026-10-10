@@ -542,10 +542,9 @@ export function UploadForm({
       ? linked.listing.files.find((f) => f.id === linked.fileId) ?? null
       : null;
 
-  // As little as a few words is a request; a model, photos or links are
-  // welcome but none of them is required.
-  const hasSomething =
-    !!again || !!title.trim() || !!note.trim() || files.length > 0 || links.length > 0 || !!picked;
+  // A name is the one thing a request needs; a model, photos, links and a
+  // note are welcome but none of them is required.
+  const named = !!title.trim();
 
   function stepQuantity(by: number) {
     setQuantityDraft(null);
@@ -669,7 +668,7 @@ export function UploadForm({
           "or download the model and drop it here with them."
         );
       }
-      if (!hasSomething) return "Say what you need — a few words is enough.";
+      if (!named) return "Say what it is — a few words is enough.";
     }
     if (n === 2) {
       if (material === null) return "Pick a material first — the chart shows what each one is good at.";
@@ -896,9 +895,14 @@ export function UploadForm({
         )}
 
         <div>
-          <Label htmlFor="title">What is it?</Label>
+          <Label htmlFor="title">
+            What is it? <span aria-hidden className="text-cherry-dk">*</span>
+          </Label>
+          {/* aria-required, not `required`: the browser's own check would block
+              Send while this card is folded, with nowhere visible to say why. */}
           <input
             id="title"
+            aria-required
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             maxLength={120}
@@ -953,7 +957,7 @@ export function UploadForm({
           {/* Important classes, because the cube sets its own size inline. */}
           <InkCube className="mx-auto mb-[8.8px] block !h-[72px] !w-[72px]" />
           <span className="block font-display text-[19px] text-ink">
-            {files.length > 0 ? "Drop more, or click to add" : "Drop files here, or click to choose (optional)"}
+            {files.length > 0 ? "Drop more, or click to add" : "Drop files here, or click to choose"}
           </span>
           <span className="mt-[6px] block font-mono text-[12px] uppercase tracking-[0.04em] text-ink-3">
             {busy && !picked
@@ -1021,7 +1025,7 @@ export function UploadForm({
             {/* Folded to one line until wanted: most orders carry no link. */}
             {addingLink ? (
               <>
-                <Label htmlFor="order-link">Link (optional)</Label>
+                <Label htmlFor="order-link">Link</Label>
                 <div className="flex flex-wrap gap-[8.8px]">
                   <input
                     id="order-link"
@@ -1067,7 +1071,7 @@ export function UploadForm({
                   onClick={() => setAddingLink(true)}
                   className="cursor-pointer border-0 bg-transparent p-0 font-mono text-[12px] font-bold uppercase tracking-[0.08em] text-ink-2 underline decoration-2 underline-offset-4 hover:text-cherry-dk disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {links.length > 0 ? "+ Add another link" : "+ Add a link (optional)"}
+                  {links.length > 0 ? "+ Add another link" : "+ Add a link"}
                 </button>
               )
             )}
@@ -1240,7 +1244,7 @@ export function UploadForm({
                 Any color
               </button>
             ) : (
-              <p className="m-0 text-[13px] text-ink-3">Optional. Tap one and the closest spool gets picked for you.</p>
+              <p className="m-0 text-[13px] text-ink-3">Tap one and the closest spool gets picked for you.</p>
             )}
           </div>
           <ColorGrid value={near} onChange={chooseNear} />
