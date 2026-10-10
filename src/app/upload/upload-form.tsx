@@ -373,9 +373,11 @@ function StepCard({
                   {summary}
                 </span>
               </span>
-              <span className="flex-none font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3 underline decoration-2 underline-offset-4 group-hover:text-cherry-dk">
-                {done ? "Change" : "Open"}
-              </span>
+              {done && (
+                <span className="flex-none font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3 underline decoration-2 underline-offset-4 group-hover:text-cherry-dk">
+                  Change
+                </span>
+              )}
             </span>
           </button>
         )}
