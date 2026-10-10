@@ -5,8 +5,12 @@ import { useRouter } from "next/navigation";
 
 import {
   DEFAULT_STORY_PRIORITY,
+  NEAR_ENOUGH,
   PRIORITY_CHIP,
   STORY_PRIORITIES,
+  colourDistance,
+  labOf,
+  type CatalogColorChoice,
   type CatalogMaterialChoice,
   type SwatchChoice,
   type StoryPriorityName,
@@ -45,7 +49,22 @@ import { MaterialChart, TraitSticker } from "@/components/material-chart";
 import { CATEGORIES, categoriesOf, traitsFor, type CategoryKey } from "@/lib/filament-traits";
 import { InkCube } from "@/components/ink-cube";
 
-import { SpoolFinder } from "./spool-finder";
+import { ColorGrid, SpoolFinder } from "./spool-finder";
+
+/**
+ * The shelf colour of a material that looks most like `hex`, or null when
+ * none is near enough to pass for it. "Whatever's loaded" is no colour at all.
+ */
+function closestShelfColor(item: CatalogMaterialChoice, hex: string): CatalogColorChoice | null {
+  const target = labOf(hex);
+  let best: { color: CatalogColorChoice; d: number } | null = null;
+  for (const color of item.colors) {
+    if (color.mode === "whatever" || !/^#[0-9a-f]{6}$/i.test(color.hex)) continue;
+    const d = colourDistance(labOf(color.hex), target);
+    if (d <= NEAR_ENOUGH && (!best || d < best.d)) best = { color, d };
+  }
+  return best?.color ?? null;
+}
 
 /**
  * An old ticket being printed again. When this is given the form has no
@@ -324,6 +343,9 @@ export function UploadForm({
   // A spool the owner can get instead of one on the shelf. One or the other:
   // picking either clears the other.
   const [toBuy, setToBuy] = useState<SwatchChoice | null>(initialSwatch);
+  // The colour picked from the grid at the top, before any material: it picks
+  // the nearest shelf colour, or searches the library when the shelf has none.
+  const [near, setNear] = useState<string | null>(null);
   const [note, setNote] = useState(again?.note ?? "");
 
   /**
@@ -508,8 +530,11 @@ export function UploadForm({
     if (category === null) {
       return setPhase({ kind: "error", message: "Pick what it should be good at, then a filament from that shelf." });
     }
-    if (material === null || (color === null && toBuy === null)) {
+    if (material === null) {
       return setPhase({ kind: "error", message: "Pick a material first — the chart shows what each one is good at." });
+    }
+    if (color === null && toBuy === null) {
+      return setPhase({ kind: "error", message: `Pick a color from the shelf, or a spool ${owner} can get.` });
     }
     if (again) return void sendAgain(again);
     if (linked.kind === "listed" && picked) {
@@ -606,7 +631,25 @@ export function UploadForm({
     if (item.name !== material) setToBuy(null);
     else if (toBuy) return;
     setMaterial(item.name);
-    setColor((item.colors.find((candidate) => candidate.name === "Slate") ?? item.colors[0]!).name);
+    setColor(shelfColorFor(item, near)?.name ?? null);
+  }
+
+  /**
+   * The shelf colour a material starts on: the one nearest the colour picked
+   * up top — none when nothing is near it, so the library opens instead — or
+   * Slate with no colour picked.
+   */
+  function shelfColorFor(item: CatalogMaterialChoice, hex: string | null) {
+    if (hex) return closestShelfColor(item, hex);
+    return item.colors.find((candidate) => candidate.name === "Slate") ?? item.colors[0]!;
+  }
+
+  /** A colour from the grid up top; null is any colour. A spool to buy already picked stays. */
+  function chooseNear(hex: string | null) {
+    setNear(hex);
+    if (!selectedMaterial || toBuy) return;
+    if (hex) setColor(closestShelfColor(selectedMaterial, hex)?.name ?? null);
+    else if (color === null) setColor(shelfColorFor(selectedMaterial, null)!.name);
   }
 
   /** Back to the chart of the shelf's materials, with nothing picked. */
@@ -621,7 +664,8 @@ export function UploadForm({
     setToBuy(next);
     if (next) setColor(null);
     else if (color === null && selectedMaterial) {
-      setColor((selectedMaterial.colors.find((c) => c.name === "Slate") ?? selectedMaterial.colors[0]!).name);
+      // Back to the shelf means a shelf colour, even with nothing near the one picked.
+      setColor((shelfColorFor(selectedMaterial, near) ?? shelfColorFor(selectedMaterial, null)!).name);
     }
   }
 
@@ -933,6 +977,27 @@ export function UploadForm({
         </div>
       </div>
 
+      {/* ---- colour first: the nearest on the shelf, or a spool to buy ---- */}
+      <section className="mt-[22px]" aria-labelledby="near-heading">
+        <div className="mb-[6px] flex flex-wrap items-baseline justify-between gap-x-[13.2px] gap-y-[4px]">
+          <h2 id="near-heading" className="m-0 font-mono text-[12px] font-bold uppercase tracking-[0.1em] text-ink-2">
+            What color?
+          </h2>
+          {near ? (
+            <button
+              type="button"
+              onClick={() => chooseNear(null)}
+              className="cursor-pointer border-0 bg-transparent p-0 font-mono text-[11.5px] font-bold uppercase tracking-[0.08em] text-ink-3 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
+            >
+              Any color
+            </button>
+          ) : (
+            <p className="m-0 text-[13px] text-ink-3">Optional. Tap one and the closest spool gets picked for you.</p>
+          )}
+        </div>
+        <ColorGrid value={near} onChange={chooseNear} />
+      </section>
+
       {/* ---- what it should be good at: the shelf the filament comes off ---- */}
       <div className="mt-[22px]">
         <Label htmlFor="category">What should it be good at?</Label>
@@ -973,11 +1038,22 @@ export function UploadForm({
         <Dropdown
           key={category}
           id="material"
-          options={shelf.map((item) => item.name)}
+          // With a colour picked, the materials that have it on the shelf come first.
+          options={(near
+            ? [...shelf].sort((a, b) => Number(closestShelfColor(b, near) !== null) - Number(closestShelfColor(a, near) !== null))
+            : shelf
+          ).map((item) => item.name)}
           value={material}
           onChange={chooseMaterial}
           placeholder="Pick one, or compare them below"
-          hint={(name) => catalog.find((item) => item.name === name)?.description ?? ""}
+          hint={(name) => {
+            const item = catalog.find((candidate) => candidate.name === name);
+            if (!item) return "";
+            if (!near) return item.description;
+            const match = closestShelfColor(item, near);
+            const stock = match ? `On the shelf in ${match.name}.` : `Not that color on the shelf — ${owner} can get one.`;
+            return item.description ? `${stock} ${item.description}` : stock;
+          }}
           describedBy={selectedMaterial?.description ? "material-about" : undefined}
         />
         {selectedMaterial?.description && (
@@ -1050,6 +1126,12 @@ export function UploadForm({
             );
           })}
         </div>
+        {near && !toBuy && closestShelfColor(selectedMaterial, near) === null && (
+          <p aria-live="polite" className="m-0 mt-[13.2px] text-[13.5px] leading-[1.45] text-ink-2">
+            Nothing on the {selectedMaterial.name} shelf looks like your color. Pick a spool {owner} can get below, or
+            one of these.
+          </p>
+        )}
         {/* Keyed by material: another material is another library search. */}
         <SpoolFinder
           key={selectedMaterial.name}
@@ -1057,6 +1139,9 @@ export function UploadForm({
           owner={owner}
           picked={toBuy}
           onPick={chooseToBuy}
+          near={near}
+          onNear={chooseNear}
+          suggested={near !== null && closestShelfColor(selectedMaterial, near) === null}
         />
       </fieldset>
       )}

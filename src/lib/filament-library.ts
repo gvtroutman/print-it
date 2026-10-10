@@ -1,7 +1,15 @@
 import "server-only";
 
 import { builtInTraits } from "@/lib/filament-traits";
-import { SWATCH_SHADES, swatchPageUrl, type LibrarySwatch, type SwatchShade } from "@/lib/catalog";
+import {
+  NEAR_ENOUGH,
+  SWATCH_SHADES,
+  colourDistance,
+  labOf,
+  swatchPageUrl,
+  type LibrarySwatch,
+  type SwatchShade,
+} from "@/lib/catalog";
 import { sourceUrl as appSourceUrl } from "@/lib/runtime";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -478,43 +486,6 @@ function measureColours(lib: Library) {
 /** The most swatches one search answers with. */
 export const SEARCH_LIMIT = 60;
 
-/** sRGB "#rrggbb" to CIE L*a*b* (D65), for judging how alike two colours look. */
-function labOf(hex: string): [number, number, number] {
-  const linear = [1, 3, 5].map((i) => {
-    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
-    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  }) as [number, number, number];
-  const [r, g, b] = linear;
-  const f = (t: number) => (t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 * t + 16) / 116);
-  const x = f((0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047);
-  const y = f(0.2126 * r + 0.7152 * g + 0.0722 * b);
-  const z = f((0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883);
-  return [116 * y - 16, 500 * (x - y), 200 * (y - z)];
-}
-
-/**
- * How far a swatch is from the colour asked for, judged the way someone
- * hunting for "a blue like this" would: in L*C*h, with a different hue
- * counting most, and a swatch duller than the colour asked for forgiven half
- * of that dullness, because filament rarely comes as vivid as a screen.
- * Plain ΔE*76 put greys and the neighbouring hue ahead of a muted spool of
- * the right hue whenever the cell was vivid.
- */
-function distance(target: [number, number, number], swatch: [number, number, number]) {
-  const [l1, a1, b1] = target;
-  const [l2, a2, b2] = swatch;
-  const c1 = Math.hypot(a1, b1);
-  const c2 = Math.hypot(a2, b2);
-  const dC = c1 - c2;
-  let dh = Math.atan2(b1, a1) - Math.atan2(b2, a2);
-  if (dh > Math.PI) dh -= 2 * Math.PI;
-  if (dh < -Math.PI) dh += 2 * Math.PI;
-  const dH = 2 * Math.sqrt(c1 * c2) * Math.sin(dh / 2);
-  return Math.hypot(0.8 * (l1 - l2), (dC > 0 ? 0.5 : 1) * dC, 1.6 * dH);
-}
-
-/** A swatch this far from the colour asked for still counts as near it. */
-const NEAR_ENOUGH = 28;
 /** When fewer than this are near enough, the closest this many are shown anyway. */
 const AT_LEAST = 12;
 
@@ -558,7 +529,7 @@ export async function searchLibrary(
   if (near) {
     const target = labOf(near);
     const scored = matches
-      .map((swatch) => ({ swatch, d: distance(labFor(swatch), target) }))
+      .map((swatch) => ({ swatch, d: colourDistance(labFor(swatch), target) }))
       .sort((a, b) => a.d - b.d);
     const close = scored.filter((s) => s.d <= NEAR_ENOUGH);
     matches = (close.length >= AT_LEAST ? close : scored.slice(0, AT_LEAST)).map((s) => s.swatch);

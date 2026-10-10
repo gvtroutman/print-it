@@ -25,23 +25,36 @@ const DEBOUNCE_MS = 300;
  *
  * Closed it is one button, so the shelf stays the obvious choice; a pick made
  * here replaces the shelf colour, and a shelf colour picked replaces this.
+ * `near` is the colour picked from the grid at the top of the form, and the
+ * library answers closest to it first. `suggested` says nothing on the shelf
+ * looks like it, and opens this without being asked.
  */
 export function SpoolFinder({
   material,
   owner,
   picked,
   onPick,
+  near,
+  onNear,
+  suggested,
 }: {
   material: string;
   owner: string;
   picked: SwatchChoice | null;
   onPick: (swatch: SwatchChoice | null) => void;
+  near: string | null;
+  onNear: (hex: string | null) => void;
+  suggested: boolean;
 }) {
-  const [open, setOpen] = useState(picked !== null);
+  const [open, setOpen] = useState(picked !== null || suggested);
   const [query, setQuery] = useState("");
-  // A colour picked from the grid; the library answers closest first.
-  const [near, setNear] = useState<string | null>(null);
   const [search, setSearch] = useState<Search>({ kind: "loading" });
+
+  // Another colour with nothing like it on the shelf opens the library again,
+  // even after it was closed.
+  useEffect(() => {
+    if (suggested) setOpen(true);
+  }, [suggested, near]);
 
   useEffect(() => {
     if (!open) return;
@@ -150,21 +163,27 @@ export function SpoolFinder({
         className="w-full rounded-card border-[3px] border-ink bg-cream px-[15px] py-[11px] text-[16px] text-ink placeholder:text-ink-3"
       />
 
-      <div className="mt-[11px] flex items-baseline justify-between gap-[13.2px]">
-        <p className="m-0 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-2">
-          {near ? "Closest to this color first" : "Tap a color to find spools like it"}
+      <div className="mt-[11px] flex items-center justify-between gap-[13.2px]">
+        <p className="m-0 flex items-center gap-[8px] font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-2">
+          {near && (
+            <span
+              aria-hidden
+              className="inline-block h-[18px] w-[18px] flex-none rounded-[5px] border-[2px] border-ink"
+              style={{ background: near }}
+            />
+          )}
+          {near ? "Closest to your color first" : "Pick a color up top to find spools like it"}
         </p>
         {near && (
           <button
             type="button"
-            onClick={() => setNear(null)}
+            onClick={() => onNear(null)}
             className="cursor-pointer border-0 bg-transparent p-0 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
           >
             Any color
           </button>
         )}
       </div>
-      <ColorGrid value={near} onChange={setNear} />
 
       <div className="mt-[13.2px] min-h-[120px]">
         {search.kind === "loading" && (
@@ -261,7 +280,7 @@ function cellLabel(row: number, col: number) {
  * go to a row's ends, and Enter or Space picks. Picking the chosen colour
  * again clears it.
  */
-function ColorGrid({ value, onChange }: { value: string | null; onChange: (hex: string | null) => void }) {
+export function ColorGrid({ value, onChange }: { value: string | null; onChange: (hex: string | null) => void }) {
   const rows = COLOR_GRID.length;
   const cols = COLOR_GRID[0]!.length;
   const chosen = value === null ? -1 : COLOR_GRID.flat().indexOf(value);
@@ -288,7 +307,7 @@ function ColorGrid({ value, onChange }: { value: string | null; onChange: (hex: 
   return (
     <div
       role="radiogroup"
-      aria-label="Color to search by"
+      aria-label="Color you want"
       // Square cells, and capped so twelve rows of them stay under the fold.
       className="mt-[6px] grid w-full max-w-[460px] overflow-hidden rounded-[14px] border-[3px] border-ink"
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
