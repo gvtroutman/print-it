@@ -75,7 +75,7 @@ export const SWATCH_SHADES = [
 export type SwatchShade = (typeof SWATCH_SHADES)[number]["key"];
 
 /** HSL (degrees, percent, percent) as "#rrggbb". */
-function hslHex(h: number, s: number, l: number): string {
+export function hslHex(h: number, s: number, l: number): string {
   const a = (s / 100) * Math.min(l / 100, 1 - l / 100);
   const channel = (n: number) => {
     const k = (n + h / 30) % 12;
@@ -84,35 +84,6 @@ function hslHex(h: number, s: number, l: number): string {
   };
   return `#${channel(0)}${channel(8)}${channel(4)}`;
 }
-
-/**
- * The hues across the colour grid, left to right: cyan round to green. Few
- * enough that each cell is big enough to tap without aiming; the search
- * finds the closest spools, so a cell only has to be near what is wanted.
- */
-const GRID_HUES = [195, 220, 262, 292, 330, 358, 24, 48, 90, 145];
-/**
- * Each hue's rows, darkest to palest, as [saturation, lightness]. A little
- * short of fully saturated: filament rarely comes as vivid as a screen can
- * show, and a cell nothing is near is a cell that finds nothing like it.
- */
-const GRID_ROWS: [number, number][] = [
-  [68, 13], [70, 20], [72, 27], [75, 35], [80, 43], [85, 51], [88, 59], [90, 67], [90, 75], [90, 83], [90, 91],
-];
-
-/**
- * The "can get" picker's colour grid, row by row, the way a phone's colour
- * picker lays it out: a row of greys from white to black, then a row per
- * lightness with a column per hue. Picking a cell lists the library's spools
- * that look closest to it.
- */
-export const COLOR_GRID: string[][] = [
-  Array.from({ length: GRID_HUES.length }, (_, i) => {
-    const v = Math.round(255 * (1 - i / (GRID_HUES.length - 1))).toString(16).padStart(2, "0");
-    return `#${v}${v}${v}`;
-  }),
-  ...GRID_ROWS.map(([s, l]) => GRID_HUES.map((h) => hslHex(h, s, l))),
-];
 
 /** sRGB "#rrggbb" to CIE L*a*b* (D65), for judging how alike two colours look. */
 export function labOf(hex: string): [number, number, number] {

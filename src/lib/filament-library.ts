@@ -501,7 +501,7 @@ const labFor = (swatch: LibrarySwatch) => {
  * Swatches that fit a material, narrowed by search words (every word has to
  * appear in the name, maker or type) and an optional shade.
  *
- * With `near`, a colour picked from the grid, they come closest first, and
+ * With `near`, a colour picked from the rainbow, they come closest first, and
  * only those that look near it — or, where the material has few spools that
  * colour, the closest dozen, so a pick never comes back empty. Otherwise
  * swatches whose type is the material's own name come first, then by maker

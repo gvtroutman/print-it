@@ -47,7 +47,7 @@ import { FilamentSpool } from "@/components/color-swatch";
 import { MaterialChart } from "@/components/material-chart";
 import { InkCube } from "@/components/ink-cube";
 
-import { ColorCard, ColorGrid } from "./spool-finder";
+import { ColorCard, ColorPicker } from "./spool-finder";
 
 /**
  * The shelf colour of a material that looks most like `hex`, or null when
@@ -1262,24 +1262,8 @@ export function UploadForm({
         )}
 
         {/* ---- colour first: the nearest on the shelf, or a spool to buy ---- */}
-        <section aria-labelledby="near-heading">
-          <div className="mb-[6px] flex flex-wrap items-baseline justify-between gap-x-[13.2px] gap-y-[4px]">
-            <h3 id="near-heading" className="m-0 font-mono text-[12px] font-bold uppercase tracking-[0.1em] text-ink-2">
-              What color?
-            </h3>
-            {near ? (
-              <button
-                type="button"
-                onClick={() => chooseNear(null)}
-                className="cursor-pointer border-0 bg-transparent p-0 font-mono text-[11.5px] font-bold uppercase tracking-[0.08em] text-ink-3 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
-              >
-                Any color
-              </button>
-            ) : (
-              <p className="m-0 text-[13px] text-ink-3">Tap one and the closest spool gets picked for you.</p>
-            )}
-          </div>
-          <ColorGrid value={near} onChange={chooseNear} />
+        <section aria-label="Color">
+          <ColorPicker value={near} onChange={chooseNear} />
         </section>
 
         {/* ---- material ---- */}

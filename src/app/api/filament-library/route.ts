@@ -10,7 +10,7 @@ import { LibraryUnavailable, searchLibrary, swatchColour } from "@/lib/filament-
  * `material` is a catalogue material's name and decides which kind of
  * filament is listed; `q` narrows by words in the name, maker or type, and
  * `shade` by the library's colour family (`RED`, `BLU`, …). `near`, a
- * `#rrggbb` from the picker's colour grid, lists the spools that look closest
+ * `#rrggbb` from the rainbow colour picker, lists the spools that look closest
  * to it first, leaving out the ones that look nothing like it. At most
  * `SEARCH_LIMIT` swatches come back, with `total` saying how many matched.
  *

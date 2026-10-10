@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 
-import { COLOR_GRID, type SwatchChoice } from "@/lib/catalog";
+import { hslHex, type SwatchChoice } from "@/lib/catalog";
 import { SwatchPhoto } from "@/components/swatch-photo";
 
 /** What `GET /api/filament-library` answers with. */
@@ -176,7 +176,7 @@ export function ColorCard({
  * narrowed to the material picked, searched by words and shade. The server
  * does the searching (the browser may not reach that site), and reads the
  * picked swatch back from its own copy when the request is sent. `near` is
- * the colour picked from the grid at the top of the form, and the library
+ * the colour picked from the rainbow at the top of the form, and the library
  * answers closest to it first.
  */
 function SpoolFinder({
@@ -375,90 +375,170 @@ function SpoolFinder({
   );
 }
 
-/** What a screen reader hears for each column, then each row of `COLOR_GRID`. */
-const HUE_NAMES = ["sky blue", "blue", "violet", "purple", "pink", "red", "orange", "yellow", "lime", "green"];
-const ROW_NAMES = [
-  "darkest", "very dark", "dark", "deep", "rich", "bright", "clear", "light", "soft", "pale", "palest",
-];
+/**
+ * The rainbow pad's colours: hue left to right, lightness top to bottom, at
+ * one saturation a little short of what a screen can show, because filament
+ * rarely comes that vivid and a colour nothing is near finds nothing like it.
+ */
+const PAD_SATURATION = 85;
+/** The lightness at the pad's top and bottom edges: palest and darkest. */
+const PAD_TOP = 96;
+const PAD_BOTTOM = 6;
 
-function cellLabel(row: number, col: number) {
-  if (row === 0) {
-    if (col === 0) return "white";
-    if (col === COLOR_GRID[0]!.length - 1) return "black";
-    return `grey ${col} of ${COLOR_GRID[0]!.length - 2}`;
+/** Hue `x` (0–1 across) and lightness `y` (0–1 down) on the pad, or `x` along the greys. */
+type Spot = { strip: "rainbow"; x: number; y: number } | { strip: "grey"; x: number };
+
+const clamp = (n: number) => Math.min(1, Math.max(0, n));
+
+function hexOf(spot: Spot): string {
+  if (spot.strip === "grey") {
+    const v = Math.round(255 * (1 - spot.x)).toString(16).padStart(2, "0");
+    return `#${v}${v}${v}`;
   }
-  return `${ROW_NAMES[row - 1] ?? ""} ${HUE_NAMES[col] ?? ""}`.trim();
+  return hslHex((spot.x * 360) % 360, PAD_SATURATION, PAD_TOP - (PAD_TOP - PAD_BOTTOM) * spot.y);
 }
 
-/**
- * A grid of colours to search by, laid out like a phone's colour picker. One
- * tab stop for the whole grid; the arrow keys move around it, Home and End
- * go to a row's ends, and Enter or Space picks. Picking the chosen colour
- * again clears it.
- */
-export function ColorGrid({ value, onChange }: { value: string | null; onChange: (hex: string | null) => void }) {
-  const rows = COLOR_GRID.length;
-  const cols = COLOR_GRID[0]!.length;
-  const chosen = value === null ? -1 : COLOR_GRID.flat().indexOf(value);
-  const [focus, setFocus] = useState(chosen >= 0 ? chosen : 0);
-  const cells = useRef<(HTMLButtonElement | null)[]>([]);
+/** Where a colour sits on the pad, or on the greys; for a colour picked before this mounted. */
+function spotOf(hex: string): Spot {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255) as [number, number, number];
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  if (max === min) return { strip: "grey", x: 1 - max };
+  const d = max - min;
+  const h = max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  const l = ((max + min) / 2) * 100;
+  return { strip: "rainbow", x: h / 6, y: clamp((PAD_TOP - l) / (PAD_TOP - PAD_BOTTOM)) };
+}
 
-  function move(e: React.KeyboardEvent, index: number) {
-    const row = Math.floor(index / cols);
-    const col = index % cols;
-    const next = {
-      ArrowRight: row * cols + Math.min(cols - 1, col + 1),
-      ArrowLeft: row * cols + Math.max(0, col - 1),
-      ArrowDown: Math.min(rows - 1, row + 1) * cols + col,
-      ArrowUp: Math.max(0, row - 1) * cols + col,
-      Home: row * cols,
-      End: row * cols + cols - 1,
-    }[e.key];
-    if (next === undefined) return;
-    e.preventDefault();
-    setFocus(next);
-    cells.current[next]?.focus();
+/** What a screen reader hears for a spot: "light orange", "dark grey". */
+function spotName(spot: Spot): string {
+  if (spot.strip === "grey") {
+    if (spot.x < 0.04) return "white";
+    if (spot.x > 0.96) return "black";
+    return spot.x < 0.35 ? "light grey" : spot.x < 0.65 ? "grey" : "dark grey";
+  }
+  const h = spot.x * 360;
+  const hue =
+    [[15, "red"], [45, "orange"], [70, "yellow"], [95, "lime"], [160, "green"], [200, "teal"], [250, "blue"],
+      [280, "violet"], [320, "purple"], [345, "pink"], [361, "red"]].find(([end]) => h < (end as number))![1];
+  const l = PAD_TOP - (PAD_TOP - PAD_BOTTOM) * spot.y;
+  const shade = l > 85 ? "pale " : l > 68 ? "light " : l > 40 ? "" : l > 22 ? "dark " : "very dark ";
+  return `${shade}${hue}`;
+}
+
+/** The pad's background: the rainbow, washed to white above and to black below. */
+const PAD_BACKGROUND = (() => {
+  const middle = ((PAD_TOP - 50) / (PAD_TOP - PAD_BOTTOM)) * 100;
+  const hues = Array.from({ length: 13 }, (_, i) => `hsl(${i * 30} ${PAD_SATURATION}% 50%)`).join(", ");
+  return [
+    `linear-gradient(to bottom, rgba(255,255,255,${(PAD_TOP - 50) / 50}), rgba(255,255,255,0) ${middle}%, rgba(0,0,0,0) ${middle}%, rgba(0,0,0,${(50 - PAD_BOTTOM) / 50}))`,
+    `linear-gradient(to right, ${hues})`,
+  ].join(", ");
+})();
+
+/**
+ * A rainbow to pick a colour from: drag across the pad, or along the greys
+ * under it, and the colour is picked when the finger lifts. Each is one tab
+ * stop; the arrow keys move around it and pick as they go.
+ */
+export function ColorPicker({ value, onChange }: { value: string | null; onChange: (hex: string | null) => void }) {
+  // Where the marker sits. A drag moves it without picking until it lets go,
+  // so the library is not asked again on every pixel.
+  const [spot, setSpot] = useState<Spot | null>(() => (value ? spotOf(value) : null));
+  const shown = value === null ? null : spot ?? spotOf(value);
+
+  function pointer(strip: Spot["strip"], commit: boolean) {
+    return (e: React.PointerEvent<HTMLDivElement>) => {
+      if (e.type === "pointerdown") e.currentTarget.setPointerCapture(e.pointerId);
+      else if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+      const box = e.currentTarget.getBoundingClientRect();
+      const x = clamp((e.clientX - box.left) / box.width);
+      const next: Spot = strip === "grey" ? { strip, x } : { strip, x, y: clamp((e.clientY - box.top) / box.height) };
+      setSpot(next);
+      if (commit) onChange(hexOf(next));
+    };
   }
 
+  function keys(strip: Spot["strip"]) {
+    return (e: React.KeyboardEvent) => {
+      const step = e.shiftKey ? 0.1 : 0.025;
+      const from: Spot =
+        shown?.strip === strip ? shown : strip === "grey" ? { strip, x: 0.5 } : { strip, x: 0, y: 0.5 };
+      const dx = { ArrowRight: step, ArrowLeft: -step }[e.key] ?? 0;
+      const dy = { ArrowDown: step, ArrowUp: -step }[e.key] ?? 0;
+      if (!dx && !dy) return;
+      e.preventDefault();
+      const next: Spot =
+        from.strip === "grey"
+          ? { strip: "grey", x: clamp(from.x + dx + dy) }
+          : { strip: "rainbow", x: (from.x + dx + 1) % 1, y: clamp(from.y + dy) };
+      setSpot(next);
+      onChange(hexOf(next));
+    };
+  }
+
+  const marker = (at: Spot) => (
+    <span
+      aria-hidden
+      className="pointer-events-none absolute h-[24px] w-[24px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-white shadow-[0_0_0_2.5px_#1b2126]"
+      style={{
+        left: `${at.x * 100}%`,
+        top: at.strip === "grey" ? "50%" : `${at.y * 100}%`,
+        background: hexOf(at),
+      }}
+    />
+  );
+
+  const strip = "relative cursor-crosshair touch-none rounded-[14px] border-[3px] border-ink focus-visible:outline-offset-4";
+
   return (
-    <div
-      role="radiogroup"
-      aria-label="Color you want"
-      // Square cells, and capped so twelve rows of them stay under the fold.
-      className="mt-[6px] grid w-full max-w-[460px] overflow-hidden rounded-[14px] border-[3px] border-ink"
-      style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
-    >
-      {COLOR_GRID.flatMap((row, r) =>
-        row.map((hex, c) => {
-          const index = r * cols + c;
-          const active = index === chosen;
-          return (
-            <button
-              key={index}
-              ref={(el) => {
-                cells.current[index] = el;
-              }}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              aria-label={cellLabel(r, c)}
-              tabIndex={index === focus ? 0 : -1}
-              onClick={() => {
-                setFocus(index);
-                onChange(active ? null : hex);
-              }}
-              onKeyDown={(e) => move(e, index)}
-              className={`relative aspect-square cursor-pointer border-0 p-0 transition-transform focus-visible:z-20 ${
-                active ? "z-10 scale-[1.08] rounded-[6px]" : "hover:z-10 hover:scale-[1.05] hover:rounded-[5px]"
-              }`}
-              style={{
-                background: hex,
-                boxShadow: active ? "0 0 0 2.5px #ffffff, 0 0 0 5px #1b2126" : undefined,
-              }}
-            />
-          );
-        }),
-      )}
+    <div className="mt-[6px] w-full max-w-[460px]">
+      <div
+        role="slider"
+        tabIndex={0}
+        aria-label="Color you want"
+        aria-valuemin={0}
+        aria-valuemax={360}
+        aria-valuenow={shown?.strip === "rainbow" ? Math.round(shown.x * 360) : undefined}
+        aria-valuetext={shown?.strip === "rainbow" ? spotName(shown) : "none picked"}
+        onPointerDown={pointer("rainbow", false)}
+        onPointerMove={pointer("rainbow", false)}
+        onPointerUp={pointer("rainbow", true)}
+        onKeyDown={keys("rainbow")}
+        className={`${strip} h-[176px]`}
+        style={{ background: PAD_BACKGROUND }}
+      >
+        {shown?.strip === "rainbow" && marker(shown)}
+      </div>
+      <div className="mt-[8px] flex items-center gap-[13.2px]">
+        <div
+          role="slider"
+          tabIndex={0}
+          aria-label="Or a grey"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={shown?.strip === "grey" ? Math.round(shown.x * 100) : undefined}
+          aria-valuetext={shown?.strip === "grey" ? spotName(shown) : "none picked"}
+          onPointerDown={pointer("grey", false)}
+          onPointerMove={pointer("grey", false)}
+          onPointerUp={pointer("grey", true)}
+          onKeyDown={keys("grey")}
+          className={`${strip} h-[30px] flex-1`}
+          style={{ background: "linear-gradient(to right, #ffffff, #808080, #000000)" }}
+        >
+          {shown?.strip === "grey" && marker(shown)}
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          // Kept in place when hidden, so picking a colour does not shift the pad.
+          className={`flex-none cursor-pointer border-0 bg-transparent p-0 font-mono text-[11.5px] font-bold uppercase tracking-[0.08em] text-ink-3 underline decoration-2 underline-offset-4 hover:text-cherry-dk ${
+            value === null ? "invisible" : ""
+          }`}
+        >
+          Any color
+        </button>
+      </div>
     </div>
   );
 }
