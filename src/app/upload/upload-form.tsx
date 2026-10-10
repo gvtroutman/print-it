@@ -45,7 +45,7 @@ const KIND_BADGE: Record<FileKind, { label: string; className: string }> = {
 
 import { SOURCE_LABEL, identifySource, type ImportSource } from "@/lib/import-source";
 import { Button, Label, Notice } from "@/components/ui";
-import { MaterialChart, MaterialFacts } from "@/components/material-chart";
+import { MaterialFacts } from "@/components/material-chart";
 import { InkCube } from "@/components/ink-cube";
 
 import { ColorMenu, OtherColors, SwipePair, colorNameOf } from "./spool-finder";
@@ -127,7 +127,6 @@ type Linked =
  * other options stacked beneath it. A listbox rather than a native `<select>`
  * so the open list wears the same chunky outline as the rest of the form.
  * Arrow keys, Home/End, Enter/Space and Escape work as they do on a select.
- * `hint` puts a short line of small print under each option in the open list.
  * A null `value` is nothing chosen yet; the trigger shows `placeholder` instead.
  */
 function Dropdown({
@@ -135,7 +134,6 @@ function Dropdown({
   options,
   value,
   onChange,
-  hint,
   describedBy,
   placeholder,
 }: {
@@ -143,7 +141,6 @@ function Dropdown({
   options: readonly string[];
   value: string | null;
   onChange: (v: string) => void;
-  hint?: (option: string) => string;
   describedBy?: string;
   placeholder?: string;
 }) {
@@ -239,7 +236,6 @@ function Dropdown({
       >
         {options.map((option, index) => {
           const selected = option === value;
-          const small = hint?.(option);
           return (
             <li
               key={option}
@@ -253,11 +249,6 @@ function Dropdown({
               } ${selected ? "font-bold" : ""}`}
             >
               {option}
-              {small && (
-                <span className="mt-[2px] line-clamp-2 font-sans text-[13px] font-normal leading-[1.35] text-ink-2">
-                  {small}
-                </span>
-              )}
             </li>
           );
         })}
@@ -419,7 +410,7 @@ export function UploadForm({
   const inputRef = useRef<HTMLInputElement>(null);
   // A fresh request starts with no material picked: the colour step shows
   // every filament side by side instead of one material's spools, so the
-  // choice is made against the chart rather than defaulted past. Printing
+  // choice is made on purpose rather than defaulted past. Printing
   // again starts from what was asked for last time — where that is still on
   // the shelf. A material or colour the owner has since retired falls back to
   // the usual default, and `gone` says which, because a choice that quietly
@@ -730,7 +721,7 @@ export function UploadForm({
       if (!named) return "Say what it is — a few words is enough.";
     }
     if (n === 2 && material === null) {
-      return "Pick a material first — the chart shows what each one is good at, or pick Auto.";
+      return "Pick a material first, or Auto. Swipe across to see what each one is good at.";
     }
     if (n === 3 && material !== null && !auto && color === null && toBuy === null) {
       return `Pick a color from the circles, or a spool ${owner} can get from Other colors.`;
@@ -906,13 +897,6 @@ export function UploadForm({
       setToBuy(null);
     }
     if (hex || fromCircles || color === null) setColor(shelf?.name ?? null);
-  }
-
-  /** Back to the chart of the materials, with nothing picked. */
-  function compareMaterials() {
-    setMaterial(null);
-    setColor(null);
-    setToBuy(null);
   }
 
   /** A spool to buy instead of the shelf colour; null goes back to the shelf. */
@@ -1373,37 +1357,11 @@ export function UploadForm({
                 value={material}
                 onChange={chooseMaterial}
                 placeholder="Pick a filament, or Auto"
-                hint={(name) =>
-                  name === AUTO_MATERIAL
-                    ? `${owner} picks the one that best suits what you are printing.`
-                    : catalog.find((candidate) => candidate.name === name)?.description ?? ""
-                }
               />
             </div>
           }
           secondPanel={<MaterialFacts item={selectedMaterial} auto={auto} owner={owner} />}
         />
-
-        {/* ---- the chart of the materials, until one is picked ---- */}
-        {material === null ? (
-          <section className="mt-[22px]" aria-labelledby="compare-heading">
-            <div className="mb-[8.8px] flex flex-wrap items-baseline justify-between gap-x-[13.2px] gap-y-[4px]">
-              <h3 id="compare-heading" className="m-0 font-mono text-[12px] font-bold uppercase tracking-[0.1em] text-ink-2">
-                Which filament?
-              </h3>
-              <p className="m-0 text-[13px] text-ink-3">Tap one to pick it. More stickers, more of it. Five is the most.</p>
-            </div>
-            <MaterialChart catalog={catalog} owner={owner} onPick={chooseMaterial} />
-          </section>
-        ) : (
-          <button
-            type="button"
-            onClick={compareMaterials}
-            className="mt-[17.6px] cursor-pointer border-0 bg-transparent p-0 font-mono text-[11.5px] font-bold uppercase tracking-[0.08em] text-ink-3 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
-          >
-            Compare materials
-          </button>
-        )}
 
         {step === 2 && error}
       </StepCard>
