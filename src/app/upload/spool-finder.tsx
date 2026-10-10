@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { hslHex, type CatalogColorChoice, type SwatchChoice } from "@/lib/catalog";
 import { SwatchPhoto } from "@/components/swatch-photo";
@@ -490,7 +490,8 @@ function MenuCircle({
  * The colour menu: every colour on the owner's shelf, across all materials,
  * as a circle, then "Any color" and a rainbow circle for your own. The full
  * picker — rainbow, dark · light, see-through — only opens from that last
- * circle, or when the colour already picked is none of the shelf's.
+ * circle, or when the colour already picked is none of the shelf's: the
+ * circles slide off to the left as it slides in from the right.
  */
 export function ColorMenu({
   colors,
@@ -515,51 +516,93 @@ export function ColorMenu({
   const onShelf = (hex: string | null) =>
     hex !== null && alpha === 1 && shelf.some((c) => c.hex.toLowerCase() === hex.toLowerCase());
 
-  const [own, setOwn] = useState(value !== null && !onShelf(value));
-  const ownPicked = own && value !== null;
+  // A colour of your own is one the circles don't have.
+  const ownPicked = value !== null && !onShelf(value);
+  const [own, setOwn] = useState(ownPicked);
   // The colour of your own, shown in the middle of its rainbow circle.
   const tint = value ? `${value}${Math.round(alpha * 255).toString(16).padStart(2, "0")}` : "";
 
+  // The menu and the picker share one spot; it grows or shrinks to the one showing.
+  const menuRef = useRef<HTMLDivElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const ownRef = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const el = (own ? pickerRef : menuRef).current;
+    if (!el) return;
+    const measure = () => setHeight(el.offsetHeight);
+    measure();
+    const watch = new ResizeObserver(measure);
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [own]);
+
+  function open(next: boolean) {
+    setOwn(next);
+    // Focus follows to what slid in: the rainbow pad, or back to its circle.
+    requestAnimationFrame(() =>
+      (next
+        ? pickerRef.current?.querySelector<HTMLElement>("[role=slider]")
+        : ownRef.current?.querySelector<HTMLElement>("button")
+      )?.focus({ preventScroll: true }),
+    );
+  }
+
   return (
-    <div>
-      <div role="radiogroup" aria-label="Color you want" className="flex flex-wrap gap-x-[8px] gap-y-[13.2px]">
-        <MenuCircle
-          label="Any color"
-          active={value === null && !own}
-          dashed
-          onClick={() => {
-            setOwn(false);
-            onChange(null, 1);
-          }}
-        />
-        {shelf.map((c) => (
-          <MenuCircle
-            key={c.id}
-            label={c.name}
-            active={!own && value !== null && value.toLowerCase() === c.hex.toLowerCase()}
-            background={c.style}
-            onClick={() => {
-              setOwn(false);
-              onChange(c.hex, 1);
-            }}
-          />
-        ))}
-        <MenuCircle label="Your own" active={own} background={RAINBOW} onClick={() => setOwn(true)}>
-          <span
-            className="h-[20px] w-[20px] rounded-full border-[2.5px] border-ink"
-            style={{ background: ownPicked ? `linear-gradient(${tint}, ${tint}), ${CHECKER}` : "#ffffff" }}
-          />
-        </MenuCircle>
+    // Clips the slide at the card's edge, with room for the chosen circle's ring.
+    <div
+      className="relative -m-[10px] overflow-hidden transition-[height] duration-[400ms] ease-out motion-reduce:transition-none"
+      style={height === null ? undefined : { height }}
+    >
+      {/* ---- the circles: slide off to the left for your own ---- */}
+      <div
+        ref={menuRef}
+        inert={own}
+        className={`${PANEL} ${own ? "absolute inset-x-0 top-0 -translate-x-1/3 opacity-0" : "relative"}`}
+      >
+        <div role="radiogroup" aria-label="Color you want" className="flex flex-wrap gap-x-[8px] gap-y-[13.2px]">
+          <MenuCircle label="Any color" active={value === null} dashed onClick={() => onChange(null, 1)} />
+          {shelf.map((c) => (
+            <MenuCircle
+              key={c.id}
+              label={c.name}
+              active={!ownPicked && value !== null && value.toLowerCase() === c.hex.toLowerCase()}
+              background={c.style}
+              onClick={() => onChange(c.hex, 1)}
+            />
+          ))}
+          <div ref={ownRef} className="contents">
+            <MenuCircle label="Your own" active={ownPicked} background={RAINBOW} onClick={() => open(true)}>
+              <span
+                className="h-[20px] w-[20px] rounded-full border-[2.5px] border-ink"
+                style={{ background: ownPicked ? `linear-gradient(${tint}, ${tint}), ${CHECKER}` : "#ffffff" }}
+              />
+            </MenuCircle>
+          </div>
+        </div>
       </div>
 
-      {own && (
-        <div className="mt-[17.6px]">
-          <ColorPicker value={value} alpha={alpha} onChange={onChange} />
-        </div>
-      )}
+      {/* ---- the picker: slides in from the right to take their place ---- */}
+      <div
+        ref={pickerRef}
+        inert={!own}
+        className={`${PANEL} ${own ? "relative" : "absolute inset-x-0 top-0 translate-x-1/3 opacity-0"}`}
+      >
+        <button
+          type="button"
+          onClick={() => open(false)}
+          className="mb-[6px] cursor-pointer border-0 bg-transparent p-0 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-2 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
+        >
+          ← Shelf colors
+        </button>
+        <ColorPicker value={value} alpha={alpha} onChange={onChange} />
+      </div>
     </div>
   );
 }
+
+/** Each half of the colour menu, sliding and fading as it swaps with the other. */
+const PANEL = "w-full p-[10px] transition-[opacity,translate] duration-[400ms] ease-out motion-reduce:transition-none";
 
 /**
  * A colour picker in three parts: a rainbow pad to aim a target at (hue
@@ -581,17 +624,32 @@ export function ColorPicker({
   const [pick, setPick] = useState<Pick | null>(() => (value ? pickOf(value, alpha) : null));
   const handOn = useRef(onChange);
   handOn.current = onChange;
+  // The last colour handed on, so it is not mistaken for one from elsewhere.
+  const sent = useRef({ hex: value, a: alpha });
+  // The target was just moved from outside, so it is not handed back.
+  const synced = useRef(false);
 
-  // "Any color" from elsewhere on the form clears the target too.
+  // A colour picked elsewhere on the form — a shelf circle, "Any color" —
+  // moves the target there too.
   useEffect(() => {
-    if (value === null) setPick(null);
-  }, [value]);
+    if (value === sent.current.hex && alpha === sent.current.a) return;
+    sent.current = { hex: value, a: alpha };
+    synced.current = value !== null;
+    setPick(value ? pickOf(value, alpha) : null);
+  }, [value, alpha]);
 
   useEffect(() => {
     if (!pick) return;
+    if (synced.current) {
+      synced.current = false;
+      return;
+    }
     const hex = hexOf(pick);
     if (hex === value && pick.a === alpha) return;
-    const timer = setTimeout(() => handOn.current(hex, pick.a), 200);
+    const timer = setTimeout(() => {
+      sent.current = { hex, a: pick.a };
+      handOn.current(hex, pick.a);
+    }, 200);
     return () => clearTimeout(timer);
   }, [pick]);
 
@@ -686,6 +744,7 @@ export function ColorPicker({
             type="button"
             onClick={() => {
               setPick(null);
+              sent.current = { hex: null, a: 1 };
               onChange(null, 1);
             }}
             // Kept in place when hidden, so picking a colour does not shift anything.
