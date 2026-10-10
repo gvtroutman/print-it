@@ -90,8 +90,8 @@ const FAMILIES: Family[] = [
     family: "PETG",
     // CPE and CoPE are co-polyester, the same family PETG and PCTG belong to.
     aliases: ["PETG", "PET", "PCTG", "CPE", "CoPE", "Copolyester", "Co-polyester"],
-    // Rated like PETG, but a CoPE spool is not a PETG one.
-    kinds: ["CPE", "CoPE", "Copolyester", "Co-polyester"],
+    // Rated like PETG, but a CoPE or PCTG spool is not a PETG one.
+    kinds: ["PCTG", "CPE", "CoPE", "Copolyester", "Co-polyester"],
     ratings: { strength: 4, flex: 3, heat: 3, finish: 3, outdoors: 4 },
     goodFor: "Hooks, brackets, bottles, parts that get knocked about.",
   },

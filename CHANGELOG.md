@@ -20,9 +20,9 @@ Notable changes. Every entry names a released version; deployments pin
 - **SpoolmanDB fills in the spool search.** When filamentcolors.xyz finds
   fewer than 12 spools, or cannot be reached, the search also lists
   SpoolmanDB's spools (the makers' own listings; about 70 brands), shown by
-  colour with no photo. They have negative `swatchId`s. CoPE and CPE
-  materials are charted as PETG, but their spool search offers only CoPE
-  (or CPE) spools, not PETG ones.
+  colour with no photo. They have negative `swatchId`s. PCTG, CoPE and CPE
+  materials are charted as PETG, but their spool search offers only their
+  own kind of spool, not PETG ones (and PETG's offers none of theirs).
 - **An invitation no longer needs an email address.** The printer owner can
   invite somebody by name alone; the link is shown once to hand over, and the
   member signs up with just that name. Such an account carries a non-routable
