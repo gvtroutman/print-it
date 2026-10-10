@@ -144,6 +144,61 @@ const LINKISH = /^\s*(?:https?:\/\/|www\.)/i;
 const compactCount = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
 
 /**
+ * A little "i" that shows a note on hover, focus or tap. Tap matters because a
+ * phone has no hover, and iOS does not focus a button it taps, so a click opens
+ * it too; a tap anywhere else, Escape, or leaving with the mouse closes it. The
+ * note stays in the DOM while closed so `id` can describe something else.
+ */
+function InfoTip({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [open]);
+
+  return (
+    <span
+      ref={wrap}
+      className="relative inline-block"
+      onPointerEnter={(e) => e.pointerType === "mouse" && setOpen(true)}
+      onPointerLeave={(e) => e.pointerType === "mouse" && setOpen(false)}
+    >
+      <button
+        type="button"
+        aria-label={label}
+        aria-describedby={id}
+        onClick={() => setOpen(true)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape" && open) {
+            e.preventDefault();
+            setOpen(false);
+          }
+        }}
+        className="flex h-[26px] w-[26px] items-center justify-center rounded-full border-2 border-ink bg-porcelain font-display text-[15px] leading-none text-ink hover:bg-sun"
+      >
+        i
+      </button>
+      <span
+        id={id}
+        role="tooltip"
+        hidden={!open}
+        className="absolute right-0 top-full z-10 mt-[8px] w-max max-w-[240px] rounded-card border-[3px] border-ink bg-ink px-[11px] py-[8px] text-left font-mono text-[12px] uppercase tracking-[0.04em] text-cream"
+      >
+        {children}
+      </span>
+    </span>
+  );
+}
+
+/**
  * A single-choice dropdown: the chosen option and a chevron, opening onto the
  * other options stacked beneath it. A listbox rather than a native `<select>`
  * so the open list wears the same chunky outline as the rest of the form.
@@ -1087,7 +1142,8 @@ export function UploadForm({
         </div>
 
         {/* ---- dropzone ---- */}
-        {!again && <label
+        {!again && <div className="relative mt-[22px]">
+        <label
           onDragOver={(e) => {
             e.preventDefault();
             setDragging(true);
@@ -1100,7 +1156,7 @@ export function UploadForm({
            * label carries the visuals, so the label shows the focus. Same colour
            * and offset as the global ring in globals.css.
            */
-          className={`mt-[22px] block cursor-pointer rounded-panel border-[3px] border-dashed px-[26.4px] py-[13.2px] text-center transition-colors focus-within:outline focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-cherry-dk ${
+          className={`block cursor-pointer rounded-panel border-[3px] border-dashed px-[26.4px] py-[13.2px] text-center transition-colors focus-within:outline focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-cherry-dk ${
             dragging
               ? "border-ink bg-sun"
               : "border-ink-3 bg-porcelain hover:border-ink hover:bg-sun-wash"
@@ -1127,6 +1183,7 @@ export function UploadForm({
             accept={PICKER_ACCEPT}
             className="sr-only"
             disabled={busy}
+            aria-describedby="upload-limits"
             onChange={(e) => accept(Array.from(e.target.files ?? []))}
           />
           {/* Important classes, because the cube sets its own size inline. */}
@@ -1134,13 +1191,13 @@ export function UploadForm({
           <span className="block font-display text-[19px] text-ink">
             {files.length > 0 ? "Drop more, or click to add" : "Upload files"}
           </span>
-          <span className="mt-[6px] block font-mono text-[12px] uppercase tracking-[0.04em] text-ink-3">
-            {busy && !picked
-              ? `Uploading… ${phase.percent}%`
-              : files.length > 0
-                ? `${formatBytes(totalBytes)} of ${formatBytes(MAX_UPLOAD_BYTES)} · checked on the server when you send it`
-                : `3D models, photos or videos – up to ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB`}
-          </span>
+          {(files.length > 0 || (busy && !picked)) && (
+            <span className="mt-[6px] block font-mono text-[12px] uppercase tracking-[0.04em] text-ink-3">
+              {busy && !picked
+                ? `Uploading… ${phase.percent}%`
+                : `${formatBytes(totalBytes)} of ${formatBytes(MAX_UPLOAD_BYTES)} · checked on the server when you send it`}
+            </span>
+          )}
 
           {busy && !picked && (
             <span className="mt-[13.2px] block h-[10px] overflow-hidden rounded-full border-[3px] border-ink bg-cream-2">
@@ -1150,7 +1207,14 @@ export function UploadForm({
               />
             </span>
           )}
-        </label>}
+        </label>
+        {/* Outside the <label>, so opening the note does not open the picker. */}
+        <span className="absolute right-[12px] top-[12px]">
+          <InfoTip id="upload-limits" label="What can I upload?">
+            3D models, photos or videos – up to {MAX_UPLOAD_BYTES / (1024 * 1024)}MB
+          </InfoTip>
+        </span>
+        </div>}
 
         {/* ---- what is on the order so far. Outside the <label>, so a remove
              button does not also open the file picker. ---- */}
