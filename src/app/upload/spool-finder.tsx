@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
-import { hslHex, type SwatchChoice } from "@/lib/catalog";
+import { hslHex, type CatalogColorChoice, type SwatchChoice } from "@/lib/catalog";
 import { SwatchPhoto } from "@/components/swatch-photo";
 
 /** What `GET /api/filament-library` answers with. */
@@ -438,6 +438,128 @@ const SLIDER =
   "[&::-moz-range-thumb]:h-[14px] [&::-moz-range-thumb]:w-[14px] [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-[3px] [&::-moz-range-thumb]:border-solid [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:bg-transparent [&::-moz-range-thumb]:shadow-[0_0_0_2.5px_#1b2126]";
 
 const SLIDER_LABEL = "w-[104px] flex-none font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-2";
+
+/** The "your own" circle: the whole rainbow around it. */
+const RAINBOW = `conic-gradient(${Array.from({ length: 13 }, (_, i) => `hsl(${i * 30} 100% 50%)`).join(", ")})`;
+
+/** One circle in the colour menu, with its name under. */
+function MenuCircle({
+  label,
+  active,
+  onClick,
+  background,
+  dashed,
+  children,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  background?: string;
+  dashed?: boolean;
+  children?: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      onClick={onClick}
+      className="group flex w-[64px] min-w-0 cursor-pointer flex-col items-center gap-[6px] border-0 bg-transparent p-0"
+    >
+      <span
+        aria-hidden
+        className={`grid h-[44px] w-[44px] place-items-center rounded-full border-[3px] transition-transform ${
+          dashed ? "border-dashed border-ink-3" : "border-ink"
+        } ${active ? "scale-[1.08] shadow-[0_0_0_3px_#ffffff,0_0_0_6px_#1b2126]" : "group-hover:scale-[1.08]"}`}
+        style={background ? { background } : undefined}
+      >
+        {children}
+      </span>
+      <span
+        className={`line-clamp-2 text-center font-mono text-[10px] font-bold uppercase leading-[1.2] tracking-[0.04em] ${
+          active ? "text-cherry-dk" : "text-ink-2"
+        }`}
+      >
+        {label}
+      </span>
+    </button>
+  );
+}
+
+/**
+ * The colour menu: every colour on the owner's shelf, across all materials,
+ * as a circle, then "Any color" and a rainbow circle for your own. The full
+ * picker — rainbow, dark · light, see-through — only opens from that last
+ * circle, or when the colour already picked is none of the shelf's.
+ */
+export function ColorMenu({
+  colors,
+  value,
+  alpha,
+  onChange,
+}: {
+  colors: CatalogColorChoice[];
+  value: string | null;
+  alpha: number;
+  onChange: (hex: string | null, alpha: number) => void;
+}) {
+  // One circle per colour name, the first material's look winning.
+  const shelf: CatalogColorChoice[] = [];
+  const seen = new Set<string>();
+  for (const c of colors) {
+    const key = c.name.toLowerCase();
+    if (c.mode === "whatever" || !/^#[0-9a-f]{6}$/i.test(c.hex) || seen.has(key)) continue;
+    seen.add(key);
+    shelf.push(c);
+  }
+  const onShelf = (hex: string | null) =>
+    hex !== null && alpha === 1 && shelf.some((c) => c.hex.toLowerCase() === hex.toLowerCase());
+
+  const [own, setOwn] = useState(value !== null && !onShelf(value));
+  const ownPicked = own && value !== null;
+  // The colour of your own, shown in the middle of its rainbow circle.
+  const tint = value ? `${value}${Math.round(alpha * 255).toString(16).padStart(2, "0")}` : "";
+
+  return (
+    <div>
+      <div role="radiogroup" aria-label="Color you want" className="flex flex-wrap gap-x-[8px] gap-y-[13.2px]">
+        <MenuCircle
+          label="Any color"
+          active={value === null && !own}
+          dashed
+          onClick={() => {
+            setOwn(false);
+            onChange(null, 1);
+          }}
+        />
+        {shelf.map((c) => (
+          <MenuCircle
+            key={c.id}
+            label={c.name}
+            active={!own && value !== null && value.toLowerCase() === c.hex.toLowerCase()}
+            background={c.style}
+            onClick={() => {
+              setOwn(false);
+              onChange(c.hex, 1);
+            }}
+          />
+        ))}
+        <MenuCircle label="Your own" active={own} background={RAINBOW} onClick={() => setOwn(true)}>
+          <span
+            className="h-[20px] w-[20px] rounded-full border-[2.5px] border-ink"
+            style={{ background: ownPicked ? `linear-gradient(${tint}, ${tint}), ${CHECKER}` : "#ffffff" }}
+          />
+        </MenuCircle>
+      </div>
+
+      {own && (
+        <div className="mt-[17.6px]">
+          <ColorPicker value={value} alpha={alpha} onChange={onChange} />
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * A colour picker in three parts: a rainbow pad to aim a target at (hue
