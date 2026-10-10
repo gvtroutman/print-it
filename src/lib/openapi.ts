@@ -886,6 +886,12 @@ export async function buildOpenApiDocument() {
                 "A color: spools are listed closest-looking first, and only those near it — or the " +
                 "closest 12 when fewer are.",
             },
+            {
+              name: "clear",
+              in: "query",
+              schema: { type: "string", enum: ["1"] },
+              description: "See-through spools (clear, translucent, glass) first.",
+            },
           ],
           responses: {
             "200": {

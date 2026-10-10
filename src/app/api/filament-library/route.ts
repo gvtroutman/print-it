@@ -11,7 +11,8 @@ import { LibraryUnavailable, searchLibrary, swatchColour } from "@/lib/filament-
  * filament is listed; `q` narrows by words in the name, maker or type, and
  * `shade` by the library's colour family (`RED`, `BLU`, …). `near`, a
  * `#rrggbb` from the rainbow colour picker, lists the spools that look closest
- * to it first, leaving out the ones that look nothing like it. At most
+ * to it first, leaving out the ones that look nothing like it. `clear=1`
+ * puts see-through spools first, for a colour picked partly transparent. At most
  * `SEARCH_LIMIT` swatches come back, with `total` saying how many matched.
  *
  * Any signed-in person may search — it is what the request form shows them.
@@ -33,9 +34,10 @@ export const GET = withActor(async (request) => {
   const nearParam = params.get("near");
   const near = nearParam && /^#?[0-9a-f]{6}$/i.test(nearParam) ? `#${nearParam.replace("#", "").toLowerCase()}` : null;
   if (nearParam && !near) return fail(400, "That is not a colour — send #rrggbb.");
+  const clear = params.get("clear") === "1";
 
   try {
-    const { total, swatches } = await searchLibrary(material, { query, shade: shade as SwatchShade | null, near });
+    const { total, swatches } = await searchLibrary(material, { query, shade: shade as SwatchShade | null, near, clear });
     return ok({
       total,
       // Every field named — see `storyResource` in src/lib/api.ts.

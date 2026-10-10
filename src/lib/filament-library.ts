@@ -498,6 +498,13 @@ const labFor = (swatch: LibrarySwatch) => {
 };
 
 /**
+ * A spool light shows through: the library's own "clear" shade, or one named
+ * as see-through, since a translucent red is filed under red.
+ */
+const seeThrough = (swatch: LibrarySwatch) =>
+  swatch.shade === "TRN" || /translu|transparent|clear|glass|crystal|see.?through/i.test(`${swatch.name} ${swatch.type}`);
+
+/**
  * Swatches that fit a material, narrowed by search words (every word has to
  * appear in the name, maker or type) and an optional shade.
  *
@@ -505,7 +512,8 @@ const labFor = (swatch: LibrarySwatch) => {
  * only those that look near it — or, where the material has few spools that
  * colour, the closest dozen, so a pick never comes back empty. Otherwise
  * swatches whose type is the material's own name come first, then by maker
- * and name.
+ * and name. With `clear`, see-through spools go ahead of the rest, each
+ * group kept in that order.
  */
 export async function searchLibrary(
   material: string,
@@ -513,7 +521,8 @@ export async function searchLibrary(
     query = "",
     shade = null,
     near = null,
-  }: { query?: string; shade?: SwatchShade | null; near?: string | null } = {},
+    clear = false,
+  }: { query?: string; shade?: SwatchShade | null; near?: string | null; clear?: boolean } = {},
 ): Promise<{ total: number; swatches: LibrarySwatch[] }> {
   const { byId } = await load();
   const terms = words(query).split(" ").filter(Boolean);
@@ -541,5 +550,6 @@ export async function searchLibrary(
         a.name.localeCompare(b.name),
     );
   }
+  if (clear) matches = [...matches.filter(seeThrough), ...matches.filter((swatch) => !seeThrough(swatch))];
   return { total: matches.length, swatches: matches.slice(0, SEARCH_LIMIT) };
 }

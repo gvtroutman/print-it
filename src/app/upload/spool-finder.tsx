@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { hslHex, type SwatchChoice } from "@/lib/catalog";
 import { SwatchPhoto } from "@/components/swatch-photo";
@@ -39,6 +39,7 @@ export function ColorCard({
   onPick,
   near,
   onNear,
+  clear,
   suggested,
 }: {
   material: string;
@@ -49,6 +50,8 @@ export function ColorCard({
   onPick: (swatch: SwatchChoice | null) => void;
   near: string | null;
   onNear: (hex: string | null) => void;
+  /** The colour picked up top is partly see-through. */
+  clear: boolean;
   suggested: boolean;
 }) {
   const id = useId();
@@ -163,6 +166,7 @@ export function ColorCard({
               }}
               near={near}
               onNear={onNear}
+              clear={clear}
             />
           )}
         </div>
@@ -177,7 +181,7 @@ export function ColorCard({
  * does the searching (the browser may not reach that site), and reads the
  * picked swatch back from its own copy when the request is sent. `near` is
  * the colour picked from the rainbow at the top of the form, and the library
- * answers closest to it first.
+ * answers closest to it first; `clear`, see-through spools ahead of the rest.
  */
 function SpoolFinder({
   material,
@@ -187,6 +191,7 @@ function SpoolFinder({
   onBack,
   near,
   onNear,
+  clear,
 }: {
   material: string;
   owner: string;
@@ -195,6 +200,7 @@ function SpoolFinder({
   onBack: () => void;
   near: string | null;
   onNear: (hex: string | null) => void;
+  clear: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState<Search>({ kind: "loading" });
@@ -208,6 +214,7 @@ function SpoolFinder({
       const params = new URLSearchParams({ material });
       if (query.trim()) params.set("q", query.trim());
       if (near) params.set("near", near);
+      if (clear) params.set("clear", "1");
       try {
         const res = await fetch(`/api/filament-library?${params}`, { signal: controller.signal });
         const body = await res.json().catch(() => ({}));
@@ -223,7 +230,7 @@ function SpoolFinder({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [material, query, near]);
+  }, [material, query, near, clear]);
 
   return (
     <>
@@ -288,7 +295,9 @@ function SpoolFinder({
               style={{ background: near }}
             />
           )}
-          {near ? "Closest to your color first" : "Pick a color up top to find spools like it"}
+          {near
+            ? `Closest to your color first${clear ? ", see-through ones ahead" : ""}`
+            : "Pick a color up top to find spools like it"}
         </p>
         {near && (
           <button
@@ -375,169 +384,228 @@ function SpoolFinder({
   );
 }
 
-/**
- * The rainbow pad's colours: hue left to right, lightness top to bottom, at
- * one saturation a little short of what a screen can show, because filament
- * rarely comes that vivid and a colour nothing is near finds nothing like it.
- */
-const PAD_SATURATION = 85;
-/** The lightness at the pad's top and bottom edges: palest and darkest. */
-const PAD_TOP = 96;
-const PAD_BOTTOM = 6;
+/** A colour picked from the rainbow: hue in degrees, saturation 0–1, lightness 0–100, opacity 0–1. */
+type Pick = { h: number; s: number; l: number; a: number };
 
-/** Hue `x` (0–1 across) and lightness `y` (0–1 down) on the pad, or `x` along the greys. */
-type Spot = { strip: "rainbow"; x: number; y: number } | { strip: "grey"; x: number };
+/** Where a fresh pick starts: a pure colour, solid. */
+const FRESH = { s: 1, l: 50, a: 1 };
 
 const clamp = (n: number) => Math.min(1, Math.max(0, n));
 
-function hexOf(spot: Spot): string {
-  if (spot.strip === "grey") {
-    const v = Math.round(255 * (1 - spot.x)).toString(16).padStart(2, "0");
-    return `#${v}${v}${v}`;
-  }
-  return hslHex((spot.x * 360) % 360, PAD_SATURATION, PAD_TOP - (PAD_TOP - PAD_BOTTOM) * spot.y);
-}
+const hexOf = (pick: Pick) => hslHex(pick.h % 360, pick.s * 100, pick.l);
 
-/** Where a colour sits on the pad, or on the greys; for a colour picked before this mounted. */
-function spotOf(hex: string): Spot {
+/** The pick as "#rrggbbaa", for showing it over the checkerboard. */
+const cssOf = (pick: Pick) => `${hexOf(pick)}${Math.round(pick.a * 255).toString(16).padStart(2, "0")}`;
+
+/** A colour picked before this mounted, back into hue, saturation and lightness. */
+function pickOf(hex: string, a: number): Pick {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255) as [number, number, number];
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
-  if (max === min) return { strip: "grey", x: 1 - max };
+  const l = (max + min) / 2;
   const d = max - min;
+  if (d === 0) return { h: 0, s: 0, l: l * 100, a };
   const h = max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
-  const l = ((max + min) / 2) * 100;
-  return { strip: "rainbow", x: h / 6, y: clamp((PAD_TOP - l) / (PAD_TOP - PAD_BOTTOM)) };
+  return { h: h * 60, s: d / (1 - Math.abs(2 * l - 1)), l: l * 100, a };
 }
 
-/** What a screen reader hears for a spot: "light orange", "dark grey". */
-function spotName(spot: Spot): string {
-  if (spot.strip === "grey") {
-    if (spot.x < 0.04) return "white";
-    if (spot.x > 0.96) return "black";
-    return spot.x < 0.35 ? "light grey" : spot.x < 0.65 ? "grey" : "dark grey";
-  }
-  const h = spot.x * 360;
-  const hue =
+/** What a screen reader hears for a pick, and what the box says under it: "light orange". */
+function pickName({ h, s, l }: Pick): string {
+  if (l > 97) return "white";
+  if (l < 4) return "black";
+  if (s < 0.12) return l > 70 ? "light grey" : l < 30 ? "dark grey" : "grey";
+  const hue = (
     [[15, "red"], [45, "orange"], [70, "yellow"], [95, "lime"], [160, "green"], [200, "teal"], [250, "blue"],
-      [280, "violet"], [320, "purple"], [345, "pink"], [361, "red"]].find(([end]) => h < (end as number))![1];
-  const l = PAD_TOP - (PAD_TOP - PAD_BOTTOM) * spot.y;
-  const shade = l > 85 ? "pale " : l > 68 ? "light " : l > 40 ? "" : l > 22 ? "dark " : "very dark ";
-  return `${shade}${hue}`;
+      [280, "violet"], [320, "purple"], [345, "pink"], [361, "red"]] as const
+  ).find(([end]) => h < end)![1];
+  const shade = l > 85 ? "pale " : l > 65 ? "light " : l > 38 ? "" : l > 20 ? "dark " : "very dark ";
+  return `${shade}${s < 0.45 ? "muted " : ""}${hue}`;
 }
 
-/** The pad's background: the rainbow, washed to white above and to black below. */
-const PAD_BACKGROUND = (() => {
-  const middle = ((PAD_TOP - 50) / (PAD_TOP - PAD_BOTTOM)) * 100;
-  const hues = Array.from({ length: 13 }, (_, i) => `hsl(${i * 30} ${PAD_SATURATION}% 50%)`).join(", ");
-  return [
-    `linear-gradient(to bottom, rgba(255,255,255,${(PAD_TOP - 50) / 50}), rgba(255,255,255,0) ${middle}%, rgba(0,0,0,0) ${middle}%, rgba(0,0,0,${(50 - PAD_BOTTOM) / 50}))`,
-    `linear-gradient(to right, ${hues})`,
-  ].join(", ");
-})();
+/** The pad: every hue across, vivid at the top fading to grey at the bottom. */
+const PAD_BACKGROUND = [
+  "linear-gradient(to bottom, rgba(128,128,128,0), rgba(128,128,128,0.5), rgb(128,128,128))",
+  `linear-gradient(to right, ${Array.from({ length: 13 }, (_, i) => `hsl(${i * 30} 100% 50%)`).join(", ")})`,
+].join(", ");
+
+/** A pale checkerboard, so a see-through colour looks see-through. */
+const CHECKER = "repeating-conic-gradient(#d4d9dd 0% 25%, #ffffff 0% 50%) 0 0 / 12px 12px";
+
+/** A range input as a thick bar with a ringed thumb; its track is its own background. */
+const SLIDER =
+  "h-[26px] w-full cursor-pointer appearance-none rounded-full border-[3px] border-ink disabled:cursor-not-allowed disabled:opacity-40 " +
+  "[&::-webkit-slider-thumb]:h-[20px] [&::-webkit-slider-thumb]:w-[20px] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-[3px] [&::-webkit-slider-thumb]:border-solid [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-transparent [&::-webkit-slider-thumb]:shadow-[0_0_0_2.5px_#1b2126] " +
+  "[&::-moz-range-thumb]:h-[14px] [&::-moz-range-thumb]:w-[14px] [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-[3px] [&::-moz-range-thumb]:border-solid [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:bg-transparent [&::-moz-range-thumb]:shadow-[0_0_0_2.5px_#1b2126]";
+
+const SLIDER_LABEL = "w-[104px] flex-none font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-2";
 
 /**
- * A rainbow to pick a colour from: drag across the pad, or along the greys
- * under it, and the colour is picked when the finger lifts. Each is one tab
- * stop; the arrow keys move around it and pick as they go.
+ * A colour picker in three parts: a rainbow pad to aim a target at (hue
+ * across, vivid to grey down), a big box showing the colour picked, and
+ * sliders for how light or dark it is and how see-through. The pad is one
+ * tab stop that the arrow keys move around. A colour is handed on once the
+ * pointer or slider rests a moment, so the library is not asked again on
+ * every pixel of a drag.
  */
-export function ColorPicker({ value, onChange }: { value: string | null; onChange: (hex: string | null) => void }) {
-  // Where the marker sits. A drag moves it without picking until it lets go,
-  // so the library is not asked again on every pixel.
-  const [spot, setSpot] = useState<Spot | null>(() => (value ? spotOf(value) : null));
-  const shown = value === null ? null : spot ?? spotOf(value);
+export function ColorPicker({
+  value,
+  alpha,
+  onChange,
+}: {
+  value: string | null;
+  alpha: number;
+  onChange: (hex: string | null, alpha: number) => void;
+}) {
+  const [pick, setPick] = useState<Pick | null>(() => (value ? pickOf(value, alpha) : null));
+  const handOn = useRef(onChange);
+  handOn.current = onChange;
 
-  function pointer(strip: Spot["strip"], commit: boolean) {
-    return (e: React.PointerEvent<HTMLDivElement>) => {
-      if (e.type === "pointerdown") e.currentTarget.setPointerCapture(e.pointerId);
-      else if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
-      const box = e.currentTarget.getBoundingClientRect();
-      const x = clamp((e.clientX - box.left) / box.width);
-      const next: Spot = strip === "grey" ? { strip, x } : { strip, x, y: clamp((e.clientY - box.top) / box.height) };
-      setSpot(next);
-      if (commit) onChange(hexOf(next));
-    };
+  // "Any color" from elsewhere on the form clears the target too.
+  useEffect(() => {
+    if (value === null) setPick(null);
+  }, [value]);
+
+  useEffect(() => {
+    if (!pick) return;
+    const hex = hexOf(pick);
+    if (hex === value && pick.a === alpha) return;
+    const timer = setTimeout(() => handOn.current(hex, pick.a), 200);
+    return () => clearTimeout(timer);
+  }, [pick]);
+
+  function aim(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.type === "pointerdown") e.currentTarget.setPointerCapture(e.pointerId);
+    else if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    const box = e.currentTarget.getBoundingClientRect();
+    const h = clamp((e.clientX - box.left) / box.width) * 360;
+    const s = 1 - clamp((e.clientY - box.top) / box.height);
+    setPick((prev) => ({ ...FRESH, ...prev, h, s }));
   }
 
-  function keys(strip: Spot["strip"]) {
-    return (e: React.KeyboardEvent) => {
-      const step = e.shiftKey ? 0.1 : 0.025;
-      const from: Spot =
-        shown?.strip === strip ? shown : strip === "grey" ? { strip, x: 0.5 } : { strip, x: 0, y: 0.5 };
-      const dx = { ArrowRight: step, ArrowLeft: -step }[e.key] ?? 0;
-      const dy = { ArrowDown: step, ArrowUp: -step }[e.key] ?? 0;
-      if (!dx && !dy) return;
-      e.preventDefault();
-      const next: Spot =
-        from.strip === "grey"
-          ? { strip: "grey", x: clamp(from.x + dx + dy) }
-          : { strip: "rainbow", x: (from.x + dx + 1) % 1, y: clamp(from.y + dy) };
-      setSpot(next);
-      onChange(hexOf(next));
-    };
+  function nudge(e: React.KeyboardEvent) {
+    const step = e.shiftKey ? 0.1 : 0.025;
+    const dh = { ArrowRight: step, ArrowLeft: -step }[e.key] ?? 0;
+    const ds = { ArrowUp: step, ArrowDown: -step }[e.key] ?? 0;
+    if (!dh && !ds) return;
+    e.preventDefault();
+    setPick((prev) => {
+      const from = prev ?? { h: 0, ...FRESH };
+      return { ...from, h: (from.h + dh * 360 + 360) % 360, s: clamp(from.s + ds) };
+    });
   }
 
-  const marker = (at: Spot) => (
-    <span
-      aria-hidden
-      className="pointer-events-none absolute h-[24px] w-[24px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-white shadow-[0_0_0_2.5px_#1b2126]"
-      style={{
-        left: `${at.x * 100}%`,
-        top: at.strip === "grey" ? "50%" : `${at.y * 100}%`,
-        background: hexOf(at),
-      }}
-    />
-  );
-
-  const strip = "relative cursor-crosshair touch-none rounded-[14px] border-[3px] border-ink focus-visible:outline-offset-4";
+  const hex = pick ? hexOf(pick) : null;
+  const solid = pick ? hexOf({ ...pick, l: 50 }) : "#808080";
 
   return (
-    <div className="mt-[6px] w-full max-w-[460px]">
-      <div
-        role="slider"
-        tabIndex={0}
-        aria-label="Color you want"
-        aria-valuemin={0}
-        aria-valuemax={360}
-        aria-valuenow={shown?.strip === "rainbow" ? Math.round(shown.x * 360) : undefined}
-        aria-valuetext={shown?.strip === "rainbow" ? spotName(shown) : "none picked"}
-        onPointerDown={pointer("rainbow", false)}
-        onPointerMove={pointer("rainbow", false)}
-        onPointerUp={pointer("rainbow", true)}
-        onKeyDown={keys("rainbow")}
-        className={`${strip} h-[176px]`}
-        style={{ background: PAD_BACKGROUND }}
-      >
-        {shown?.strip === "rainbow" && marker(shown)}
-      </div>
-      <div className="mt-[8px] flex items-center gap-[13.2px]">
+    <div className="mt-[6px] w-full max-w-[560px]">
+      <div className="flex items-start gap-[13.2px]">
+        {/* ---- 1 · the rainbow, with a target where the colour is ---- */}
         <div
           role="slider"
           tabIndex={0}
-          aria-label="Or a grey"
+          aria-label="Color you want"
           aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={shown?.strip === "grey" ? Math.round(shown.x * 100) : undefined}
-          aria-valuetext={shown?.strip === "grey" ? spotName(shown) : "none picked"}
-          onPointerDown={pointer("grey", false)}
-          onPointerMove={pointer("grey", false)}
-          onPointerUp={pointer("grey", true)}
-          onKeyDown={keys("grey")}
-          className={`${strip} h-[30px] flex-1`}
-          style={{ background: "linear-gradient(to right, #ffffff, #808080, #000000)" }}
+          aria-valuemax={360}
+          aria-valuenow={pick ? Math.round(pick.h) : undefined}
+          aria-valuetext={pick ? pickName(pick) : "none picked"}
+          onPointerDown={aim}
+          onPointerMove={aim}
+          onKeyDown={nudge}
+          className="relative h-[176px] min-w-0 flex-1 cursor-crosshair touch-none rounded-[14px] border-[3px] border-ink focus-visible:outline-offset-4"
+          style={{ background: PAD_BACKGROUND }}
         >
-          {shown?.strip === "grey" && marker(shown)}
+          {pick && (
+            <svg
+              aria-hidden
+              viewBox="0 0 34 34"
+              className="pointer-events-none absolute h-[34px] w-[34px] -translate-x-1/2 -translate-y-1/2"
+              style={{ left: `${(pick.h / 360) * 100}%`, top: `${(1 - pick.s) * 100}%` }}
+            >
+              <g fill="none" strokeLinecap="round">
+                <g stroke="#1b2126" strokeWidth="5">
+                  <circle cx="17" cy="17" r="8" />
+                  <path d="M17 2.5v6M17 25.5v6M2.5 17h6M25.5 17h6" />
+                </g>
+                <g stroke="#ffffff" strokeWidth="2">
+                  <circle cx="17" cy="17" r="8" />
+                  <path d="M17 2.5v6M17 25.5v6M2.5 17h6M25.5 17h6" />
+                </g>
+              </g>
+              <circle cx="17" cy="17" r="2" fill="#ffffff" stroke="#1b2126" strokeWidth="1.2" />
+            </svg>
+          )}
         </div>
-        <button
-          type="button"
-          onClick={() => onChange(null)}
-          // Kept in place when hidden, so picking a colour does not shift the pad.
-          className={`flex-none cursor-pointer border-0 bg-transparent p-0 font-mono text-[11.5px] font-bold uppercase tracking-[0.08em] text-ink-3 underline decoration-2 underline-offset-4 hover:text-cherry-dk ${
-            value === null ? "invisible" : ""
-          }`}
-        >
-          Any color
-        </button>
+
+        {/* ---- 2 · the colour picked, big ---- */}
+        <div className="flex w-[96px] flex-none flex-col items-center gap-[6px] sm:w-[120px]">
+          <div
+            aria-hidden
+            className={`grid aspect-square w-full place-items-center overflow-hidden rounded-[14px] border-[3px] ${
+              pick ? "border-ink" : "border-dashed border-ink-3"
+            }`}
+            style={pick ? { background: `linear-gradient(${cssOf(pick)}, ${cssOf(pick)}), ${CHECKER}` } : undefined}
+          >
+            {!pick && (
+              <span className="px-[6px] text-center font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+                Any color
+              </span>
+            )}
+          </div>
+          {pick && (
+            <p aria-live="polite" className="m-0 text-center text-[12.5px] font-bold leading-[1.25] text-ink">
+              {pickName(pick)}
+              {pick.a < 1 && (
+                <span className="block font-normal text-ink-2">{Math.round((1 - pick.a) * 100)}% see-through</span>
+              )}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setPick(null);
+              onChange(null, 1);
+            }}
+            // Kept in place when hidden, so picking a colour does not shift anything.
+            className={`cursor-pointer border-0 bg-transparent p-0 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3 underline decoration-2 underline-offset-4 hover:text-cherry-dk ${
+              pick ? "" : "invisible"
+            }`}
+          >
+            Any color
+          </button>
+        </div>
+      </div>
+
+      {/* ---- 3 · lighter or darker, and how see-through ---- */}
+      <div className="mt-[13.2px] grid gap-[11px]">
+        <label className="flex items-center gap-[11px]">
+          <span className={SLIDER_LABEL}>Dark · light</span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={pick ? Math.round(pick.l) : 50}
+            disabled={!pick}
+            aria-valuetext={pick ? pickName(pick) : undefined}
+            onChange={(e) => setPick((prev) => prev && { ...prev, l: Number(e.target.value) })}
+            className={SLIDER}
+            style={{ background: `linear-gradient(to right, #000000, ${solid}, #ffffff)` }}
+          />
+        </label>
+        <label className="flex items-center gap-[11px]">
+          <span className={SLIDER_LABEL}>See-through</span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={pick ? Math.round((1 - pick.a) * 100) : 0}
+            disabled={!pick}
+            aria-valuetext={pick ? `${Math.round((1 - pick.a) * 100)}% see-through` : undefined}
+            onChange={(e) => setPick((prev) => prev && { ...prev, a: 1 - Number(e.target.value) / 100 })}
+            className={SLIDER}
+            style={{ background: `linear-gradient(to right, ${hex ?? "#808080"}, ${hex ?? "#808080"}80, ${hex ?? "#808080"}00), ${CHECKER}` }}
+          />
+        </label>
       </div>
     </div>
   );

@@ -89,6 +89,9 @@ export type Again = {
 /** The most one request may ask for; the server says the same. */
 const MAX_QUANTITY = 24;
 
+/** A colour picked at most this solid looks for see-through spools first. */
+const SEE_THROUGH = 0.8;
+
 /** The round − and + either side of the amount. */
 const STEP_BUTTON =
   "grid h-[44px] w-[44px] cursor-pointer place-items-center rounded-full border-0 bg-cream-2 text-ink transition-colors hover:bg-cream-3 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-cream-2";
@@ -457,9 +460,11 @@ export function UploadForm({
   // A spool the owner can get instead of one on the shelf. One or the other:
   // picking either clears the other.
   const [toBuy, setToBuy] = useState<SwatchChoice | null>(initialSwatch);
-  // The colour picked from the grid at the top, before any material: it picks
+  // The colour picked from the rainbow at the top, before any material: it picks
   // the nearest shelf colour, or searches the library when the shelf has none.
+  // `nearAlpha` is how solid it is; a see-through one looks for clear spools.
   const [near, setNear] = useState<string | null>(null);
+  const [nearAlpha, setNearAlpha] = useState(1);
   const [note, setNote] = useState(again?.note ?? "");
 
   // The card that is open, and the furthest one reached by moving on.
@@ -809,9 +814,10 @@ export function UploadForm({
     return item.colors.find((candidate) => candidate.name === "Slate") ?? item.colors[0]!;
   }
 
-  /** A colour from the grid up top; null is any colour. A spool to buy already picked stays. */
-  function chooseNear(hex: string | null) {
+  /** A colour from the rainbow up top; null is any colour. A spool to buy already picked stays. */
+  function chooseNear(hex: string | null, alpha = 1) {
     setNear(hex);
+    setNearAlpha(hex ? alpha : 1);
     if (!selectedMaterial || toBuy) return;
     if (hex) setColor(closestShelfColor(selectedMaterial, hex)?.name ?? null);
     else if (color === null) setColor(shelfColorFor(selectedMaterial, null)!.name);
@@ -1263,7 +1269,7 @@ export function UploadForm({
 
         {/* ---- colour first: the nearest on the shelf, or a spool to buy ---- */}
         <section aria-label="Color">
-          <ColorPicker value={near} onChange={chooseNear} />
+          <ColorPicker value={near} alpha={nearAlpha} onChange={chooseNear} />
         </section>
 
         {/* ---- material ---- */}
@@ -1334,7 +1340,8 @@ export function UploadForm({
             picked={toBuy}
             onPick={chooseToBuy}
             near={near}
-            onNear={chooseNear}
+            onNear={(hex) => chooseNear(hex)}
+            clear={near !== null && nearAlpha <= SEE_THROUGH}
             suggested={near !== null && closestShelfColor(selectedMaterial, near) === null}
             shelf={
               <>
