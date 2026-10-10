@@ -894,7 +894,7 @@ export function UploadForm({
     // Enter in the quantity box submits without blurring it; show what is
     // actually being sent rather than a half-typed draft.
     setQuantityDraft(null);
-    // The Next buttons submit too, so Enter in a field moves on a card;
+    // The → buttons submit too, so Enter in a field moves on a card;
     // only the last card sends.
     if (step !== 4) return advance();
     // Anything still missing reopens the card it belongs on.
@@ -1078,9 +1078,46 @@ export function UploadForm({
   );
   const sendSummary = `${quantity} ${quantity === 1 ? "copy" : "copies"}`;
 
-  const back = (to: StepNo) => (
-    <Button type="button" variant="ghost" disabled={busy} onClick={() => goTo(to)}>
-      Back
+  // Arrows, not words, so every card's footer reads the same: ← at its left
+  // edge, → at its right. The step each one goes to is still named for a
+  // screen reader, and on hover.
+  const arrow = (d: string) => (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      className="block h-[22px] w-[22px]"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d={d} />
+    </svg>
+  );
+  const back = (to: StepNo, name: string) => (
+    <Button
+      type="button"
+      variant="ghost"
+      disabled={busy}
+      onClick={() => goTo(to)}
+      aria-label={`Back to ${name}`}
+      title={`Back to ${name}`}
+      className="!px-[18px] !py-[11px]"
+    >
+      {arrow("M19 12H5M11 6l-6 6 6 6")}
+    </Button>
+  );
+  // ml-auto keeps it at the right edge on the first card too, where no ← sits beside it.
+  const next = (name: string) => (
+    <Button
+      type="submit"
+      disabled={busy}
+      aria-label={`Next: ${name}`}
+      title={`Next: ${name}`}
+      className="ml-auto !px-[18px] !py-[11px]"
+    >
+      {arrow("M5 12h14M13 6l6 6-6 6")}
     </Button>
   );
 
@@ -1101,14 +1138,7 @@ export function UploadForm({
         onOpen={() => goTo(1)}
         onClose={foldAll}
         cardRef={(el) => void (cards.current[0] = el)}
-        footer={
-          // A lone child in the footer's justify-between row; mx-auto centres it.
-          <div className="mx-auto">
-            <Button type="submit" disabled={busy}>
-              Next: material
-            </Button>
-          </div>
-        }
+        footer={next("material")}
       >
         {again && (
           <div className="mb-[22px] rounded-panel border-[3px] border-ink bg-cream px-[22px] py-[17.6px]">
@@ -1553,10 +1583,8 @@ export function UploadForm({
         cardRef={(el) => void (cards.current[1] = el)}
         footer={
           <>
-            {back(1)}
-            <Button type="submit" disabled={busy}>
-              Next: color
-            </Button>
+            {back(1, "what to print")}
+            {next("color")}
           </>
         }
       >
@@ -1621,10 +1649,8 @@ export function UploadForm({
         cardRef={(el) => void (cards.current[2] = el)}
         footer={
           <>
-            {back(2)}
-            <Button type="submit" disabled={busy}>
-              Next: send it
-            </Button>
+            {back(2, "material")}
+            {next("send it")}
           </>
         }
       >
@@ -1681,8 +1707,8 @@ export function UploadForm({
         cardRef={(el) => void (cards.current[3] = el)}
         footer={
           <>
-            {back(3)}
-            <div className="flex flex-wrap items-end gap-[13.2px]">
+            {back(3, "color")}
+            <div className="ml-auto flex flex-wrap items-end gap-[13.2px]">
               {/* Amount sits by the send button: the last thing settled before it goes. */}
               <div>
                 <Label htmlFor="quantity">Amount</Label>
