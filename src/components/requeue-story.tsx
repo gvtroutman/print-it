@@ -19,7 +19,7 @@ export function RequeueStory({
   compact = false,
 }: {
   storyId: number;
-  /** The display ref, e.g. "PI-104". Not `ref` — React reserves it. */
+  /** The display ref, e.g. "PI-4". Not `ref` — React reserves it. */
   label: string;
   /** A tight, label-free button for a list row (the History view). */
   compact?: boolean;

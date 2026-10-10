@@ -35,9 +35,9 @@ only new moving part, and it talks to nothing but this app's own API.
  Browser                 Helper on your machine            This app
  ───────                 ──────────────────────            ────────
  click ─ppp://slice/104?t=…─▶ prusa-open.sh
-                            GET /api/models/104?t=…  ───────▶  (link credential)
+                            GET /api/models/4?t=…  ───────▶  (link credential)
                             ◀───────────────────── the .stl bytes
-                            writes /tmp/…/PI-104-clip.stl
+                            writes /tmp/…/PI-4-clip.stl
                             prusa-slicer --single-instance <that file>
 ```
 

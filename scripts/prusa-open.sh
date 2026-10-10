@@ -222,7 +222,7 @@ mkdir -p "$DOWNLOAD_DIR"
 # before the move so the file we are about to open is never a prune target.
 find "$DOWNLOAD_DIR" -maxdepth 1 -type f -mtime +1 -delete 2>/dev/null || true
 
-out="$DOWNLOAD_DIR/PI-$((100 + id))-$name"
+out="$DOWNLOAD_DIR/PI-$id-$name"
 mv "$body" "$out"
 note "saved $out"
 
