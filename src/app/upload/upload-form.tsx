@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 import {
@@ -263,6 +263,126 @@ function Dropdown({
   );
 }
 
+/** The three cards of the request board, in the order they are filled in. */
+type StepNo = 1 | 2 | 3;
+
+/** Each card's own colour, along its top when open and its edge when folded. */
+const STEP_ACCENT: Record<StepNo, string> = { 1: "bg-aqua", 2: "bg-sun", 3: "bg-mint" };
+
+/** Clear of the sticky header; the same as the cards' `scroll-mt` and the folded columns' `top`. */
+const BELOW_HEADER = 112;
+
+function StepBadge({ n, done }: { n: StepNo; done: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={`grid h-[32px] w-[32px] flex-none place-items-center rounded-full border-[3px] border-ink font-display text-[16px] leading-none text-ink ${
+        done ? "bg-mint" : "bg-porcelain"
+      }`}
+    >
+      {done ? "✓" : n}
+    </span>
+  );
+}
+
+/**
+ * One card of the request board. Open, it is the step being filled in and
+ * takes the room; folded, it is a narrow column beside it (a bar on a phone)
+ * saying what was settled there, and tapping it opens it again. The fields
+ * stay mounted while folded, only hidden, so moving between cards never loses
+ * a file, a typed word or the spool library's search.
+ */
+function StepCard({
+  n,
+  title,
+  open,
+  done,
+  summary,
+  disabled,
+  onOpen,
+  cardRef,
+  footer,
+  children,
+}: {
+  n: StepNo;
+  title: string;
+  open: boolean;
+  done: boolean;
+  /** What the folded card says about this step. */
+  summary: ReactNode;
+  disabled: boolean;
+  onOpen: () => void;
+  cardRef: (el: HTMLElement | null) => void;
+  footer: ReactNode;
+  children: ReactNode;
+}) {
+  const headingId = `step-${n}-heading`;
+  return (
+    <section
+      ref={cardRef}
+      aria-labelledby={headingId}
+      className={`min-w-0 scroll-mt-[112px] ${open ? "lg:flex-1" : "lg:w-[148px] lg:flex-none xl:w-[184px]"}`}
+    >
+      <div
+        className={`h-full rounded-panel border-[3px] border-ink bg-porcelain ${open ? "shadow-stamp-lg" : "shadow-stamp"}`}
+      >
+        {open ? (
+          <div
+            className={`layers flex items-center gap-[11px] rounded-t-[13px] border-b-[3px] border-ink px-[17.6px] py-[11px] sm:px-[26.4px] ${STEP_ACCENT[n]}`}
+          >
+            <StepBadge n={n} done={false} />
+            {/* Focused when the card opens, so a screen reader hears where it landed. */}
+            <h2
+              id={headingId}
+              tabIndex={-1}
+              data-step-heading
+              className="m-0 min-w-0 flex-1 font-display text-[22px] leading-tight text-ink outline-none"
+            >
+              {title}
+            </h2>
+            <span className="flex-none font-mono text-[11.5px] font-bold uppercase tracking-[0.1em] text-ink">
+              {n} of 3
+            </span>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={onOpen}
+            disabled={disabled}
+            className="group flex h-full w-full cursor-pointer items-stretch rounded-[13px] border-0 bg-transparent p-0 text-left text-ink transition-colors hover:bg-sun-wash disabled:cursor-not-allowed disabled:hover:bg-transparent lg:flex-col"
+          >
+            <span
+              aria-hidden
+              className={`layers w-[12px] flex-none rounded-l-[13px] border-r-[3px] border-ink lg:h-[14px] lg:w-auto lg:rounded-l-none lg:rounded-t-[13px] lg:border-b-[3px] lg:border-r-0 ${STEP_ACCENT[n]}`}
+            />
+            <span className="flex min-w-0 flex-1 items-center gap-[11px] px-[13.2px] py-[11px] lg:sticky lg:top-[112px] lg:flex-none lg:flex-col lg:items-start lg:gap-[8.8px] lg:px-[15px] lg:py-[17.6px]">
+              <StepBadge n={n} done={done} />
+              <span className="min-w-0 flex-1 lg:w-full lg:flex-none">
+                <span id={headingId} className="block font-display text-[17px] leading-tight">
+                  {title}
+                </span>
+                <span className="mt-[3px] block truncate text-[13px] leading-[1.4] text-ink-2 lg:whitespace-normal lg:break-words">
+                  {summary}
+                </span>
+              </span>
+              <span className="flex-none font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3 underline decoration-2 underline-offset-4 group-hover:text-cherry-dk">
+                {done ? "Change" : "Open"}
+              </span>
+            </span>
+          </button>
+        )}
+
+        <div hidden={!open}>
+          <div className="px-[17.6px] py-[22px] sm:px-[26.4px]">{children}</div>
+          <div className="flex flex-wrap items-end justify-between gap-[13.2px] border-t-[3px] border-dashed border-ink/25 px-[17.6px] py-[17.6px] sm:px-[26.4px]">
+            {footer}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function UploadForm({
   owner,
   catalog,
@@ -340,6 +460,27 @@ export function UploadForm({
   // the nearest shelf colour, or searches the library when the shelf has none.
   const [near, setNear] = useState<string | null>(null);
   const [note, setNote] = useState(again?.note ?? "");
+
+  // The card that is open, and the furthest one reached by moving on.
+  const [step, setStep] = useState<StepNo>(1);
+  const [reached, setReached] = useState<StepNo>(1);
+  const cards = useRef<(HTMLElement | null)[]>([]);
+  // Off until a card is opened, so the page does not grab focus as it loads.
+  const moved = useRef(false);
+
+  // The card just opened gets focus and, when its top is out of sight, the
+  // window: on a phone the one before folds into a bar above it.
+  useEffect(() => {
+    if (!moved.current) return;
+    const card = cards.current[step - 1];
+    if (!card) return;
+    card.querySelector<HTMLElement>("[data-step-heading]")?.focus({ preventScroll: true });
+    const top = card.getBoundingClientRect().top;
+    if (top < BELOW_HEADER - 8 || top > window.innerHeight * 0.6) {
+      const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      card.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
+    }
+  }, [step]);
 
   /**
    * Client-side checks are for fast feedback only — the server re-runs all of
@@ -514,45 +655,71 @@ export function UploadForm({
     }
   }
 
+  /** Why a card cannot be left behind yet, or null when it is settled. */
+  function problemOn(n: StepNo): string | null {
+    if (n === 1) {
+      if (linked.kind === "listed" && !picked) return "Pick which file to print from that link, or clear the link.";
+      // An import is fetched by the server from two ids; there is no upload
+      // for files from this disk to travel in.
+      if (linked.kind === "listed" && files.length > 0) {
+        return (
+          "Photos and videos can't come along with an imported model yet. Remove them, " +
+          "or download the model and drop it here with them."
+        );
+      }
+      if (!hasSomething) return "Say what you need — a few words is enough.";
+    }
+    if (n === 2) {
+      if (material === null) return "Pick a material first — the chart shows what each one is good at.";
+      if (color === null && toBuy === null) {
+        return `Pick a color in the library, or a spool ${owner} can get from Other colors.`;
+      }
+    }
+    return null;
+  }
+
+  function goTo(n: StepNo) {
+    moved.current = true;
+    setPhase({ kind: "idle" });
+    setQuantityDraft(null);
+    setStep(n);
+    setReached((r) => (n > r ? n : r));
+  }
+
+  /** On to the next card, once this one is settled. */
+  function advance() {
+    const problem = problemOn(step);
+    if (problem) return setPhase({ kind: "error", message: problem });
+    goTo(step === 1 ? 2 : 3);
+  }
+
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (phase.kind === "uploading") return;
     // Enter in the quantity box submits without blurring it; show what is
     // actually being sent rather than a half-typed draft.
     setQuantityDraft(null);
-    if (material === null) {
-      return setPhase({ kind: "error", message: "Pick a material first — the chart shows what each one is good at." });
-    }
-    if (color === null && toBuy === null) {
-      return setPhase({ kind: "error", message: `Pick a color in the library, or a spool ${owner} can get from Other colors.` });
+    // The Next buttons submit too, so Enter in a field moves on a card;
+    // only the last card sends.
+    if (step !== 3) return advance();
+    // Anything still missing reopens the card it belongs on.
+    for (const n of [1, 2] as const) {
+      const problem = problemOn(n);
+      if (problem) {
+        goTo(n);
+        return setPhase({ kind: "error", message: problem });
+      }
     }
     if (again) return void sendAgain(again);
-    if (linked.kind === "listed" && picked) {
-      // An import is fetched by the server from two ids; there is no upload
-      // for files from this disk to travel in.
-      if (files.length > 0) {
-        return setPhase({
-          kind: "error",
-          message:
-            "Photos and videos can't come along with an imported model yet. Remove them, " +
-            "or download the model and drop it here with them.",
-        });
-      }
-      return void sendImport(linked.url, picked.id);
-    }
-    if (linked.kind === "listed") {
-      return setPhase({ kind: "error", message: "Pick which file to print from that link, or clear the link." });
-    }
-    if (!hasSomething) {
-      return setPhase({ kind: "error", message: "Say what you need — a few words is enough." });
-    }
+    if (linked.kind === "listed" && picked) return void sendImport(linked.url, picked.id);
 
     const body = new FormData();
     if (primary) body.set("file", primary);
     for (const extra of extras) body.append("attachments", extra);
     for (const l of links) body.append("links", l);
     body.set("title", title);
-    body.set("material", material);
+    // Never null here: problemOn(2) has just said so.
+    body.set("material", material!);
     if (toBuy) body.set("swatchId", String(toBuy.id));
     else if (color) body.set("colorName", color);
     body.set("quantity", String(quantity));
@@ -647,301 +814,85 @@ export function UploadForm({
     }
   }
 
-  return (
-    <form onSubmit={submit} className="max-w-[780px]">
-      {again && (
-        <div className="rounded-panel border-[3px] border-ink bg-porcelain px-[22px] py-[17.6px] shadow-stamp">
-          <p className="m-0 font-mono text-[11.5px] font-bold uppercase tracking-[0.08em] text-ink-3">
-            {again.filename ? `Same file as ${again.ref} — no re-upload` : `Same as ${again.ref}`}
-          </p>
-          <p className="m-0 mt-[4px] break-words font-display text-[19px] text-ink">
-            {again.filename ?? "No model — asked for in words"}
-          </p>
-          <p className="m-0 mt-[3px] font-mono text-[12px] uppercase tracking-[0.04em] text-ink-3">
-            {again.fileSize !== null ? `${formatBytes(again.fileSize)} · ` : ""}change anything below, or send it as it was
-          </p>
-        </div>
-      )}
-      {gone.length > 0 && (
-        <div className="mt-[13.2px]">
-          <Notice tone="warn">
-            {gone.join(" and ")} {gone.length === 1 ? "is" : "are"} not on offer any more, so
-            that has been set to something that is. Check it before you send.
-          </Notice>
-        </div>
-      )}
+  const error = phase.kind === "error" && (
+    <div className="mt-[17.6px]">
+      <Notice tone="warn">{phase.message}</Notice>
+    </div>
+  );
 
-      {/* ---- dropzone ---- */}
-      {!again && <label
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragging(true);
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={onDrop}
-        /*
-         * focus-within, because the input it wraps is visually hidden and its
-         * own outline would be drawn on a 1px clipped box nobody can see. The
-         * label carries the visuals, so the label shows the focus. Same colour
-         * and offset as the global ring in globals.css.
-         */
-        className={`block cursor-pointer rounded-panel border-[3px] border-dashed px-[26.4px] py-[35.2px] text-center transition-colors focus-within:outline focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-cherry-dk ${
-          dragging
-            ? "border-ink bg-sun"
-            : "border-ink-3 bg-porcelain hover:border-ink hover:bg-sun-wash"
-        }`}
-      >
-        {/*
-         * sr-only, NOT hidden.
-         *
-         * This was `className="hidden"` — display:none — which takes the input
-         * out of the focus order entirely. A <label> is not focusable, so there
-         * was no tab stop anywhere that opened the file picker, and the submit
-         * button is disabled until a file is chosen. A keyboard or screen-reader
-         * user therefore could not upload anything at all: the app's primary
-         * function, unreachable, with no error and nothing to notice.
-         *
-         * sr-only clips it to a 1px box instead of removing it, so it stays
-         * focusable and operable (Space and Enter open the picker) while the
-         * dropzone above keeps every bit of the visual design.
-         */}
-        <input
-          ref={inputRef}
-          type="file"
-          multiple
-          accept={PICKER_ACCEPT}
-          className="sr-only"
-          disabled={busy}
-          onChange={(e) => accept(Array.from(e.target.files ?? []))}
-        />
-        <InkCube className="mx-auto mb-[13.2px] block" />
-        <span className="block font-display text-[19px] text-ink">
-          {files.length > 0 ? "Drop more, or click to add" : "Drop a 3D model, photos or videos here (optional)"}
-        </span>
-        <span className="mt-[6px] block font-mono text-[12px] uppercase tracking-[0.04em] text-ink-3">
-          {busy && !picked
-            ? `Uploading… ${phase.percent}%`
-            : files.length > 0
-              ? `${formatBytes(totalBytes)} of ${formatBytes(MAX_UPLOAD_BYTES)} · checked on the server when you send it`
-              : `or click to choose · ${MODEL_FORMATS_TEXT} · photos · videos · ${formatBytes(MAX_UPLOAD_BYTES)} in all`}
-        </span>
-
-        {busy && !picked && (
-          <span className="mt-[13.2px] block h-[10px] overflow-hidden rounded-full border-[3px] border-ink bg-cream-2">
-            <span
-              className="block h-full bg-cherry transition-[width] duration-200"
-              style={{ width: `${phase.percent}%` }}
-            />
-          </span>
+  // ---- what each folded card says ----
+  const fileCount = files.length + (picked ? 1 : 0);
+  const whatSummary =
+    [
+      title.trim() || primary?.name || picked?.name || again?.filename || (note.trim() ? "Asked for in words" : ""),
+      fileCount > 0 ? `${fileCount} ${fileCount === 1 ? "file" : "files"}` : "",
+      links.length > 0 ? `${links.length} ${links.length === 1 ? "link" : "links"}` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ") || "Nothing yet";
+  const shelfColor = selectedMaterial?.colors.find((c) => c.name === color) ?? null;
+  const dotHex = toBuy?.hex ?? shelfColor?.hex ?? null;
+  const colorSummary =
+    material === null ? (
+      "Not picked yet"
+    ) : (
+      <>
+        {dotHex && /^#[0-9a-f]{6}$/i.test(dotHex) && (
+          <span
+            aria-hidden
+            className="mr-[6px] inline-block h-[11px] w-[11px] rounded-full border-2 border-ink align-[-1px]"
+            style={{ background: dotHex }}
+          />
         )}
-      </label>}
+        {material} · {toBuy ? `${toBuy.name}, to get` : color ?? "no color yet"}
+      </>
+    );
+  const sendSummary = `${PRIORITY_CHIP[priority]?.label ?? priority} priority · ${quantity} ${quantity === 1 ? "copy" : "copies"}`;
 
-      {/* ---- what is on the order so far. Outside the <label>, so a remove
-           button does not also open the file picker. ---- */}
-      {!again && files.length > 0 && (
-        <ul aria-label="Files on this order" className="m-0 mt-[13.2px] flex list-none flex-col gap-[6px] p-0">
-          {files.map((f) => {
-            const kind = kindOf(f.name) ?? "model";
-            const badge = KIND_BADGE[kind];
-            return (
-              <li
-                key={`${f.name}:${f.size}`}
-                className="flex items-center gap-[11px] rounded-card border-[3px] border-ink bg-porcelain px-[11px] py-[7px]"
-              >
-                <FileThumb file={f} kind={kind} />
-                <span
-                  className={`flex-none rounded-chip border-2 border-ink px-[7px] py-[1px] font-mono text-[10.5px] font-bold uppercase tracking-[0.06em] ${badge.className}`}
-                >
-                  {badge.label}
-                </span>
-                <span className="min-w-0 flex-1 break-words text-[14.5px] font-bold text-ink">
-                  {f.name}
-                  {f === primary && (
-                    <span className="ml-[8px] font-mono text-[10.5px] font-bold uppercase tracking-[0.06em] text-cherry-dk">
-                      main model
-                    </span>
-                  )}
-                </span>
-                <span className="flex-none font-mono text-[12px] text-ink-3">{formatBytes(f.size)}</span>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => removeFile(f)}
-                  aria-label={`Remove ${f.name}`}
-                  className="flex-none cursor-pointer rounded-chip border-2 border-ink bg-cream px-[8px] py-[1px] font-mono text-[13px] font-bold text-ink hover:bg-cherry hover:text-cream disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  ✕
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+  const back = (to: StepNo) => (
+    <Button type="button" variant="ghost" disabled={busy} onClick={() => goTo(to)}>
+      Back
+    </Button>
+  );
 
-      {/* ---- links that explain the job ---- */}
-      {!again && (
-        <div className="mt-[17.6px]">
-          <Label htmlFor="order-link">Links (optional)</Label>
-          <div className="flex flex-wrap gap-[8.8px]">
-            <input
-              id="order-link"
-              type="url"
-              inputMode="url"
-              value={linkDraft}
-              disabled={busy}
-              onChange={(e) => {
-                setLinkDraft(e.target.value);
-                setLinkError(null);
-              }}
-              // Enter adds the link; it does not send the order.
-              onKeyDown={(e) => {
-                if (e.key !== "Enter") return;
-                e.preventDefault();
-                addLink();
-              }}
-              placeholder="https://… the product it fits, a video, a forum post"
-              className="min-w-[240px] flex-1 rounded-card border-[3px] border-ink bg-porcelain px-[15px] py-[12px] text-[16px] text-ink placeholder:text-ink-3"
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={busy || !linkDraft.trim() || links.length >= MAX_LINKS_PER_ORDER}
-              onClick={addLink}
-            >
-              Add link
+  return (
+    <form
+      onSubmit={submit}
+      className="flex flex-col gap-[13.2px] lg:flex-row lg:items-stretch lg:gap-[17.6px]"
+    >
+      {/* ================= 1 · what to print ================= */}
+      <StepCard
+        n={1}
+        title="What to print"
+        open={step === 1}
+        done={reached > 1 && problemOn(1) === null}
+        summary={whatSummary}
+        disabled={busy}
+        onOpen={() => goTo(1)}
+        cardRef={(el) => void (cards.current[0] = el)}
+        footer={
+          <>
+            <span className="text-[13px] text-ink-3">A few words is enough. Files and links are welcome.</span>
+            <Button type="submit" disabled={busy}>
+              Next: color
             </Button>
-          </div>
-          {linkError && (
-            <p role="alert" className="m-0 mt-[6px] font-mono text-[11.5px] uppercase tracking-[0.04em] text-cherry-dk">
-              {linkError}
+          </>
+        }
+      >
+        {again && (
+          <div className="mb-[22px] rounded-panel border-[3px] border-ink bg-cream px-[22px] py-[17.6px]">
+            <p className="m-0 font-mono text-[11.5px] font-bold uppercase tracking-[0.08em] text-ink-3">
+              {again.filename ? `Same file as ${again.ref} — no re-upload` : `Same as ${again.ref}`}
             </p>
-          )}
-          {links.length > 0 && (
-            <ul aria-label="Links on this order" className="m-0 mt-[8.8px] flex list-none flex-col gap-[6px] p-0">
-              {links.map((l) => (
-                <li
-                  key={l}
-                  className="flex items-center gap-[11px] rounded-card border-[3px] border-ink bg-porcelain px-[11px] py-[7px]"
-                >
-                  <span className="min-w-0 flex-1 break-all font-mono text-[13px] text-ink">{l}</span>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => setLinks(links.filter((x) => x !== l))}
-                    aria-label={`Remove ${l}`}
-                    className="flex-none cursor-pointer rounded-chip border-2 border-ink bg-cream px-[8px] py-[1px] font-mono text-[13px] font-bold text-ink hover:bg-cherry hover:text-cream disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    ✕
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-
-      {/* ---- or a link (only where the instance has switched importing on) ---- */}
-      {!again && importSources.length > 0 && (
-        <div className="mt-[17.6px]">
-          <Label htmlFor="import-link">Or paste a {sourceNames} link</Label>
-          <div className="flex flex-wrap gap-[8.8px]">
-            <input
-              id="import-link"
-              type="url"
-              inputMode="url"
-              value={link}
-              disabled={busy}
-              onChange={(e) => setLink(e.target.value)}
-              // Enter here means "look this up", not "send the request": the
-              // form is not ready to send until a file has been picked.
-              onKeyDown={(e) => {
-                if (e.key !== "Enter") return;
-                e.preventDefault();
-                void lookUp();
-              }}
-              placeholder="https://www.printables.com/model/…"
-              className="min-w-[240px] flex-1 rounded-card border-[3px] border-ink bg-porcelain px-[15px] py-[12px] text-[16px] text-ink placeholder:text-ink-3"
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={busy || linked.kind === "looking" || !link.trim()}
-              onClick={() => void lookUp()}
-            >
-              {linked.kind === "looking" ? "Looking…" : "Find the files"}
-            </Button>
+            <p className="m-0 mt-[4px] break-words font-display text-[19px] text-ink">
+              {again.filename ?? "No model — asked for in words"}
+            </p>
+            <p className="m-0 mt-[3px] font-mono text-[12px] uppercase tracking-[0.04em] text-ink-3">
+              {again.fileSize !== null ? `${formatBytes(again.fileSize)} · ` : ""}change anything, or send it as it was
+            </p>
           </div>
+        )}
 
-          {linked.kind === "listed" && (
-            <div
-              aria-live="polite"
-              className="mt-[13.2px] rounded-panel border-[3px] border-ink bg-porcelain px-[22px] py-[17.6px] shadow-stamp"
-            >
-              <p className="m-0 break-words font-display text-[19px] text-ink">{linked.listing.model.name}</p>
-              <p className="m-0 mt-[3px] font-mono text-[12px] uppercase tracking-[0.04em] text-ink-3">
-                {[
-                  linked.listing.model.author ? `by ${linked.listing.model.author}` : null,
-                  linked.listing.model.license,
-                ]
-                  .filter(Boolean)
-                  .join(" · ") || SOURCE_LABEL[linked.listing.source]}
-              </p>
-
-              {linked.listing.files.length === 0 ? (
-                <p className="m-0 mt-[13.2px] text-[15px] text-ink-2">
-                  There is no 3D file this app takes in that model, so there is nothing here to print.
-                </p>
-              ) : (
-                <div
-                  role="radiogroup"
-                  aria-label="Which file to print"
-                  className="mt-[13.2px] flex max-h-[280px] flex-col gap-[6px] overflow-y-auto"
-                >
-                  {linked.listing.files.map((f) => {
-                    const active = f.id === linked.fileId;
-                    return (
-                      <button
-                        key={f.id}
-                        type="button"
-                        role="radio"
-                        aria-checked={active}
-                        disabled={f.tooLarge || busy}
-                        onClick={() => setLinked({ ...linked, fileId: f.id })}
-                        className={`flex cursor-pointer items-baseline justify-between gap-[13.2px] rounded-card border-[3px] border-ink px-[13px] py-[9px] text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                          active ? "bg-cherry-dk text-cream" : "bg-cream text-ink hover:bg-sun"
-                        }`}
-                      >
-                        <span className="min-w-0 break-words text-[15px] font-bold">{f.name}</span>
-                        <span className="shrink-0 font-mono text-[12px] uppercase tracking-[0.04em]">
-                          {formatBytes(f.size)}
-                          {f.tooLarge ? ` · over ${formatBytes(MAX_UPLOAD_BYTES)}` : ""}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
-              <p className="m-0 mt-[11px] font-mono text-[11.5px] uppercase tracking-[0.04em] text-ink-3">
-                {linked.listing.files.length > 1 ? "One file per request · " : ""}
-                {linked.listing.otherFiles > 0
-                  ? `${linked.listing.otherFiles} other ${linked.listing.otherFiles === 1 ? "file" : "files"} there cannot be printed here · `
-                  : ""}
-                fetched and checked on the server when you send it
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {phase.kind === "error" && (
-        <div className="mt-[13.2px]">
-          <Notice tone="warn">{phase.message}</Notice>
-        </div>
-      )}
-
-      {/* ---- title + material ---- */}
-      <div className="mt-[26.4px] grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-[22px]">
         <div>
           <Label htmlFor="title">What is it?</Label>
           <input
@@ -953,245 +904,558 @@ export function UploadForm({
             className="w-full rounded-card border-[3px] border-ink bg-porcelain px-[15px] py-[12px] text-[16px] text-ink placeholder:text-ink-3"
           />
         </div>
-      </div>
 
-      {/* ---- colour first: the nearest on the shelf, or a spool to buy ---- */}
-      <section className="mt-[22px]" aria-labelledby="near-heading">
-        <div className="mb-[6px] flex flex-wrap items-baseline justify-between gap-x-[13.2px] gap-y-[4px]">
-          <h2 id="near-heading" className="m-0 font-mono text-[12px] font-bold uppercase tracking-[0.1em] text-ink-2">
-            What color?
-          </h2>
-          {near ? (
-            <button
-              type="button"
-              onClick={() => chooseNear(null)}
-              className="cursor-pointer border-0 bg-transparent p-0 font-mono text-[11.5px] font-bold uppercase tracking-[0.08em] text-ink-3 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
+        {/* ---- dropzone ---- */}
+        {!again && <label
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+          /*
+           * focus-within, because the input it wraps is visually hidden and its
+           * own outline would be drawn on a 1px clipped box nobody can see. The
+           * label carries the visuals, so the label shows the focus. Same colour
+           * and offset as the global ring in globals.css.
+           */
+          className={`mt-[22px] block cursor-pointer rounded-panel border-[3px] border-dashed px-[26.4px] py-[35.2px] text-center transition-colors focus-within:outline focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-cherry-dk ${
+            dragging
+              ? "border-ink bg-sun"
+              : "border-ink-3 bg-porcelain hover:border-ink hover:bg-sun-wash"
+          }`}
+        >
+          {/*
+           * sr-only, NOT hidden.
+           *
+           * This was `className="hidden"` — display:none — which takes the input
+           * out of the focus order entirely. A <label> is not focusable, so there
+           * was no tab stop anywhere that opened the file picker, and the submit
+           * button is disabled until a file is chosen. A keyboard or screen-reader
+           * user therefore could not upload anything at all: the app's primary
+           * function, unreachable, with no error and nothing to notice.
+           *
+           * sr-only clips it to a 1px box instead of removing it, so it stays
+           * focusable and operable (Space and Enter open the picker) while the
+           * dropzone above keeps every bit of the visual design.
+           */}
+          <input
+            ref={inputRef}
+            type="file"
+            multiple
+            accept={PICKER_ACCEPT}
+            className="sr-only"
+            disabled={busy}
+            onChange={(e) => accept(Array.from(e.target.files ?? []))}
+          />
+          <InkCube className="mx-auto mb-[13.2px] block" />
+          <span className="block font-display text-[19px] text-ink">
+            {files.length > 0 ? "Drop more, or click to add" : "Drop a 3D model, photos or videos here (optional)"}
+          </span>
+          <span className="mt-[6px] block font-mono text-[12px] uppercase tracking-[0.04em] text-ink-3">
+            {busy && !picked
+              ? `Uploading… ${phase.percent}%`
+              : files.length > 0
+                ? `${formatBytes(totalBytes)} of ${formatBytes(MAX_UPLOAD_BYTES)} · checked on the server when you send it`
+                : `or click to choose · ${MODEL_FORMATS_TEXT} · photos · videos · ${formatBytes(MAX_UPLOAD_BYTES)} in all`}
+          </span>
+
+          {busy && !picked && (
+            <span className="mt-[13.2px] block h-[10px] overflow-hidden rounded-full border-[3px] border-ink bg-cream-2">
+              <span
+                className="block h-full bg-cherry transition-[width] duration-200"
+                style={{ width: `${phase.percent}%` }}
+              />
+            </span>
+          )}
+        </label>}
+
+        {/* ---- what is on the order so far. Outside the <label>, so a remove
+             button does not also open the file picker. ---- */}
+        {!again && files.length > 0 && (
+          <ul aria-label="Files on this order" className="m-0 mt-[13.2px] flex list-none flex-col gap-[6px] p-0">
+            {files.map((f) => {
+              const kind = kindOf(f.name) ?? "model";
+              const badge = KIND_BADGE[kind];
+              return (
+                <li
+                  key={`${f.name}:${f.size}`}
+                  className="flex items-center gap-[11px] rounded-card border-[3px] border-ink bg-porcelain px-[11px] py-[7px]"
+                >
+                  <FileThumb file={f} kind={kind} />
+                  <span
+                    className={`flex-none rounded-chip border-2 border-ink px-[7px] py-[1px] font-mono text-[10.5px] font-bold uppercase tracking-[0.06em] ${badge.className}`}
+                  >
+                    {badge.label}
+                  </span>
+                  <span className="min-w-0 flex-1 break-words text-[14.5px] font-bold text-ink">
+                    {f.name}
+                    {f === primary && (
+                      <span className="ml-[8px] font-mono text-[10.5px] font-bold uppercase tracking-[0.06em] text-cherry-dk">
+                        main model
+                      </span>
+                    )}
+                  </span>
+                  <span className="flex-none font-mono text-[12px] text-ink-3">{formatBytes(f.size)}</span>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => removeFile(f)}
+                    aria-label={`Remove ${f.name}`}
+                    className="flex-none cursor-pointer rounded-chip border-2 border-ink bg-cream px-[8px] py-[1px] font-mono text-[13px] font-bold text-ink hover:bg-cherry hover:text-cream disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    ✕
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        {/* ---- links that explain the job ---- */}
+        {!again && (
+          <div className="mt-[17.6px]">
+            <Label htmlFor="order-link">Links (optional)</Label>
+            <div className="flex flex-wrap gap-[8.8px]">
+              <input
+                id="order-link"
+                type="url"
+                inputMode="url"
+                value={linkDraft}
+                disabled={busy}
+                onChange={(e) => {
+                  setLinkDraft(e.target.value);
+                  setLinkError(null);
+                }}
+                // Enter adds the link; it does not move to the next card.
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  addLink();
+                }}
+                placeholder="https://… the product it fits, a video, a forum post"
+                className="min-w-[240px] flex-1 rounded-card border-[3px] border-ink bg-porcelain px-[15px] py-[12px] text-[16px] text-ink placeholder:text-ink-3"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={busy || !linkDraft.trim() || links.length >= MAX_LINKS_PER_ORDER}
+                onClick={addLink}
+              >
+                Add link
+              </Button>
+            </div>
+            {linkError && (
+              <p role="alert" className="m-0 mt-[6px] font-mono text-[11.5px] uppercase tracking-[0.04em] text-cherry-dk">
+                {linkError}
+              </p>
+            )}
+            {links.length > 0 && (
+              <ul aria-label="Links on this order" className="m-0 mt-[8.8px] flex list-none flex-col gap-[6px] p-0">
+                {links.map((l) => (
+                  <li
+                    key={l}
+                    className="flex items-center gap-[11px] rounded-card border-[3px] border-ink bg-porcelain px-[11px] py-[7px]"
+                  >
+                    <span className="min-w-0 flex-1 break-all font-mono text-[13px] text-ink">{l}</span>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setLinks(links.filter((x) => x !== l))}
+                      aria-label={`Remove ${l}`}
+                      className="flex-none cursor-pointer rounded-chip border-2 border-ink bg-cream px-[8px] py-[1px] font-mono text-[13px] font-bold text-ink hover:bg-cherry hover:text-cream disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      ✕
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {/* ---- or a link (only where the instance has switched importing on) ---- */}
+        {!again && importSources.length > 0 && (
+          <div className="mt-[17.6px]">
+            <Label htmlFor="import-link">Or paste a {sourceNames} link</Label>
+            <div className="flex flex-wrap gap-[8.8px]">
+              <input
+                id="import-link"
+                type="url"
+                inputMode="url"
+                value={link}
+                disabled={busy}
+                onChange={(e) => setLink(e.target.value)}
+                // Enter here means "look this up", not "next card": the
+                // link is not settled until a file has been picked.
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  void lookUp();
+                }}
+                placeholder="https://www.printables.com/model/…"
+                className="min-w-[240px] flex-1 rounded-card border-[3px] border-ink bg-porcelain px-[15px] py-[12px] text-[16px] text-ink placeholder:text-ink-3"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={busy || linked.kind === "looking" || !link.trim()}
+                onClick={() => void lookUp()}
+              >
+                {linked.kind === "looking" ? "Looking…" : "Find the files"}
+              </Button>
+            </div>
+
+            {linked.kind === "listed" && (
+              <div
+                aria-live="polite"
+                className="mt-[13.2px] rounded-panel border-[3px] border-ink bg-porcelain px-[22px] py-[17.6px] shadow-stamp"
+              >
+                <p className="m-0 break-words font-display text-[19px] text-ink">{linked.listing.model.name}</p>
+                <p className="m-0 mt-[3px] font-mono text-[12px] uppercase tracking-[0.04em] text-ink-3">
+                  {[
+                    linked.listing.model.author ? `by ${linked.listing.model.author}` : null,
+                    linked.listing.model.license,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || SOURCE_LABEL[linked.listing.source]}
+                </p>
+
+                {linked.listing.files.length === 0 ? (
+                  <p className="m-0 mt-[13.2px] text-[15px] text-ink-2">
+                    There is no 3D file this app takes in that model, so there is nothing here to print.
+                  </p>
+                ) : (
+                  <div
+                    role="radiogroup"
+                    aria-label="Which file to print"
+                    className="mt-[13.2px] flex max-h-[280px] flex-col gap-[6px] overflow-y-auto"
+                  >
+                    {linked.listing.files.map((f) => {
+                      const active = f.id === linked.fileId;
+                      return (
+                        <button
+                          key={f.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          disabled={f.tooLarge || busy}
+                          onClick={() => setLinked({ ...linked, fileId: f.id })}
+                          className={`flex cursor-pointer items-baseline justify-between gap-[13.2px] rounded-card border-[3px] border-ink px-[13px] py-[9px] text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                            active ? "bg-cherry-dk text-cream" : "bg-cream text-ink hover:bg-sun"
+                          }`}
+                        >
+                          <span className="min-w-0 break-words text-[15px] font-bold">{f.name}</span>
+                          <span className="shrink-0 font-mono text-[12px] uppercase tracking-[0.04em]">
+                            {formatBytes(f.size)}
+                            {f.tooLarge ? ` · over ${formatBytes(MAX_UPLOAD_BYTES)}` : ""}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <p className="m-0 mt-[11px] font-mono text-[11.5px] uppercase tracking-[0.04em] text-ink-3">
+                  {linked.listing.files.length > 1 ? "One file per request · " : ""}
+                  {linked.listing.otherFiles > 0
+                    ? `${linked.listing.otherFiles} other ${linked.listing.otherFiles === 1 ? "file" : "files"} there cannot be printed here · `
+                    : ""}
+                  fetched and checked on the server when you send it
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {step === 1 && error}
+      </StepCard>
+
+      {/* ================= 2 · color and material ================= */}
+      <StepCard
+        n={2}
+        title="Color & material"
+        open={step === 2}
+        done={reached > 2 && problemOn(2) === null}
+        summary={colorSummary}
+        disabled={busy}
+        onOpen={() => goTo(2)}
+        cardRef={(el) => void (cards.current[1] = el)}
+        footer={
+          <>
+            {back(1)}
+            <Button type="submit" disabled={busy}>
+              Next: send it
+            </Button>
+          </>
+        }
+      >
+        {gone.length > 0 && (
+          <div className="mb-[22px]">
+            <Notice tone="warn">
+              {gone.join(" and ")} {gone.length === 1 ? "is" : "are"} not on offer any more, so
+              that has been set to something that is. Check it before you send.
+            </Notice>
+          </div>
+        )}
+
+        {/* ---- colour first: the nearest on the shelf, or a spool to buy ---- */}
+        <section aria-labelledby="near-heading">
+          <div className="mb-[6px] flex flex-wrap items-baseline justify-between gap-x-[13.2px] gap-y-[4px]">
+            <h3 id="near-heading" className="m-0 font-mono text-[12px] font-bold uppercase tracking-[0.1em] text-ink-2">
+              What color?
+            </h3>
+            {near ? (
+              <button
+                type="button"
+                onClick={() => chooseNear(null)}
+                className="cursor-pointer border-0 bg-transparent p-0 font-mono text-[11.5px] font-bold uppercase tracking-[0.08em] text-ink-3 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
+              >
+                Any color
+              </button>
+            ) : (
+              <p className="m-0 text-[13px] text-ink-3">Optional. Tap one and the closest spool gets picked for you.</p>
+            )}
+          </div>
+          <ColorGrid value={near} onChange={chooseNear} />
+        </section>
+
+        {/* ---- material ---- */}
+        <div className="mt-[22px] max-w-[420px]">
+          <Label htmlFor="material">Material</Label>
+          <Dropdown
+            id="material"
+            // With a colour picked, the materials that have it on the shelf come first.
+            options={(near
+              ? [...catalog].sort((a, b) => Number(closestShelfColor(b, near) !== null) - Number(closestShelfColor(a, near) !== null))
+              : catalog
+            ).map((item) => item.name)}
+            value={material}
+            onChange={chooseMaterial}
+            placeholder="Pick one, or compare them below"
+            hint={(name) => {
+              const item = catalog.find((candidate) => candidate.name === name);
+              if (!item) return "";
+              if (!near) return item.description;
+              const match = closestShelfColor(item, near);
+              const stock = match ? `On the shelf in ${match.name}.` : `Not that color on the shelf — ${owner} can get one.`;
+              return item.description ? `${stock} ${item.description}` : stock;
+            }}
+            describedBy={selectedMaterial?.description ? "material-about" : undefined}
+          />
+          {selectedMaterial?.description && (
+            <p
+              id="material-about"
+              aria-live="polite"
+              className="m-0 mt-[8px] text-[14px] leading-[1.45] text-ink-2"
             >
-              Any color
-            </button>
-          ) : (
-            <p className="m-0 text-[13px] text-ink-3">Optional. Tap one and the closest spool gets picked for you.</p>
+              {selectedMaterial.description}
+            </p>
           )}
         </div>
-        <ColorGrid value={near} onChange={chooseNear} />
-      </section>
 
-      {/* ---- material ---- */}
-      <div className="mt-[22px] max-w-[420px]">
-        <Label htmlFor="material">Material</Label>
-        <Dropdown
-          id="material"
-          // With a colour picked, the materials that have it on the shelf come first.
-          options={(near
-            ? [...catalog].sort((a, b) => Number(closestShelfColor(b, near) !== null) - Number(closestShelfColor(a, near) !== null))
-            : catalog
-          ).map((item) => item.name)}
-          value={material}
-          onChange={chooseMaterial}
-          placeholder="Pick one, or compare them below"
-          hint={(name) => {
-            const item = catalog.find((candidate) => candidate.name === name);
-            if (!item) return "";
-            if (!near) return item.description;
-            const match = closestShelfColor(item, near);
-            const stock = match ? `On the shelf in ${match.name}.` : `Not that color on the shelf — ${owner} can get one.`;
-            return item.description ? `${stock} ${item.description}` : stock;
-          }}
-          describedBy={selectedMaterial?.description ? "material-about" : undefined}
-        />
-        {selectedMaterial?.description && (
-          <p
-            id="material-about"
-            aria-live="polite"
-            className="m-0 mt-[8px] text-[14px] leading-[1.45] text-ink-2"
-          >
-            {selectedMaterial.description}
-          </p>
-        )}
-      </div>
-
-      {/* ---- colour, or the chart of the materials until one is picked ---- */}
-      {selectedMaterial === null ? (
-        <section className="mt-[22px]" aria-labelledby="compare-heading">
+        {/* ---- colour, or the chart of the materials until one is picked ---- */}
+        {selectedMaterial === null ? (
+          <section className="mt-[22px]" aria-labelledby="compare-heading">
+            <div className="mb-[8.8px] flex flex-wrap items-baseline justify-between gap-x-[13.2px] gap-y-[4px]">
+              <h3 id="compare-heading" className="m-0 font-mono text-[12px] font-bold uppercase tracking-[0.1em] text-ink-2">
+                Which filament?
+              </h3>
+              <p className="m-0 text-[13px] text-ink-3">Tap one to see its colors. More stickers, more of it. Five is the most.</p>
+            </div>
+            <MaterialChart catalog={catalog} owner={owner} onPick={chooseMaterial} />
+          </section>
+        ) : (
+        <fieldset className="mt-[22px] border-0 p-0">
           <div className="mb-[8.8px] flex flex-wrap items-baseline justify-between gap-x-[13.2px] gap-y-[4px]">
-            <h2 id="compare-heading" className="m-0 font-mono text-[12px] font-bold uppercase tracking-[0.1em] text-ink-2">
-              Which filament?
-            </h2>
-            <p className="m-0 text-[13px] text-ink-3">Tap one to see its colors. More stickers, more of it. Five is the most.</p>
+            <legend className="float-left font-mono text-[12px] font-bold uppercase tracking-[0.1em] text-ink-2">
+              Color
+            </legend>
+            <button
+              type="button"
+              onClick={compareMaterials}
+              className="cursor-pointer border-0 bg-transparent p-0 font-mono text-[11.5px] font-bold uppercase tracking-[0.08em] text-ink-3 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
+            >
+              Compare materials
+            </button>
           </div>
-          <MaterialChart catalog={catalog} owner={owner} onPick={chooseMaterial} />
-        </section>
-      ) : (
-      <fieldset className="mt-[22px] border-0 p-0">
-        <div className="mb-[8.8px] flex flex-wrap items-baseline justify-between gap-x-[13.2px] gap-y-[4px]">
-          <legend className="float-left font-mono text-[12px] font-bold uppercase tracking-[0.1em] text-ink-2">
-            Color
-          </legend>
-          <button
-            type="button"
-            onClick={compareMaterials}
-            className="cursor-pointer border-0 bg-transparent p-0 font-mono text-[11.5px] font-bold uppercase tracking-[0.08em] text-ink-3 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
-          >
-            Compare materials
-          </button>
-        </div>
-        {/* Keyed by material: another material opens on its own shelf, with a fresh library search. */}
-        <ColorCard
-          key={selectedMaterial.name}
-          material={selectedMaterial.name}
-          owner={owner}
-          shelfCount={selectedMaterial.colors.length}
-          picked={toBuy}
-          onPick={chooseToBuy}
-          near={near}
-          onNear={chooseNear}
-          suggested={near !== null && closestShelfColor(selectedMaterial, near) === null}
-          shelf={
-            <>
-              {/* Three across on a phone, each spool shrinking to its column; from sm up
-                  they keep their full size and wrap. */}
-              <div
-                role="radiogroup"
-                aria-label={`${selectedMaterial.name} colors ${owner} has`}
-                className="grid grid-cols-3 gap-x-[10px] gap-y-[13.2px] sm:flex sm:flex-wrap sm:gap-[13.2px]"
-              >
-                {selectedMaterial.colors.map((c) => {
-                  const active = c.name === color;
-                  return (
-                    <button
-                      key={c.name}
-                      type="button"
-                      role="radio"
-                      aria-checked={active}
-                      aria-label={`${c.name} filament`}
-                      onClick={() => {
-                        setColor(c.name);
-                        setToBuy(null);
-                      }}
-                      className="flex min-w-0 cursor-pointer flex-col items-center gap-[7px] border-0 bg-transparent p-0 sm:w-[110px]"
-                    >
-                      <FilamentSpool
-                        mode={c.mode}
-                        style={c.style}
-                        className="aspect-[100/144] w-full max-w-[100px]"
-                      />
-                      <span
-                        className={`text-center font-mono text-[11px] font-bold uppercase tracking-[0.04em] ${
-                          active ? "text-cherry-dk" : "text-ink-2"
-                        }`}
+          {/* Keyed by material: another material opens on its own shelf, with a fresh library search. */}
+          <ColorCard
+            key={selectedMaterial.name}
+            material={selectedMaterial.name}
+            owner={owner}
+            shelfCount={selectedMaterial.colors.length}
+            picked={toBuy}
+            onPick={chooseToBuy}
+            near={near}
+            onNear={chooseNear}
+            suggested={near !== null && closestShelfColor(selectedMaterial, near) === null}
+            shelf={
+              <>
+                {/* Three across on a phone, each spool shrinking to its column; from sm up
+                    they keep their full size and wrap. */}
+                <div
+                  role="radiogroup"
+                  aria-label={`${selectedMaterial.name} colors ${owner} has`}
+                  className="grid grid-cols-3 gap-x-[10px] gap-y-[13.2px] sm:flex sm:flex-wrap sm:gap-[13.2px]"
+                >
+                  {selectedMaterial.colors.map((c) => {
+                    const active = c.name === color;
+                    return (
+                      <button
+                        key={c.name}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        aria-label={`${c.name} filament`}
+                        onClick={() => {
+                          setColor(c.name);
+                          setToBuy(null);
+                        }}
+                        className="flex min-w-0 cursor-pointer flex-col items-center gap-[7px] border-0 bg-transparent p-0 sm:w-[110px]"
                       >
-                        {c.name}
-                      </span>
-                    </button>
-                  );
-                })}
+                        <FilamentSpool
+                          mode={c.mode}
+                          style={c.style}
+                          className="aspect-[100/144] w-full max-w-[100px]"
+                        />
+                        <span
+                          className={`text-center font-mono text-[11px] font-bold uppercase tracking-[0.04em] ${
+                            active ? "text-cherry-dk" : "text-ink-2"
+                          }`}
+                        >
+                          {c.name}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {near && !toBuy && closestShelfColor(selectedMaterial, near) === null && (
+                  <p aria-live="polite" className="m-0 mt-[13.2px] text-[13.5px] leading-[1.45] text-ink-2">
+                    Nothing {owner} has in {selectedMaterial.name} looks like your color. Look in Other colors for a
+                    spool {owner} can get, or pick one of these.
+                  </p>
+                )}
+              </>
+            }
+          />
+        </fieldset>
+        )}
+
+        {step === 2 && error}
+      </StepCard>
+
+      {/* ================= 3 · send it ================= */}
+      <StepCard
+        n={3}
+        title="Send it"
+        open={step === 3}
+        done={false}
+        summary={sendSummary}
+        disabled={busy}
+        onOpen={() => goTo(3)}
+        cardRef={(el) => void (cards.current[2] = el)}
+        footer={
+          <>
+            {back(2)}
+            <div className="flex flex-wrap items-end gap-[13.2px]">
+              {/* Amount sits by the send button: the last thing settled before it goes. */}
+              <div>
+                <Label htmlFor="quantity">Amount</Label>
+                <div className="inline-flex items-center gap-[6px] py-[3px]">
+                  <button
+                    type="button"
+                    onClick={() => stepQuantity(-1)}
+                    disabled={quantity <= 1}
+                    aria-label="One fewer"
+                    className={STEP_BUTTON}
+                  >
+                    <svg viewBox="0 0 20 20" width={18} height={18} aria-hidden="true">
+                      <path d="M4 10h12" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" />
+                    </svg>
+                  </button>
+                  <input
+                    id="quantity"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={MAX_QUANTITY}
+                    value={quantityDraft ?? quantity}
+                    onChange={(e) => {
+                      setQuantityDraft(e.target.value);
+                      // Only a whole number of at least one becomes the quantity. The
+                      // upper limit is left to the server, whose refusal says who to ask.
+                      const n = Number(e.target.value);
+                      if (Number.isInteger(n) && n >= 1) setQuantity(n);
+                    }}
+                    // Leaving the box settles it: whatever is not a quantity gives way
+                    // to the last one that was.
+                    onBlur={() => setQuantityDraft(null)}
+                    className="w-[48px] appearance-none rounded-chip border-0 bg-transparent px-[4px] py-[10px] text-center font-mono text-[16px] font-bold tabular-nums text-ink [-moz-appearance:textfield] focus:bg-cream-2 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => stepQuantity(1)}
+                    disabled={quantity >= MAX_QUANTITY}
+                    aria-label="One more"
+                    className={STEP_BUTTON}
+                  >
+                    <svg viewBox="0 0 20 20" width={18} height={18} aria-hidden="true">
+                      <path d="M4 10h12M10 4v12" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" />
+                    </svg>
+                  </button>
+                </div>
               </div>
-              {near && !toBuy && closestShelfColor(selectedMaterial, near) === null && (
-                <p aria-live="polite" className="m-0 mt-[13.2px] text-[13.5px] leading-[1.45] text-ink-2">
-                  Nothing {owner} has in {selectedMaterial.name} looks like your color. Look in Other colors for a
-                  spool {owner} can get, or pick one of these.
-                </p>
-              )}
-            </>
-          }
-        />
-      </fieldset>
-      )}
-
-      {/* ---- priority ---- */}
-      <div className="mt-[22px] max-w-[420px]">
-        <Label htmlFor="priority">How much does it matter?</Label>
-        <div role="radiogroup" aria-label="Priority" className="flex flex-wrap gap-[6px]">
-          {STORY_PRIORITIES.map((p) => {
-            const active = p === priority;
-            return (
-              <button
-                key={p}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => setPriority(p)}
-                className={`flex-1 cursor-pointer rounded-chip border-[3px] border-ink px-[10px] py-[8px] font-mono text-[12.5px] font-bold uppercase tracking-[0.06em] transition-colors ${
-                  active ? "bg-cherry-dk text-cream" : "bg-porcelain text-ink hover:bg-sun"
-                }`}
-              >
-                {PRIORITY_CHIP[p]?.label ?? p}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ---- note ---- */}
-      <div className="mt-[22px]">
-        {/* Named, not "he" — the printer owner is a role anyone can hold. */}
-        <Label htmlFor="note">Anything {owner} should know</Label>
-        <textarea
-          id="note"
-          rows={3}
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          maxLength={2000}
-          placeholder="No rush — needs to survive a bit of pulling."
-          className="w-full resize-y rounded-card border-[3px] border-ink bg-porcelain px-[15px] py-[12px] text-[16px] text-ink placeholder:text-ink-3"
-        />
-      </div>
-
-      {/* ---- actions ---- */}
-      <div className="mt-[26.4px] flex flex-wrap items-end justify-center gap-[13.2px]">
-        {/* Amount sits by the send button: the last thing settled before it goes. */}
-        <div>
-          <Label htmlFor="quantity">Amount</Label>
-          <div className="inline-flex items-center gap-[6px] py-[3px]">
-            <button
-              type="button"
-              onClick={() => stepQuantity(-1)}
-              disabled={quantity <= 1}
-              aria-label="One fewer"
-              className={STEP_BUTTON}
-            >
-              <svg viewBox="0 0 20 20" width={18} height={18} aria-hidden="true">
-                <path d="M4 10h12" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" />
-              </svg>
-            </button>
-            <input
-              id="quantity"
-              type="number"
-              inputMode="numeric"
-              min={1}
-              max={MAX_QUANTITY}
-              value={quantityDraft ?? quantity}
-              onChange={(e) => {
-                setQuantityDraft(e.target.value);
-                // Only a whole number of at least one becomes the quantity. The
-                // upper limit is left to the server, whose refusal says who to ask.
-                const n = Number(e.target.value);
-                if (Number.isInteger(n) && n >= 1) setQuantity(n);
-              }}
-              // Leaving the box settles it: whatever is not a quantity gives way
-              // to the last one that was.
-              onBlur={() => setQuantityDraft(null)}
-              className="w-[48px] appearance-none rounded-chip border-0 bg-transparent px-[4px] py-[10px] text-center font-mono text-[16px] font-bold tabular-nums text-ink [-moz-appearance:textfield] focus:bg-cream-2 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-            />
-            <button
-              type="button"
-              onClick={() => stepQuantity(1)}
-              disabled={quantity >= MAX_QUANTITY}
-              aria-label="One more"
-              className={STEP_BUTTON}
-            >
-              <svg viewBox="0 0 20 20" width={18} height={18} aria-hidden="true">
-                <path d="M4 10h12M10 4v12" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" />
-              </svg>
-            </button>
+              <Button type="submit" disabled={busy} className="px-[30px]">
+                {busy
+                  ? again ? "Sending…" : picked ? "Fetching it…" : `Sending… ${phase.percent}%`
+                  : again ? `Send it to ${owner} again` : `Send it to ${owner}`}
+              </Button>
+            </div>
+          </>
+        }
+      >
+        {/* ---- priority ---- */}
+        <div className="max-w-[420px]">
+          <Label htmlFor="priority">How much does it matter?</Label>
+          <div role="radiogroup" aria-label="Priority" className="flex flex-wrap gap-[6px]">
+            {STORY_PRIORITIES.map((p) => {
+              const active = p === priority;
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => setPriority(p)}
+                  className={`flex-1 cursor-pointer rounded-chip border-[3px] border-ink px-[10px] py-[8px] font-mono text-[12.5px] font-bold uppercase tracking-[0.06em] transition-colors ${
+                    active ? "bg-cherry-dk text-cream" : "bg-porcelain text-ink hover:bg-sun"
+                  }`}
+                >
+                  {PRIORITY_CHIP[p]?.label ?? p}
+                </button>
+              );
+            })}
           </div>
         </div>
-        <Button type="submit" disabled={!hasSomething || busy} className="px-[30px]">
-          {busy
-            ? again ? "Sending…" : picked ? "Fetching it…" : `Sending… ${phase.percent}%`
-            : again ? `Send it to ${owner} again` : `Send it to ${owner}`}
-        </Button>
-      </div>
+
+        {/* ---- note ---- */}
+        <div className="mt-[22px]">
+          {/* Named, not "he" — the printer owner is a role anyone can hold. */}
+          <Label htmlFor="note">Anything {owner} should know</Label>
+          <textarea
+            id="note"
+            rows={3}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={2000}
+            placeholder="No rush — needs to survive a bit of pulling."
+            className="w-full resize-y rounded-card border-[3px] border-ink bg-porcelain px-[15px] py-[12px] text-[16px] text-ink placeholder:text-ink-3"
+          />
+        </div>
+
+        {step === 3 && error}
+      </StepCard>
     </form>
   );
 }
