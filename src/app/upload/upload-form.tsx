@@ -1268,10 +1268,7 @@ export function UploadForm({
         )}
 
         {/* ---- colour first: the nearest on the shelf, or a spool to buy ---- */}
-        <section aria-labelledby="color-menu-heading">
-          <h3 id="color-menu-heading" className="m-0 mb-[11px] font-mono text-[12px] font-bold uppercase tracking-[0.1em] text-ink-2">
-            Color
-          </h3>
+        <section aria-label="Color">
           <ColorMenu
             colors={catalog.flatMap((item) => item.colors)}
             value={near}

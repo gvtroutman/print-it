@@ -606,67 +606,98 @@ export function ColorMenu({
     transition: "none",
   });
 
+  // How far across the indicator shows: 0 the circles, 1 the picker, following a drag.
+  const at = pull ? pull.p : own ? 1 : 0;
+
   return (
-    // Clips the slide at the card's edge, with room for the chosen circle's ring.
-    // Up and down still scrolls the page on a phone; sideways drags are ours.
-    <div
-      ref={boxRef}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerEnd}
-      onPointerCancel={onPointerEnd}
-      onClickCapture={(e) => {
-        if (!dragged.current) return;
-        e.preventDefault();
-        e.stopPropagation();
-      }}
-      className="relative -m-[10px] touch-pan-y select-none overflow-hidden transition-[height] duration-[400ms] ease-out motion-reduce:transition-none"
-      style={pull ? { height: pull.h, transition: "none" } : height === null ? undefined : { height }}
-    >
-      {/* ---- the circles: slide off to the left for your own ---- */}
-      <div
-        ref={menuRef}
-        inert={own}
-        className={`${PANEL} ${own ? "absolute inset-x-0 top-0 -translate-x-1/3 opacity-0" : "relative"}`}
-        style={pull ? held(1 - pull.p, -pull.p) : undefined}
-      >
-        <div role="radiogroup" aria-label="Color you want" className="flex flex-wrap gap-x-[8px] gap-y-[13.2px]">
-          <MenuCircle label="Any color" active={value === null} dashed onClick={() => onChange(null, 1)} />
-          {shelf.map((c) => (
-            <MenuCircle
-              key={c.id}
-              label={c.name}
-              active={!ownPicked && value !== null && value.toLowerCase() === c.hex.toLowerCase()}
-              background={c.style}
-              onClick={() => onChange(c.hex, 1)}
-            />
-          ))}
-          <div ref={ownRef} className="contents">
-            <MenuCircle label="Your own" active={ownPicked} background={RAINBOW} onClick={() => open(true)}>
+    <div>
+      {/* ---- two lines for the two halves: the one showing is filled in ---- */}
+      <div className="grid grid-cols-2 gap-[12px] px-[4px] pt-[4px] pb-[14px]">
+        {(
+          [
+            ["Shelf colors", 1 - at, false],
+            ["Your own color", at, true],
+          ] as const
+        ).map(([label, fill, toOwn]) => (
+          <button
+            key={label}
+            type="button"
+            aria-label={label}
+            aria-current={own === toOwn ? "true" : undefined}
+            onClick={() => own !== toOwn && open(toOwn)}
+            className="group cursor-pointer border-0 bg-transparent px-0 py-[6px]"
+          >
+            <span className="relative block h-[5px] overflow-hidden rounded-full bg-rule">
               <span
-                className="h-[20px] w-[20px] rounded-full border-[2.5px] border-ink"
-                style={{ background: ownPicked ? `linear-gradient(${tint}, ${tint}), ${CHECKER}` : "#ffffff" }}
+                className="absolute inset-0 rounded-full bg-ink transition-opacity duration-[400ms] ease-out group-hover:bg-cherry-dk motion-reduce:transition-none"
+                style={{ opacity: fill, transition: pull ? "none" : undefined }}
               />
-            </MenuCircle>
-          </div>
-        </div>
+            </span>
+          </button>
+        ))}
       </div>
 
-      {/* ---- the picker: slides in from the right to take their place ---- */}
+      {/* Clips the slide at the card's edge, with room for the chosen circle's ring.
+          Up and down still scrolls the page on a phone; sideways drags are ours. */}
       <div
-        ref={pickerRef}
-        inert={!own}
-        className={`${PANEL} ${own ? "relative" : "absolute inset-x-0 top-0 translate-x-1/3 opacity-0"}`}
-        style={pull ? held(pull.p, 1 - pull.p) : undefined}
+        ref={boxRef}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerEnd}
+        onPointerCancel={onPointerEnd}
+        onClickCapture={(e) => {
+          if (!dragged.current) return;
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        className="relative -m-[10px] touch-pan-y select-none overflow-hidden transition-[height] duration-[400ms] ease-out motion-reduce:transition-none"
+        style={pull ? { height: pull.h, transition: "none" } : height === null ? undefined : { height }}
       >
-        <button
-          type="button"
-          onClick={() => open(false)}
-          className="mb-[6px] cursor-pointer border-0 bg-transparent p-0 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-2 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
+        {/* ---- the circles: slide off to the left for your own ---- */}
+        <div
+          ref={menuRef}
+          inert={own}
+          className={`${PANEL} ${own ? "absolute inset-x-0 top-0 -translate-x-1/3 opacity-0" : "relative"}`}
+          style={pull ? held(1 - pull.p, -pull.p) : undefined}
         >
-          ← Shelf colors
-        </button>
-        <ColorPicker value={value} alpha={alpha} onChange={onChange} />
+          <div role="radiogroup" aria-label="Color you want" className="flex flex-wrap gap-x-[8px] gap-y-[13.2px]">
+            <MenuCircle label="Any color" active={value === null} dashed onClick={() => onChange(null, 1)} />
+            {shelf.map((c) => (
+              <MenuCircle
+                key={c.id}
+                label={c.name}
+                active={!ownPicked && value !== null && value.toLowerCase() === c.hex.toLowerCase()}
+                background={c.style}
+                onClick={() => onChange(c.hex, 1)}
+              />
+            ))}
+            <div ref={ownRef} className="contents">
+              <MenuCircle label="Your own" active={ownPicked} background={RAINBOW} onClick={() => open(true)}>
+                <span
+                  className="h-[20px] w-[20px] rounded-full border-[2.5px] border-ink"
+                  style={{ background: ownPicked ? `linear-gradient(${tint}, ${tint}), ${CHECKER}` : "#ffffff" }}
+                />
+              </MenuCircle>
+            </div>
+          </div>
+        </div>
+
+        {/* ---- the picker: slides in from the right to take their place ---- */}
+        <div
+          ref={pickerRef}
+          inert={!own}
+          className={`${PANEL} ${own ? "relative" : "absolute inset-x-0 top-0 translate-x-1/3 opacity-0"}`}
+          style={pull ? held(pull.p, 1 - pull.p) : undefined}
+        >
+          <button
+            type="button"
+            onClick={() => open(false)}
+            className="mb-[6px] cursor-pointer border-0 bg-transparent p-0 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-2 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
+          >
+            ← Shelf colors
+          </button>
+          <ColorPicker value={value} alpha={alpha} onChange={onChange} />
+        </div>
       </div>
     </div>
   );
