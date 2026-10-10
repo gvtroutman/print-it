@@ -47,6 +47,7 @@ import { SOURCE_LABEL, identifySource, type ImportSource } from "@/lib/import-so
 import { Button, Label, Notice } from "@/components/ui";
 import { MaterialFacts } from "@/components/material-chart";
 import { InkCube } from "@/components/ink-cube";
+import { NavIcon } from "@/components/nav-icons";
 
 import { ColorMenu, OtherColors, SLIDER, SwipePair, colorNameOf } from "./spool-finder";
 
@@ -374,8 +375,11 @@ function StepCard({
                 </span>
               </span>
               {done && (
-                <span className="flex-none font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3 underline decoration-2 underline-offset-4 group-hover:text-cherry-dk">
-                  Change
+                // A pencil sticker says "edit" without a word; the word is
+                // still there for a screen reader.
+                <span className="flex flex-none text-ink transition-transform duration-150 ease-out group-hover:scale-125 group-disabled:scale-100">
+                  <NavIcon name="pencil" />
+                  <span className="sr-only">Change</span>
                 </span>
               )}
             </span>

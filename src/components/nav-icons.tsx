@@ -15,7 +15,8 @@ export type NavIconName =
   | "spool"
   | "people"
   | "book"
-  | "bell";
+  | "bell"
+  | "pencil";
 
 /**
  * The wordmark's magnet letters, for the ones the theme has no token for.
@@ -121,6 +122,16 @@ const STICKERS: Record<NavIconName, Sticker> = {
     parts: [["M10 3c-3 0-5 2.3-5 5.2v3.3L3.5 14.5h13L15 11.5V8.2C15 5.3 13 3 10 3Z", MAGNET.yellow]],
     lines: "M10 1.5V3M8 16.5a2 2 0 0 0 4 0",
     tilt: -10,
+  },
+  // A pencil, point down to the left: edit this.
+  pencil: {
+    parts: [
+      ["M4.7 10.7l6.5-6.5 4.5 4.5-6.5 6.5Z", MAGNET.yellow],
+      ["M4.7 10.7l4.5 4.5L3 17Z", MAGNET.paper],
+      ["M3.5 15.1l1.4 1.4L3 17Z", "currentColor"],
+      ["M11.2 4.2l3-3 4.5 4.5-3 3Z", MAGNET.red],
+    ],
+    tilt: 4,
   },
 };
 
