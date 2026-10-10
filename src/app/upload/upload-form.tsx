@@ -294,8 +294,10 @@ function StepBadge({ n, done }: { n: StepNo; done: boolean }) {
  * stay mounted while folded, only hidden, so moving between cards never loses
  * a file, a typed word or the spool library's search.
  *
- * The open card can be folded too. With all three folded, none is pushed
- * aside, so they share the row evenly: the whole order at a glance.
+ * Tapping the open card's header folds it too, so a tap opens and closes a
+ * card, and opening one folds whichever was open. With all three folded,
+ * none is pushed aside, so they share the row evenly: the whole order at a
+ * glance.
  */
 function StepCard({
   n,
@@ -339,41 +341,33 @@ function StepCard({
         className={`h-full rounded-panel border-[3px] border-ink bg-porcelain ${open ? "shadow-stamp-lg" : "shadow-stamp"}`}
       >
         {open ? (
-          <div
-            className={`layers flex items-center gap-[11px] rounded-t-[13px] border-b-[3px] border-ink px-[17.6px] py-[11px] sm:px-[26.4px] ${STEP_ACCENT[n]}`}
-          >
-            <StepBadge n={n} done={false} />
-            {/* Focused when the card opens, so a screen reader hears where it landed. */}
-            <h2
-              id={headingId}
-              tabIndex={-1}
-              data-step-heading
-              className="m-0 min-w-0 flex-1 font-display text-[22px] leading-tight text-ink outline-none"
-            >
-              {title}
-            </h2>
-            <span className="flex-none font-mono text-[11.5px] font-bold uppercase tracking-[0.1em] text-ink">
-              {n} of 3
-            </span>
+          <h2 className="m-0">
+            {/* The whole header is the fold control. Focused when the card
+                opens, so a screen reader hears where it landed. */}
             <button
               type="button"
+              data-step-heading
               onClick={onClose}
               disabled={disabled}
-              aria-label={`Fold ${title}`}
-              title="Fold"
-              className="stamp grid h-[32px] w-[32px] flex-none cursor-pointer place-items-center rounded-full border-[3px] border-ink bg-porcelain p-0 text-ink hover:bg-cherry-wash disabled:cursor-not-allowed disabled:opacity-50"
+              aria-expanded
+              className={`layers flex w-full cursor-pointer items-center gap-[11px] rounded-t-[13px] border-0 border-b-[3px] border-ink px-[17.6px] py-[11px] text-left text-ink transition-[filter] hover:brightness-[0.96] disabled:cursor-not-allowed disabled:hover:brightness-100 sm:px-[26.4px] ${STEP_ACCENT[n]}`}
             >
-              <svg viewBox="0 0 20 20" width={14} height={14} aria-hidden="true">
-                <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" />
-              </svg>
+              <StepBadge n={n} done={false} />
+              <span id={headingId} className="min-w-0 flex-1 font-display text-[22px] leading-tight">
+                {title}
+              </span>
+              <span className="flex-none font-mono text-[11.5px] font-bold uppercase tracking-[0.1em]">
+                {n} of 3
+              </span>
             </button>
-          </div>
+          </h2>
         ) : (
           <button
             type="button"
             data-step-open
             onClick={onOpen}
             disabled={disabled}
+            aria-expanded={false}
             className="group flex h-full w-full cursor-pointer items-stretch rounded-[13px] border-0 bg-transparent p-0 text-left text-ink transition-colors hover:bg-sun-wash disabled:cursor-not-allowed disabled:hover:bg-transparent lg:flex-col"
           >
             <span
