@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { hslHex, type CatalogColorChoice, type SwatchChoice } from "@/lib/catalog";
 import { SwatchPhoto } from "@/components/swatch-photo";
@@ -17,24 +17,17 @@ type Search =
 /** How long typing has to pause before the library is asked again. */
 const DEBOUNCE_MS = 300;
 
-type Tab = "shelf" | "library";
-
 /**
- * One card for a material's colours, with two tabs. "In library" is the
- * owner's shelf — `shelf`, the spools already there — and is what the card
- * opens on. "Other colors" is the filamentcolors.xyz library: spools the
- * owner does not have but can buy.
- *
- * A pick in either tab replaces the other. The card opens on the other
- * colours when a spool to buy is already picked, and switches there when
- * `suggested` says nothing on the shelf looks like the colour picked up top.
- * Key it by material: another material starts back on its shelf.
+ * Spools the owner does not have but can buy, under the shelf colours: the
+ * filamentcolors.xyz library for one material. Folded to a button until it
+ * is wanted, so the library is not asked for nothing; it opens on its own
+ * when a spool to buy is already picked, or when `suggested` says nothing on
+ * the shelf looks like the colour picked up top. Key it by material: another
+ * material starts folded, with a fresh search.
  */
-export function ColorCard({
+export function OtherColors({
   material,
   owner,
-  shelf,
-  shelfCount,
   picked,
   onPick,
   near,
@@ -44,8 +37,6 @@ export function ColorCard({
 }: {
   material: string;
   owner: string;
-  shelf: ReactNode;
-  shelfCount: number;
   picked: SwatchChoice | null;
   onPick: (swatch: SwatchChoice | null) => void;
   near: string | null;
@@ -54,124 +45,51 @@ export function ColorCard({
   clear: boolean;
   suggested: boolean;
 }) {
-  const id = useId();
-  const [tab, setTab] = useState<Tab>(picked !== null || suggested ? "library" : "shelf");
-  // The library is only asked once its tab has been opened, then stays
-  // mounted so a search typed there survives a look back at the shelf.
-  const [visited, setVisited] = useState(tab === "library");
+  const [open, setOpen] = useState(picked !== null || suggested);
 
-  function show(next: Tab) {
-    setTab(next);
-    if (next === "library") setVisited(true);
-  }
-
-  // Another colour with nothing like it on the shelf opens the other colours,
-  // even after going back to the shelf.
+  // Another colour with nothing like it on the shelf opens the library, even after folding it.
   useEffect(() => {
-    if (suggested) show("library");
+    if (suggested) setOpen(true);
   }, [suggested, near]);
 
-  const tabs: { key: Tab; label: string; count?: number }[] = [
-    { key: "shelf", label: "In library", count: shelfCount },
-    { key: "library", label: "Other colors" },
-  ];
-
-  function onTabKey(e: React.KeyboardEvent) {
-    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight" && e.key !== "Home" && e.key !== "End") return;
-    e.preventDefault();
-    const next: Tab = e.key === "Home" ? "shelf" : e.key === "End" ? "library" : tab === "shelf" ? "library" : "shelf";
-    show(next);
-    document.getElementById(`${id}-tab-${next}`)?.focus();
-  }
-
-  return (
-    <div>
-      <div
-        role="tablist"
-        aria-label={`${material} colors`}
-        // Folder tabs on top of the card, not inside it: the open one is joined
-        // to the card by covering its top edge.
-        className="relative z-10 flex gap-[6px] px-[13.2px]"
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="cursor-pointer border-0 bg-transparent p-0 font-mono text-[11.5px] font-bold uppercase tracking-[0.08em] text-ink-2 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
       >
-        {tabs.map((t) => {
-          const active = t.key === tab;
-          return (
-            <button
-              key={t.key}
-              id={`${id}-tab-${t.key}`}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              aria-controls={`${id}-panel-${t.key}`}
-              tabIndex={active ? 0 : -1}
-              onClick={() => show(t.key)}
-              onKeyDown={onTabKey}
-              // The open tab sits on the card's edge, joined to its panel.
-              className={`-mb-[3px] flex cursor-pointer items-center gap-[7px] rounded-t-[12px] border-[3px] px-[14px] py-[8px] font-display text-[16px] font-bold transition-colors ${
-                active
-                  ? "border-ink border-b-porcelain bg-porcelain text-ink"
-                  : "border-transparent bg-transparent text-ink-3 hover:text-ink"
-              }`}
-            >
-              {t.label}
-              {t.count !== undefined && (
-                <span
-                  className={`rounded-full px-[7px] py-[1px] font-mono text-[11px] font-bold ${
-                    active ? "bg-sun text-ink" : "bg-cream-2 text-ink-2"
-                  }`}
-                >
-                  {t.count}
-                </span>
-              )}
-              {t.key === "library" && picked && (
-                <span aria-label="(picked)" className="h-[9px] w-[9px] rounded-full bg-cherry-dk" />
-              )}
-            </button>
-          );
-        })}
+        Other colors {owner} can get →
+      </button>
+    );
+  }
+  return (
+    <section aria-labelledby="other-colors-heading" className="rounded-panel border-[3px] border-ink bg-porcelain p-[17.6px] shadow-stamp">
+      <div className="mb-[8.8px] flex items-baseline justify-between gap-[13.2px]">
+        <h3 id="other-colors-heading" className="m-0 font-display text-[17px] font-bold text-ink">
+          Other colors
+        </h3>
+        {!picked && (
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="cursor-pointer border-0 bg-transparent p-0 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
+          >
+            Fold away
+          </button>
+        )}
       </div>
-      <div className="rounded-panel border-[3px] border-ink bg-porcelain shadow-stamp">
-        <div
-          id={`${id}-panel-shelf`}
-          role="tabpanel"
-          aria-labelledby={`${id}-tab-shelf`}
-          hidden={tab !== "shelf"}
-          className="p-[17.6px]"
-        >
-          {picked && (
-            <p aria-live="polite" className="m-0 mb-[13.2px] text-[13.5px] leading-[1.45] text-ink-2">
-              You picked <b className="text-ink">{picked.name}</b> from the other colors. Tap a spool here to switch to
-              one {owner} already has.
-            </p>
-          )}
-          {shelf}
-        </div>
-
-        <div
-          id={`${id}-panel-library`}
-          role="tabpanel"
-          aria-labelledby={`${id}-tab-library`}
-          hidden={tab !== "library"}
-          className="p-[17.6px]"
-        >
-          {visited && (
-            <SpoolFinder
-              material={material}
-              owner={owner}
-              picked={picked}
-              onPick={onPick}
-              onBack={() => {
-                onPick(null);
-                show("shelf");
-              }}
-              near={near}
-              onNear={onNear}
-              clear={clear}
-            />
-          )}
-        </div>
-      </div>
-    </div>
+      <SpoolFinder
+        material={material}
+        owner={owner}
+        picked={picked}
+        onPick={onPick}
+        onBack={() => onPick(null)}
+        near={near}
+        onNear={onNear}
+        clear={clear}
+      />
+    </section>
   );
 }
 
@@ -258,14 +176,14 @@ function SpoolFinder({
               onClick={onBack}
               className="mt-[4px] cursor-pointer border-0 bg-transparent p-0 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-2 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
             >
-              Back to the library
+              Use a shelf color instead
             </button>
           </div>
         </div>
       )}
       {picked && (
         <p className="m-0 mb-[13.2px] text-[13.5px] leading-[1.45] text-ink-2">
-          {owner} has to buy this spool first, so it can take a little longer than a color in the library.
+          {owner} has to buy this spool first, so it can take a little longer than a color on the shelf.
         </p>
       )}
 
@@ -492,7 +410,7 @@ function MenuCircle({
 }
 
 /**
- * The colour menu: every colour on the owner's shelf, across all materials,
+ * The colour menu: every colour on the shelf it is given (one material's, or all of them),
  * as a circle, then "Any color" and a rainbow circle for your own. The full
  * picker — rainbow, dark · light, see-through — only opens from that last
  * circle, or when the colour already picked is none of the shelf's: the

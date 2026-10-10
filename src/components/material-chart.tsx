@@ -129,7 +129,7 @@ export function MaterialFacts({
         <p className="m-0 mt-[6px] max-w-[520px] text-[14px] leading-[1.5] text-ink-2">
           {owner} picks the filament that best suits what you are asking for — strong enough, bendy enough,
           heat-proof enough, with the finish it deserves — from what is on the shelf. If what it is for is not
-          obvious from the files, say so in the note on the next card.
+          obvious from the files, say so in the note on the last card.
         </p>
       </div>
     );

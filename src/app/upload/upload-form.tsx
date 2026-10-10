@@ -45,11 +45,10 @@ const KIND_BADGE: Record<FileKind, { label: string; className: string }> = {
 
 import { SOURCE_LABEL, identifySource, type ImportSource } from "@/lib/import-source";
 import { Button, Label, Notice } from "@/components/ui";
-import { FilamentSpool } from "@/components/color-swatch";
 import { MaterialChart, MaterialFacts } from "@/components/material-chart";
 import { InkCube } from "@/components/ink-cube";
 
-import { ColorCard, ColorMenu, SwipePair, colorNameOf } from "./spool-finder";
+import { ColorMenu, OtherColors, SwipePair, colorNameOf } from "./spool-finder";
 
 /**
  * The shelf colour of a material that looks most like `hex`, or null when
@@ -267,11 +266,11 @@ function Dropdown({
   );
 }
 
-/** The three cards of the request board, in the order they are filled in. */
-type StepNo = 1 | 2 | 3;
+/** The four cards of the request board, in the order they are filled in. */
+type StepNo = 1 | 2 | 3 | 4;
 
 /** Each card's own colour, along its top when open and its edge when folded. */
-const STEP_ACCENT: Record<StepNo, string> = { 1: "bg-aqua", 2: "bg-sun", 3: "bg-mint" };
+const STEP_ACCENT: Record<StepNo, string> = { 1: "bg-aqua", 2: "bg-sun", 3: "bg-[#f4c531]", 4: "bg-mint" };
 
 /** Clear of the sticky header; the same as the cards' `scroll-mt` and the folded columns' `top`. */
 const BELOW_HEADER = 112;
@@ -297,7 +296,7 @@ function StepBadge({ n, done }: { n: StepNo; done: boolean }) {
  * a file, a typed word or the spool library's search.
  *
  * Tapping the open card's header folds it too, so a tap opens and closes a
- * card, and opening one folds whichever was open. With all three folded,
+ * card, and opening one folds whichever was open. With all four folded,
  * none is pushed aside, so they share the row evenly: the whole order at a
  * glance.
  */
@@ -336,7 +335,7 @@ function StepCard({
       ref={cardRef}
       aria-labelledby={headingId}
       className={`min-w-0 scroll-mt-[112px] ${
-        open || allFolded ? "lg:flex-1" : "lg:w-[148px] lg:flex-none xl:w-[184px]"
+        open || allFolded ? "lg:flex-1" : "lg:w-[132px] lg:flex-none xl:w-[156px]"
       }`}
     >
       <div
@@ -359,7 +358,7 @@ function StepCard({
                 {title}
               </span>
               <span className="flex-none font-mono text-[11.5px] font-bold uppercase tracking-[0.1em]">
-                {n} of 3
+                {n} of 4
               </span>
             </button>
           </h2>
@@ -486,7 +485,10 @@ export function UploadForm({
   // The colour picked from the rainbow at the top, before any material: it picks
   // the nearest shelf colour, or searches the library when the shelf has none.
   // `nearAlpha` is how solid it is; a see-through one looks for clear spools.
-  const [near, setNear] = useState<string | null>(null);
+  // Printing again lights the circle of the colour asked for last time.
+  const [near, setNear] = useState<string | null>(
+    initialColor && initialColor.mode !== "whatever" && /^#[0-9a-f]{6}$/i.test(initialColor.hex) ? initialColor.hex : null,
+  );
   const [nearAlpha, setNearAlpha] = useState(1);
   const [note, setNote] = useState(again?.note ?? "");
 
@@ -727,11 +729,11 @@ export function UploadForm({
       }
       if (!named) return "Say what it is — a few words is enough.";
     }
-    if (n === 2) {
-      if (material === null) return "Pick a material first — the chart shows what each one is good at, or pick Auto.";
-      if (!auto && color === null && toBuy === null) {
-        return `Pick a color in the library, or a spool ${owner} can get from Other colors.`;
-      }
+    if (n === 2 && material === null) {
+      return "Pick a material first — the chart shows what each one is good at, or pick Auto.";
+    }
+    if (n === 3 && material !== null && !auto && color === null && toBuy === null) {
+      return `Pick a color from the circles, or a spool ${owner} can get from Other colors.`;
     }
     return null;
   }
@@ -744,7 +746,7 @@ export function UploadForm({
     setReached((r) => (n > r ? n : r));
   }
 
-  /** Fold the open card, leaving all three folded side by side. */
+  /** Fold the open card, leaving all four folded side by side. */
   function foldAll() {
     moved.current = true;
     folded.current = step;
@@ -758,7 +760,7 @@ export function UploadForm({
     if (step === null) return;
     const problem = problemOn(step);
     if (problem) return setPhase({ kind: "error", message: problem });
-    goTo(step === 1 ? 2 : 3);
+    goTo((step + 1) as StepNo);
   }
 
   function submit(e: React.FormEvent) {
@@ -769,9 +771,9 @@ export function UploadForm({
     setQuantityDraft(null);
     // The Next buttons submit too, so Enter in a field moves on a card;
     // only the last card sends.
-    if (step !== 3) return advance();
+    if (step !== 4) return advance();
     // Anything still missing reopens the card it belongs on.
-    for (const n of [1, 2] as const) {
+    for (const n of [1, 2, 3] as const) {
       const problem = problemOn(n);
       if (problem) {
         goTo(n);
@@ -864,26 +866,46 @@ export function UploadForm({
     if (item.name !== material) setToBuy(null);
     else if (toBuy) return;
     setMaterial(item.name);
-    setColor(shelfColorFor(item, near)?.name ?? null);
+    const match = shelfColorFor(item, near);
+    setColor(match?.name ?? null);
+    // A circle picked from another material's shelf moves to this one's nearest.
+    if (near && match && match.mode !== "whatever" && /^#[0-9a-f]{6}$/i.test(match.hex)
+      && catalog.some((m) => m.colors.some((c) => c.hex.toLowerCase() === near.toLowerCase()))) {
+      setNear(match.hex);
+    }
   }
 
   /**
    * The shelf colour a material starts on: the one nearest the colour picked
-   * up top — none when nothing is near it, so the library opens instead — or
-   * Slate with no colour picked.
+   * up top — none when nothing is near it, so the library opens instead — or,
+   * with any colour, its "whatever" spool, else Slate.
    */
   function shelfColorFor(item: CatalogMaterialChoice, hex: string | null) {
     if (hex) return closestShelfColor(item, hex);
-    return item.colors.find((candidate) => candidate.name === "Slate") ?? item.colors[0]!;
+    return (
+      item.colors.find((candidate) => candidate.mode === "whatever") ??
+      item.colors.find((candidate) => candidate.name === "Slate") ??
+      item.colors[0]!
+    );
   }
 
-  /** A colour from the rainbow up top; null is any colour. A spool to buy already picked stays. */
-  function chooseNear(hex: string | null, alpha = 1) {
+  /**
+   * A colour from the circles or the rainbow; null is any colour. From the
+   * circles it is the shelf colour asked for, so it replaces a spool to buy
+   * when the shelf has one like it. From the library's own colour filter a
+   * spool to buy already picked stays.
+   */
+  function chooseNear(hex: string | null, alpha = 1, fromCircles = false) {
     setNear(hex);
     setNearAlpha(hex ? alpha : 1);
-    if (!selectedMaterial || toBuy) return;
-    if (hex) setColor(closestShelfColor(selectedMaterial, hex)?.name ?? null);
-    else if (color === null) setColor(shelfColorFor(selectedMaterial, null)!.name);
+    if (!selectedMaterial) return;
+    if (toBuy && !fromCircles) return;
+    const shelf = hex ? closestShelfColor(selectedMaterial, hex) : shelfColorFor(selectedMaterial, null);
+    if (toBuy) {
+      if (!shelf) return;
+      setToBuy(null);
+    }
+    if (hex || fromCircles || color === null) setColor(shelf?.name ?? null);
   }
 
   /** Back to the chart of the materials, with nothing picked. */
@@ -920,22 +942,22 @@ export function UploadForm({
       .filter(Boolean)
       .join(" · ") || "Nothing yet";
   const shelfColor = selectedMaterial?.colors.find((c) => c.name === color) ?? null;
-  const dotHex = auto ? near : toBuy?.hex ?? shelfColor?.hex ?? null;
-  const colorSummary =
-    material === null ? (
-      "Not picked yet"
-    ) : (
-      <>
-        {dotHex && /^#[0-9a-f]{6}$/i.test(dotHex) && (
-          <span
-            aria-hidden
-            className="mr-[6px] inline-block h-[11px] w-[11px] rounded-full border-2 border-ink align-[-1px]"
-            style={{ background: dotHex }}
-          />
-        )}
-        {material} · {auto ? autoColorName : toBuy ? `${toBuy.name}, to get` : color ?? "no color yet"}
-      </>
-    );
+  const materialSummary = material ?? "Not picked yet";
+  // Before a material, or left to the owner, the colour is the circle picked.
+  const byCircle = auto || selectedMaterial === null;
+  const dotHex = byCircle ? near : toBuy?.hex ?? shelfColor?.hex ?? null;
+  const colorSummary = (
+    <>
+      {dotHex && /^#[0-9a-f]{6}$/i.test(dotHex) && (
+        <span
+          aria-hidden
+          className="mr-[6px] inline-block h-[11px] w-[11px] rounded-full border-2 border-ink align-[-1px]"
+          style={{ background: dotHex }}
+        />
+      )}
+      {byCircle ? autoColorName : toBuy ? `${toBuy.name}, to get` : color ?? "No color yet"}
+    </>
+  );
   const sendSummary = `${PRIORITY_CHIP[priority]?.label ?? priority} priority · ${quantity} ${quantity === 1 ? "copy" : "copies"}`;
 
   const back = (to: StepNo) => (
@@ -965,7 +987,7 @@ export function UploadForm({
           // A lone child in the footer's justify-between row; mx-auto centres it.
           <div className="mx-auto">
             <Button type="submit" disabled={busy}>
-              Next: color
+              Next: material
             </Button>
           </div>
         }
@@ -1304,13 +1326,13 @@ export function UploadForm({
         {step === 1 && error}
       </StepCard>
 
-      {/* ================= 2 · color and material ================= */}
+      {/* ================= 2 · material ================= */}
       <StepCard
         n={2}
-        title="Color & material"
+        title="Material"
         open={step === 2}
         done={reached > 2 && problemOn(2) === null}
-        summary={colorSummary}
+        summary={materialSummary}
         disabled={busy}
         allFolded={step === null}
         onOpen={() => goTo(2)}
@@ -1320,7 +1342,7 @@ export function UploadForm({
           <>
             {back(1)}
             <Button type="submit" disabled={busy}>
-              Next: send it
+              Next: color
             </Button>
           </>
         }
@@ -1334,158 +1356,65 @@ export function UploadForm({
           </div>
         )}
 
-        {/* ---- colour first: the nearest on the shelf, or a spool to buy ---- */}
-        <section aria-label="Color">
-          <ColorMenu
-            colors={catalog.flatMap((item) => item.colors)}
-            value={near}
-            alpha={nearAlpha}
-            onChange={chooseNear}
-          />
-        </section>
+        {/* ---- the dropdown, then what the one picked is like ---- */}
+        <SwipePair
+          spill
+          second={aboutMaterial}
+          onShow={(next) => setAboutMaterial(next)}
+          labels={["Pick a filament", "About this filament"]}
+          first={
+            <div className="max-w-[420px]">
+              <label htmlFor="material" className="sr-only">
+                Material
+              </label>
+              <Dropdown
+                id="material"
+                options={[AUTO_MATERIAL, ...catalog.map((item) => item.name)]}
+                value={material}
+                onChange={chooseMaterial}
+                placeholder="Pick a filament, or Auto"
+                hint={(name) =>
+                  name === AUTO_MATERIAL
+                    ? `${owner} picks the one that best suits what you are printing.`
+                    : catalog.find((candidate) => candidate.name === name)?.description ?? ""
+                }
+              />
+            </div>
+          }
+          secondPanel={<MaterialFacts item={selectedMaterial} auto={auto} owner={owner} />}
+        />
 
-        <hr aria-hidden className="mx-0 my-[24px] border-0 border-t-[3px] border-dashed border-ink/25" />
-
-        {/* ---- material: the dropdown, then what the one picked is like ---- */}
-        <section aria-label="Material">
-          <SwipePair
-            spill
-            second={aboutMaterial}
-            onShow={(next) => setAboutMaterial(next)}
-            labels={["Pick a filament", "About this filament"]}
-            first={
-              <div className="max-w-[420px]">
-                <label htmlFor="material" className="sr-only">
-                  Material
-                </label>
-                <Dropdown
-                  id="material"
-                  // Auto first; with a colour picked, the materials that have it on the shelf come next.
-                  options={[
-                    AUTO_MATERIAL,
-                    ...(near
-                      ? [...catalog].sort((a, b) => Number(closestShelfColor(b, near) !== null) - Number(closestShelfColor(a, near) !== null))
-                      : catalog
-                    ).map((item) => item.name),
-                  ]}
-                  value={material}
-                  onChange={chooseMaterial}
-                  placeholder="Pick a filament, or Auto"
-                  hint={(name) => {
-                    if (name === AUTO_MATERIAL) return `${owner} picks the one that best suits what you are printing.`;
-                    const item = catalog.find((candidate) => candidate.name === name);
-                    if (!item) return "";
-                    if (!near) return item.description;
-                    const match = closestShelfColor(item, near);
-                    const stock = match ? `On the shelf in ${match.name}.` : `Not that color on the shelf — ${owner} can get one.`;
-                    return item.description ? `${stock} ${item.description}` : stock;
-                  }}
-                />
-              </div>
-            }
-            secondPanel={<MaterialFacts item={selectedMaterial} auto={auto} owner={owner} />}
-          />
-        </section>
-
-        {/* ---- colour, or the chart of the materials until one is picked ---- */}
-        {auto ? null : selectedMaterial === null ? (
+        {/* ---- the chart of the materials, until one is picked ---- */}
+        {material === null ? (
           <section className="mt-[22px]" aria-labelledby="compare-heading">
             <div className="mb-[8.8px] flex flex-wrap items-baseline justify-between gap-x-[13.2px] gap-y-[4px]">
               <h3 id="compare-heading" className="m-0 font-mono text-[12px] font-bold uppercase tracking-[0.1em] text-ink-2">
                 Which filament?
               </h3>
-              <p className="m-0 text-[13px] text-ink-3">Tap one to see its colors. More stickers, more of it. Five is the most.</p>
+              <p className="m-0 text-[13px] text-ink-3">Tap one to pick it. More stickers, more of it. Five is the most.</p>
             </div>
             <MaterialChart catalog={catalog} owner={owner} onPick={chooseMaterial} />
           </section>
         ) : (
-        <fieldset className="mt-[22px] border-0 p-0">
-          <div className="mb-[8.8px] flex flex-wrap items-baseline justify-between gap-x-[13.2px] gap-y-[4px]">
-            <legend className="float-left font-mono text-[12px] font-bold uppercase tracking-[0.1em] text-ink-2">
-              Color
-            </legend>
-            <button
-              type="button"
-              onClick={compareMaterials}
-              className="cursor-pointer border-0 bg-transparent p-0 font-mono text-[11.5px] font-bold uppercase tracking-[0.08em] text-ink-3 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
-            >
-              Compare materials
-            </button>
-          </div>
-          {/* Keyed by material: another material opens on its own shelf, with a fresh library search. */}
-          <ColorCard
-            key={selectedMaterial.name}
-            material={selectedMaterial.name}
-            owner={owner}
-            shelfCount={selectedMaterial.colors.length}
-            picked={toBuy}
-            onPick={chooseToBuy}
-            near={near}
-            onNear={(hex) => chooseNear(hex)}
-            clear={near !== null && nearAlpha <= SEE_THROUGH}
-            suggested={near !== null && closestShelfColor(selectedMaterial, near) === null}
-            shelf={
-              <>
-                {/* Three across on a phone, each spool shrinking to its column; from sm up
-                    they keep their full size and wrap. */}
-                <div
-                  role="radiogroup"
-                  aria-label={`${selectedMaterial.name} colors ${owner} has`}
-                  className="grid grid-cols-3 gap-x-[10px] gap-y-[13.2px] sm:flex sm:flex-wrap sm:gap-[13.2px]"
-                >
-                  {selectedMaterial.colors.map((c) => {
-                    const active = c.name === color;
-                    return (
-                      <button
-                        key={c.name}
-                        type="button"
-                        role="radio"
-                        aria-checked={active}
-                        aria-label={`${c.name} filament`}
-                        onClick={() => {
-                          setColor(c.name);
-                          setToBuy(null);
-                        }}
-                        className="flex min-w-0 cursor-pointer flex-col items-center gap-[7px] border-0 bg-transparent p-0 sm:w-[110px]"
-                      >
-                        <FilamentSpool
-                          mode={c.mode}
-                          style={c.style}
-                          className="aspect-[100/144] w-full max-w-[100px]"
-                        />
-                        <span
-                          className={`text-center font-mono text-[11px] font-bold uppercase tracking-[0.04em] ${
-                            active ? "text-cherry-dk" : "text-ink-2"
-                          }`}
-                        >
-                          {c.name}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-                {near && !toBuy && closestShelfColor(selectedMaterial, near) === null && (
-                  <p aria-live="polite" className="m-0 mt-[13.2px] text-[13.5px] leading-[1.45] text-ink-2">
-                    Nothing {owner} has in {selectedMaterial.name} looks like your color. Look in Other colors for a
-                    spool {owner} can get, or pick one of these.
-                  </p>
-                )}
-              </>
-            }
-          />
-        </fieldset>
+          <button
+            type="button"
+            onClick={compareMaterials}
+            className="mt-[17.6px] cursor-pointer border-0 bg-transparent p-0 font-mono text-[11.5px] font-bold uppercase tracking-[0.08em] text-ink-3 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
+          >
+            Compare materials
+          </button>
         )}
 
         {step === 2 && error}
       </StepCard>
 
-      {/* ================= 3 · send it ================= */}
+      {/* ================= 3 · color ================= */}
       <StepCard
         n={3}
-        title="Send it"
+        title="Color"
         open={step === 3}
-        done={false}
-        summary={sendSummary}
+        done={reached > 3 && problemOn(3) === null}
+        summary={colorSummary}
         disabled={busy}
         allFolded={step === null}
         onOpen={() => goTo(3)}
@@ -1494,6 +1423,66 @@ export function UploadForm({
         footer={
           <>
             {back(2)}
+            <Button type="submit" disabled={busy}>
+              Next: send it
+            </Button>
+          </>
+        }
+      >
+        {/* ---- the shelf as circles: the material's own, or every material's ---- */}
+        {/* Keyed by material: another shelf starts back on its circles. */}
+        <section aria-label="Color">
+          <ColorMenu
+            key={material ?? ""}
+            colors={selectedMaterial ? selectedMaterial.colors : catalog.flatMap((item) => item.colors)}
+            value={near}
+            alpha={nearAlpha}
+            onChange={(hex, alpha) => chooseNear(hex, alpha, true)}
+          />
+        </section>
+
+        {selectedMaterial && (
+          <>
+            {near && !toBuy && closestShelfColor(selectedMaterial, near) === null && (
+              <p aria-live="polite" className="m-0 mt-[13.2px] text-[13.5px] leading-[1.45] text-ink-2">
+                Nothing {owner} has in {selectedMaterial.name} looks like your color. Pick a spool {owner} can get
+                below, or one of the circles.
+              </p>
+            )}
+            <hr aria-hidden className="mx-0 my-[24px] border-0 border-t-[3px] border-dashed border-ink/25" />
+            {/* Keyed by material: another material starts folded, with a fresh library search. */}
+            <OtherColors
+              key={selectedMaterial.name}
+              material={selectedMaterial.name}
+              owner={owner}
+              picked={toBuy}
+              onPick={chooseToBuy}
+              near={near}
+              onNear={(hex) => chooseNear(hex)}
+              clear={near !== null && nearAlpha <= SEE_THROUGH}
+              suggested={near !== null && closestShelfColor(selectedMaterial, near) === null}
+            />
+          </>
+        )}
+
+        {step === 3 && error}
+      </StepCard>
+
+      {/* ================= 4 · send it ================= */}
+      <StepCard
+        n={4}
+        title="Send it"
+        open={step === 4}
+        done={false}
+        summary={sendSummary}
+        disabled={busy}
+        allFolded={step === null}
+        onOpen={() => goTo(4)}
+        onClose={foldAll}
+        cardRef={(el) => void (cards.current[3] = el)}
+        footer={
+          <>
+            {back(3)}
             <div className="flex flex-wrap items-end gap-[13.2px]">
               {/* Amount sits by the send button: the last thing settled before it goes. */}
               <div>
@@ -1590,7 +1579,7 @@ export function UploadForm({
           />
         </div>
 
-        {step === 3 && error}
+        {step === 4 && error}
       </StepCard>
     </form>
   );
