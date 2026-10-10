@@ -86,6 +86,7 @@ async function handleUpload(request: Request, user: Actor) {
     title: form.get("title") ?? "",
     material: form.get("material"),
     colorName: form.get("colorName") ?? "",
+    colorHex: form.get("colorHex") || null,
     swatchId: form.get("swatchId"),
     quantity: form.get("quantity"),
     priority: form.get("priority") ?? undefined,

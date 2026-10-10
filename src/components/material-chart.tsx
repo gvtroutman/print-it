@@ -109,6 +109,63 @@ export function MaterialChart({
 }
 
 /**
+ * One material, told on its own: what it suits, the owner's words about it,
+ * and its five marks in stickers. With `auto`, what leaving it to the owner
+ * means instead; with neither, a line saying where this fills in from.
+ */
+export function MaterialFacts({
+  item,
+  auto,
+  owner,
+}: {
+  item: CatalogMaterialChoice | null;
+  auto: boolean;
+  owner: string;
+}) {
+  if (auto) {
+    return (
+      <div aria-live="polite">
+        <p className="m-0 font-display text-[18px] font-bold text-ink">Auto</p>
+        <p className="m-0 mt-[6px] max-w-[520px] text-[14px] leading-[1.5] text-ink-2">
+          {owner} picks the filament that best suits what you are asking for — strong enough, bendy enough,
+          heat-proof enough, with the finish it deserves — from what is on the shelf. If what it is for is not
+          obvious from the files, say so in the note on the next card.
+        </p>
+      </div>
+    );
+  }
+  if (!item) {
+    return (
+      <p className="m-0 text-[14px] leading-[1.5] text-ink-3">
+        Pick a filament, or Auto, and what it is good at shows up here.
+      </p>
+    );
+  }
+  const traits = traitsFor(item.name, item.ratings);
+  return (
+    <div aria-live="polite">
+      <p className="m-0 font-display text-[18px] font-bold text-ink">{item.name}</p>
+      {traits?.goodFor && <p className="m-0 mt-[2px] text-[14px] leading-[1.45] text-ink-2">{traits.goodFor}</p>}
+      {item.description && <p className="m-0 mt-[6px] max-w-[520px] text-[14px] leading-[1.45] text-ink-2">{item.description}</p>}
+      <dl className="m-0 mt-[12px] grid max-w-[360px] grid-cols-[auto_1fr] items-center gap-x-[18px] gap-y-[6px]">
+        {TRAITS.map((trait) => {
+          const mark = traits?.ratings[trait.key] ?? null;
+          return (
+            <div key={trait.key} title={trait.blurb} className="contents">
+              <dt className="font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-ink-2">{trait.label}</dt>
+              <dd className="m-0 flex min-h-[24px] items-center">
+                <Marks trait={trait.key} mark={mark} />
+                <span className="sr-only">{mark === null ? "not rated" : `${mark} of ${TOP_MARK}`}</span>
+              </dd>
+            </div>
+          );
+        })}
+      </dl>
+    </div>
+  );
+}
+
+/**
  * One sticker per trait, in the menu stickers' style: a flat magnet colour
  * inside an ink line, on a 20 x 20 grid. `parts` are the filled shapes,
  * `lines` the open ink strokes drawn over them, and `ribbons` coloured open

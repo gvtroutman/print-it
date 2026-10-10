@@ -422,6 +422,11 @@ function pickName({ h, s, l }: Pick): string {
   return `${shade}${s < 0.45 ? "muted " : ""}${hue}`;
 }
 
+/** A colour of your own in words, for a ticket: "light orange", or "see-through light orange". */
+export function colorNameOf(hex: string, alpha = 1): string {
+  return `${alpha < 1 ? "see-through " : ""}${pickName(pickOf(hex, alpha))}`;
+}
+
 /** The pad: every hue across, vivid at the top fading to grey at the bottom. */
 const PAD_BACKGROUND = [
   "linear-gradient(to bottom, rgba(128,128,128,0), rgba(128,128,128,0.5), rgb(128,128,128))",
@@ -523,24 +528,11 @@ export function ColorMenu({
   // The colour of your own, shown in the middle of its rainbow circle.
   const tint = value ? `${value}${Math.round(alpha * 255).toString(16).padStart(2, "0")}` : "";
 
-  // The menu and the picker share one spot; it grows or shrinks to the one showing.
-  const menuRef = useRef<HTMLDivElement>(null);
+  // What slid in gets focus: the rainbow pad, or back to its circle.
   const pickerRef = useRef<HTMLDivElement>(null);
   const ownRef = useRef<HTMLDivElement>(null);
-  const [height, setHeight] = useState<number | null>(null);
-  useLayoutEffect(() => {
-    const el = (own ? pickerRef : menuRef).current;
-    if (!el) return;
-    const measure = () => setHeight(el.offsetHeight);
-    measure();
-    const watch = new ResizeObserver(measure);
-    watch.observe(el);
-    return () => watch.disconnect();
-  }, [own]);
-
   function open(next: boolean) {
     setOwn(next);
-    // Focus follows to what slid in: the rainbow pad, or back to its circle.
     requestAnimationFrame(() =>
       (next
         ? pickerRef.current?.querySelector<HTMLElement>("[role=slider]")
@@ -549,23 +541,103 @@ export function ColorMenu({
     );
   }
 
+  return (
+    <SwipePair
+      second={own}
+      onShow={(next, tapped) => (tapped ? open(next) : setOwn(next))}
+      labels={["Shelf colors", "Your own color"]}
+      first={
+        <div role="radiogroup" aria-label="Color you want" className="flex flex-wrap gap-x-[8px] gap-y-[13.2px]">
+          <MenuCircle label="Any color" active={value === null} dashed onClick={() => onChange(null, 1)} />
+          {shelf.map((c) => (
+            <MenuCircle
+              key={c.id}
+              label={c.name}
+              active={!ownPicked && value !== null && value.toLowerCase() === c.hex.toLowerCase()}
+              background={c.style}
+              onClick={() => onChange(c.hex, 1)}
+            />
+          ))}
+          <div ref={ownRef} className="contents">
+            <MenuCircle label="Your own" active={ownPicked} background={RAINBOW} onClick={() => open(true)}>
+              <span
+                className="h-[20px] w-[20px] rounded-full border-[2.5px] border-ink"
+                style={{ background: ownPicked ? `linear-gradient(${tint}, ${tint}), ${CHECKER}` : "#ffffff" }}
+              />
+            </MenuCircle>
+          </div>
+        </div>
+      }
+      secondPanel={
+        <div ref={pickerRef}>
+          <button
+            type="button"
+            onClick={() => open(false)}
+            className="mb-[6px] cursor-pointer border-0 bg-transparent p-0 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-2 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
+          >
+            ← Shelf colors
+          </button>
+          <ColorPicker value={value} alpha={alpha} onChange={onChange} />
+        </div>
+      }
+    />
+  );
+}
+
+/**
+ * Two panels sharing one spot, with two rounded lines above them saying
+ * which is showing. The second slides in from the right as the first slides
+ * off to the left; tapping a line, or dragging sideways, swaps them. The
+ * spot grows or shrinks to the panel showing. `spill` lets a popup inside a
+ * panel (a dropdown's open list) hang out below it rather than be clipped.
+ * `onShow` says whether a line was tapped, so the caller can move focus;
+ * a drag leaves focus where it was.
+ */
+export function SwipePair({
+  second,
+  onShow,
+  labels,
+  first,
+  secondPanel,
+  spill = false,
+}: {
+  second: boolean;
+  onShow: (second: boolean, tapped: boolean) => void;
+  labels: [string, string];
+  first: ReactNode;
+  secondPanel: ReactNode;
+  spill?: boolean;
+}) {
+  const firstRef = useRef<HTMLDivElement>(null);
+  const secondRef = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const el = (second ? secondRef : firstRef).current;
+    if (!el) return;
+    const measure = () => setHeight(el.offsetHeight);
+    measure();
+    const watch = new ResizeObserver(measure);
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [second]);
+
   // ---- dragging between the two: they follow the pointer, and swap past halfway or on a flick ----
   const boxRef = useRef<HTMLDivElement>(null);
   const gesture = useRef<{ id: number; x: number; y: number; dragging: boolean; lastX: number; lastT: number; vx: number } | null>(null);
   // A drag ends in a click on whatever it started on; that click is swallowed.
   const dragged = useRef(false);
-  /** Mid-drag: how far across, 0 the circles to 1 the picker, and the height between theirs. */
+  /** Mid-drag: how far across, 0 the first to 1 the second, and the height between theirs. */
   const [pull, setPull] = useState<{ p: number; h: number } | null>(null);
 
   function pullAt(x: number, startX: number) {
-    const p = clamp((own ? 1 : 0) - (x - startX) / (boxRef.current!.offsetWidth * SWIPE));
-    const [from, to] = [menuRef.current!.offsetHeight, pickerRef.current!.offsetHeight];
+    const p = clamp((second ? 1 : 0) - (x - startX) / (boxRef.current!.offsetWidth * SWIPE));
+    const [from, to] = [firstRef.current!.offsetHeight, secondRef.current!.offsetHeight];
     return { p, h: from + (to - from) * p };
   }
 
   function onPointerDown(e: React.PointerEvent) {
-    // The rainbow pad and the sliders keep their own drags.
-    if (e.button !== 0 || (e.target as Element).closest("[role=slider], input[type=range]")) return;
+    // The rainbow pad, the sliders and an open list keep their own drags.
+    if (e.button !== 0 || (e.target as Element).closest("[role=slider], input[type=range], [role=listbox]")) return;
     gesture.current = { id: e.pointerId, x: e.clientX, y: e.clientY, dragging: false, lastX: e.clientX, lastT: e.timeStamp, vx: 0 };
   }
 
@@ -595,7 +667,8 @@ export function ColorMenu({
     setTimeout(() => (dragged.current = false));
     // A flick goes the way it was thrown, however short; otherwise past halfway swaps.
     const flick = Math.abs(g.vx) > FLICK ? g.vx < 0 : null;
-    setOwn(e.type === "pointercancel" ? own : flick ?? pullAt(e.clientX, g.x).p > 0.5);
+    const next = e.type === "pointercancel" ? second : flick ?? pullAt(e.clientX, g.x).p > 0.5;
+    if (next !== second) onShow(next, false);
     setPull(null);
   }
 
@@ -606,38 +679,33 @@ export function ColorMenu({
     transition: "none",
   });
 
-  // How far across the indicator shows: 0 the circles, 1 the picker, following a drag.
-  const at = pull ? pull.p : own ? 1 : 0;
+  // How far across the lines show: 0 the first, 1 the second, following a drag.
+  const at = pull ? pull.p : second ? 1 : 0;
 
   return (
     <div>
-      {/* ---- two lines for the two halves: the one showing is filled in ---- */}
+      {/* ---- two lines for the two panels: the one showing is filled in ---- */}
       <div className="grid grid-cols-2 gap-[12px] px-[4px] pt-[4px] pb-[14px]">
-        {(
-          [
-            ["Shelf colors", 1 - at, false],
-            ["Your own color", at, true],
-          ] as const
-        ).map(([label, fill, toOwn]) => (
+        {([0, 1] as const).map((i) => (
           <button
-            key={label}
+            key={i}
             type="button"
-            aria-label={label}
-            aria-current={own === toOwn ? "true" : undefined}
-            onClick={() => own !== toOwn && open(toOwn)}
+            aria-label={labels[i]}
+            aria-current={second === (i === 1) ? "true" : undefined}
+            onClick={() => second !== (i === 1) && onShow(i === 1, true)}
             className="group cursor-pointer border-0 bg-transparent px-0 py-[6px]"
           >
             <span className="relative block h-[5px] overflow-hidden rounded-full bg-rule">
               <span
                 className="absolute inset-0 rounded-full bg-ink transition-opacity duration-[400ms] ease-out group-hover:bg-cherry-dk motion-reduce:transition-none"
-                style={{ opacity: fill, transition: pull ? "none" : undefined }}
+                style={{ opacity: i === 1 ? at : 1 - at, transition: pull ? "none" : undefined }}
               />
             </span>
           </button>
         ))}
       </div>
 
-      {/* Clips the slide at the card's edge, with room for the chosen circle's ring.
+      {/* Clips the slide at the card's edge, with room for a chosen circle's ring.
           Up and down still scrolls the page on a phone; sideways drags are ours. */}
       <div
         ref={boxRef}
@@ -650,60 +718,36 @@ export function ColorMenu({
           e.preventDefault();
           e.stopPropagation();
         }}
-        className="relative -m-[10px] touch-pan-y select-none overflow-hidden transition-[height] duration-[400ms] ease-out motion-reduce:transition-none"
+        className={`relative -m-[10px] touch-pan-y select-none transition-[height] duration-[400ms] ease-out motion-reduce:transition-none ${
+          spill ? "overflow-x-clip" : "overflow-hidden"
+        }`}
         style={pull ? { height: pull.h, transition: "none" } : height === null ? undefined : { height }}
       >
-        {/* ---- the circles: slide off to the left for your own ---- */}
+        {/* ---- the first: slides off to the left for the second ---- */}
         <div
-          ref={menuRef}
-          inert={own}
-          className={`${PANEL} ${own ? "absolute inset-x-0 top-0 -translate-x-1/3 opacity-0" : "relative"}`}
+          ref={firstRef}
+          inert={second}
+          className={`${PANEL} ${second ? "pointer-events-none absolute inset-x-0 top-0 -translate-x-1/3 opacity-0" : "relative"}`}
           style={pull ? held(1 - pull.p, -pull.p) : undefined}
         >
-          <div role="radiogroup" aria-label="Color you want" className="flex flex-wrap gap-x-[8px] gap-y-[13.2px]">
-            <MenuCircle label="Any color" active={value === null} dashed onClick={() => onChange(null, 1)} />
-            {shelf.map((c) => (
-              <MenuCircle
-                key={c.id}
-                label={c.name}
-                active={!ownPicked && value !== null && value.toLowerCase() === c.hex.toLowerCase()}
-                background={c.style}
-                onClick={() => onChange(c.hex, 1)}
-              />
-            ))}
-            <div ref={ownRef} className="contents">
-              <MenuCircle label="Your own" active={ownPicked} background={RAINBOW} onClick={() => open(true)}>
-                <span
-                  className="h-[20px] w-[20px] rounded-full border-[2.5px] border-ink"
-                  style={{ background: ownPicked ? `linear-gradient(${tint}, ${tint}), ${CHECKER}` : "#ffffff" }}
-                />
-              </MenuCircle>
-            </div>
-          </div>
+          {first}
         </div>
 
-        {/* ---- the picker: slides in from the right to take their place ---- */}
+        {/* ---- the second: slides in from the right to take its place ---- */}
         <div
-          ref={pickerRef}
-          inert={!own}
-          className={`${PANEL} ${own ? "relative" : "absolute inset-x-0 top-0 translate-x-1/3 opacity-0"}`}
+          ref={secondRef}
+          inert={!second}
+          className={`${PANEL} ${second ? "relative" : "pointer-events-none absolute inset-x-0 top-0 translate-x-1/3 opacity-0"}`}
           style={pull ? held(pull.p, 1 - pull.p) : undefined}
         >
-          <button
-            type="button"
-            onClick={() => open(false)}
-            className="mb-[6px] cursor-pointer border-0 bg-transparent p-0 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-2 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
-          >
-            ← Shelf colors
-          </button>
-          <ColorPicker value={value} alpha={alpha} onChange={onChange} />
+          {secondPanel}
         </div>
       </div>
     </div>
   );
 }
 
-/** Each half of the colour menu, sliding and fading as it swaps with the other. */
+/** Each panel of a swipe pair, sliding and fading as it swaps with the other. */
 const PANEL = "w-full p-[10px] transition-[opacity,translate] duration-[400ms] ease-out motion-reduce:transition-none";
 
 /** How far sideways, in pixels, a press has to move before it is a drag and not a tap. */

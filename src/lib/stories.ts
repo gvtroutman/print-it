@@ -643,7 +643,7 @@ export async function requeueStory(
     where: { AND: [{ id }, storyScope(actor)] },
     select: {
       id: true, title: true, quantity: true, priority: true, material: true,
-      colorName: true, swatchId: true, note: true, printSettings: true,
+      colorName: true, colorHex: true, swatchId: true, note: true, printSettings: true,
       filename: true, fileSize: true,
       mimeType: true, storageKey: true, dims: true, sourceUrl: true, uploaderId: true,
       links: true,
@@ -669,11 +669,13 @@ export async function requeueStory(
   // The colour is one choice made two ways — a shelf colour by name, or a
   // spool to buy by swatch — so naming either replaces both: a reprint of a
   // bought spool that names a shelf colour is that shelf colour.
-  const recoloured = changes.colorName !== undefined || changes.swatchId !== undefined;
+  const recoloured = changes.colorName !== undefined || changes.swatchId !== undefined || changes.colorHex !== undefined;
   const parsed = WishSchema.safeParse({
     title: pick("title"),
     material: pick("material"),
     colorName: recoloured ? changes.colorName ?? "" : src.colorName,
+    // Only an Auto ticket's own colour reads it; a shelf colour goes by name.
+    colorHex: recoloured ? changes.colorHex : src.colorHex,
     swatchId: recoloured ? changes.swatchId : src.swatchId,
     quantity: pick("quantity"),
     priority: pick("priority"),

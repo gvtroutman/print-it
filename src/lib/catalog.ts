@@ -6,6 +6,25 @@ export const COLOR_MODES = ["solid", "gradient", "whatever", "funfetti"] as cons
 export type ColorMode = (typeof COLOR_MODES)[number];
 
 /**
+ * What a "whatever" colour stands for where a single colour is needed: the
+ * 3D viewer and the audit tally. A neutral grey, because the colour is by
+ * definition not known yet. The rainbow is the swatch, not the model.
+ */
+export const WHATEVER_HEX = "#b6bcc2";
+export const WHATEVER_STYLE = "linear-gradient(135deg, #e4322f 0%, #f6c945 20%, #43aa8b 40%, #2787c9 60%, #7557c7 80%, #e4328c 100%)";
+
+/**
+ * The material a requester can leave to the owner: whichever filament best
+ * suits what the order is for. Not a catalogue row, so its colour is not tied
+ * to one material's shelf — any shelf colour by name, one of the requester's
+ * own by `colorHex`, or `ANY_COLOR`.
+ */
+export const AUTO_MATERIAL = "Auto";
+
+/** The colour name for "any colour will do". */
+export const ANY_COLOR = "Any color";
+
+/**
  * Sprinkles over a base colour, for clear filament with coloured flakes in it.
  * Each colour is one dot repeated on its own tile; the tile sizes don't share
  * factors, so the dots never line up into a visible grid. Fixed pixel sizes,
@@ -256,6 +275,14 @@ export const WishSchema = z.object({
   // see the refinement below. With a swatch the name is read from the
   // library, not from here, so this may be left empty.
   colorName: z.string().trim().max(40).optional().default(""),
+  colorHex: z
+    .string()
+    .regex(/^#[0-9a-f]{6}$/i, "That is not a color.")
+    .nullish()
+    .describe(
+      `Only with material "${AUTO_MATERIAL}": a color of the requester's own, named by colorName. ` +
+        "Ignored when colorName is a shelf color.",
+    ),
   swatchId: z.coerce
     .number("That is not a swatch.")
     .int("That is not a swatch.")

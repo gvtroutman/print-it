@@ -8,7 +8,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/authz";
 import { record } from "@/lib/audit";
-import { COLOR_MODES, MAX_MATERIAL_DESCRIPTION, funfettiStyle } from "@/lib/catalog";
+import { AUTO_MATERIAL, COLOR_MODES, MAX_MATERIAL_DESCRIPTION, WHATEVER_HEX, WHATEVER_STYLE, funfettiStyle } from "@/lib/catalog";
 import { TOP_MARK, TRAITS, asMark, type OwnerRatings } from "@/lib/filament-traits";
 
 const Name = z.string().trim().min(1).max(40).transform((value) => value.replace(/\s+/g, " "));
@@ -25,13 +25,6 @@ const OwnMark = z.string().trim().transform((value, ctx) => {
   }
   return mark;
 });
-/**
- * What a "whatever" colour stands for where a single colour is needed: the
- * 3D viewer and the audit tally. A neutral grey, because the colour is by
- * definition not known yet. The rainbow is the swatch, not the model.
- */
-const WHATEVER_HEX = "#b6bcc2";
-const WHATEVER_STYLE = "linear-gradient(135deg, #e4322f 0%, #f6c945 20%, #43aa8b 40%, #2787c9 60%, #7557c7 80%, #e4328c 100%)";
 const Direction = z.enum(["up", "down"]);
 const Mode = z.enum(COLOR_MODES);
 
@@ -71,6 +64,7 @@ export async function addMaterialAction(formData: FormData): Promise<void> {
   const admin = await requireAdmin();
   const parsed = Name.safeParse(formData.get("name"));
   if (!parsed.success) back("error", "Material names must be between 1 and 40 characters.");
+  if (parsed.data.toLowerCase() === AUTO_MATERIAL.toLowerCase()) back("error", `${AUTO_MATERIAL} is taken: it is what a request says to leave the filament to you.`);
 
   const last = await db.catalogMaterial.aggregate({ _max: { sortOrder: true } });
   try {
@@ -112,6 +106,7 @@ export async function editMaterialAction(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   const parsedName = Name.safeParse(formData.get("name"));
   if (!parsedName.success) back("error", "Material names must be between 1 and 40 characters.");
+  if (parsedName.data.toLowerCase() === AUTO_MATERIAL.toLowerCase()) back("error", `${AUTO_MATERIAL} is taken: it is what a request says to leave the filament to you.`);
   const material = await db.catalogMaterial.findUnique({ where: { id }, select: { name: true } });
   if (!material) back("error", "That material no longer exists.");
   try {

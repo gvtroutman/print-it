@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 import {
+  ANY_COLOR,
+  AUTO_MATERIAL,
   DEFAULT_STORY_PRIORITY,
   NEAR_ENOUGH,
   PRIORITY_CHIP,
@@ -44,10 +46,10 @@ const KIND_BADGE: Record<FileKind, { label: string; className: string }> = {
 import { SOURCE_LABEL, identifySource, type ImportSource } from "@/lib/import-source";
 import { Button, Label, Notice } from "@/components/ui";
 import { FilamentSpool } from "@/components/color-swatch";
-import { MaterialChart } from "@/components/material-chart";
+import { MaterialChart, MaterialFacts } from "@/components/material-chart";
 import { InkCube } from "@/components/ink-cube";
 
-import { ColorCard, ColorMenu } from "./spool-finder";
+import { ColorCard, ColorMenu, SwipePair, colorNameOf } from "./spool-finder";
 
 /**
  * The shelf colour of a material that looks most like `hex`, or null when
@@ -423,8 +425,10 @@ export function UploadForm({
   // the shelf. A material or colour the owner has since retired falls back to
   // the usual default, and `gone` says which, because a choice that quietly
   // changed under someone is one they will not notice until the print arrives.
+  // An order left to the owner is left to them again.
+  const againAuto = again?.material === AUTO_MATERIAL;
   const wanted = catalog.find((item) => item.name === again?.material);
-  const initialMaterial = again
+  const initialMaterial = again && !againAuto
     ? wanted ?? catalog.find((item) => item.name === "PETG") ?? catalog[0]!
     : null;
   const wantedColor = wanted?.colors.find((item) => item.name === again?.colorName);
@@ -434,7 +438,7 @@ export function UploadForm({
   const initialColor = initialMaterial && !initialSwatch
     ? wantedColor ?? initialMaterial.colors.find((item) => item.name === "Slate") ?? initialMaterial.colors[0]!
     : null;
-  const gone = again
+  const gone = again && !againAuto
     ? [
         !wanted
           ? again.material
@@ -464,7 +468,9 @@ export function UploadForm({
   const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
 
   const [title, setTitle] = useState(again?.title ?? "");
-  const [material, setMaterial] = useState<string | null>(initialMaterial?.name ?? null);
+  const [material, setMaterial] = useState<string | null>(againAuto ? AUTO_MATERIAL : initialMaterial?.name ?? null);
+  // Whether the material's facts are showing rather than its dropdown.
+  const [aboutMaterial, setAboutMaterial] = useState(false);
   const [quantity, setQuantity] = useState<number>(again?.quantity ?? 1);
   // What is in the amount box while it is being typed in, or null
   // when it simply shows `quantity`. Kept apart from the number because a box
@@ -657,7 +663,7 @@ export function UploadForm({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          url, fileId, title, material, colorName: color ?? "", swatchId: toBuy?.id ?? null,
+          url, fileId, title, material, ...wishColor,
           quantity, priority, note, links,
         }),
       });
@@ -692,7 +698,7 @@ export function UploadForm({
         // No printSettings: left out, the old ticket's carry across as they were.
         // Both colour fields, always: naming either replaces the old ticket's choice.
         body: JSON.stringify({
-          title, material, colorName: color ?? "", swatchId: toBuy?.id ?? null, quantity, priority, note,
+          title, material, ...wishColor, quantity, priority, note,
         }),
       });
       const body = await res.json().catch(() => ({}));
@@ -722,8 +728,8 @@ export function UploadForm({
       if (!named) return "Say what it is — a few words is enough.";
     }
     if (n === 2) {
-      if (material === null) return "Pick a material first — the chart shows what each one is good at.";
-      if (color === null && toBuy === null) {
+      if (material === null) return "Pick a material first — the chart shows what each one is good at, or pick Auto.";
+      if (!auto && color === null && toBuy === null) {
         return `Pick a color in the library, or a spool ${owner} can get from Other colors.`;
       }
     }
@@ -782,8 +788,9 @@ export function UploadForm({
     body.set("title", title);
     // Never null here: problemOn(2) has just said so.
     body.set("material", material!);
-    if (toBuy) body.set("swatchId", String(toBuy.id));
-    else if (color) body.set("colorName", color);
+    if (wishColor.swatchId !== null) body.set("swatchId", String(wishColor.swatchId));
+    else if (wishColor.colorName) body.set("colorName", wishColor.colorName);
+    if (wishColor.colorHex) body.set("colorHex", wishColor.colorHex);
     body.set("quantity", String(quantity));
     body.set("priority", priority);
     body.set("note", note);
@@ -831,7 +838,26 @@ export function UploadForm({
 
   const busy = phase.kind === "uploading";
   const selectedMaterial = catalog.find((item) => item.name === material) ?? null;
+  const auto = material === AUTO_MATERIAL;
+
+  // Left to the owner, the colour is the one picked up top, not a shelf spool:
+  // a shelf colour by name, one of your own by hex too, or any colour.
+  const shelfMatch = near !== null && nearAlpha === 1
+    ? catalog.flatMap((item) => item.colors).find((c) => c.mode !== "whatever" && c.hex.toLowerCase() === near.toLowerCase())
+    : undefined;
+  const autoColorName = near === null ? ANY_COLOR : shelfMatch?.name ?? colorNameOf(near, nearAlpha);
+  /** The colour half of the wish, as every way of sending it names it. */
+  const wishColor = auto
+    ? { colorName: autoColorName, colorHex: near !== null && !shelfMatch ? near : null, swatchId: null }
+    : { colorName: color ?? "", colorHex: null, swatchId: toBuy?.id ?? null };
+
   function chooseMaterial(next: string) {
+    if (next === AUTO_MATERIAL) {
+      setMaterial(AUTO_MATERIAL);
+      setColor(null);
+      setToBuy(null);
+      return;
+    }
     const item = catalog.find((candidate) => candidate.name === next);
     if (!item) return;
     // A spool to buy was one kind of filament; another material starts from its shelf.
@@ -894,7 +920,7 @@ export function UploadForm({
       .filter(Boolean)
       .join(" · ") || "Nothing yet";
   const shelfColor = selectedMaterial?.colors.find((c) => c.name === color) ?? null;
-  const dotHex = toBuy?.hex ?? shelfColor?.hex ?? null;
+  const dotHex = auto ? near : toBuy?.hex ?? shelfColor?.hex ?? null;
   const colorSummary =
     material === null ? (
       "Not picked yet"
@@ -907,7 +933,7 @@ export function UploadForm({
             style={{ background: dotHex }}
           />
         )}
-        {material} · {toBuy ? `${toBuy.name}, to get` : color ?? "no color yet"}
+        {material} · {auto ? autoColorName : toBuy ? `${toBuy.name}, to get` : color ?? "no color yet"}
       </>
     );
   const sendSummary = `${PRIORITY_CHIP[priority]?.label ?? priority} priority · ${quantity} ${quantity === 1 ? "copy" : "copies"}`;
@@ -1318,42 +1344,51 @@ export function UploadForm({
           />
         </section>
 
-        {/* ---- material ---- */}
-        <div className="mt-[22px] max-w-[420px]">
-          <Label htmlFor="material">Material</Label>
-          <Dropdown
-            id="material"
-            // With a colour picked, the materials that have it on the shelf come first.
-            options={(near
-              ? [...catalog].sort((a, b) => Number(closestShelfColor(b, near) !== null) - Number(closestShelfColor(a, near) !== null))
-              : catalog
-            ).map((item) => item.name)}
-            value={material}
-            onChange={chooseMaterial}
-            placeholder="Pick one, or compare them below"
-            hint={(name) => {
-              const item = catalog.find((candidate) => candidate.name === name);
-              if (!item) return "";
-              if (!near) return item.description;
-              const match = closestShelfColor(item, near);
-              const stock = match ? `On the shelf in ${match.name}.` : `Not that color on the shelf — ${owner} can get one.`;
-              return item.description ? `${stock} ${item.description}` : stock;
-            }}
-            describedBy={selectedMaterial?.description ? "material-about" : undefined}
+        <hr aria-hidden className="mx-0 my-[24px] border-0 border-t-[3px] border-dashed border-ink/25" />
+
+        {/* ---- material: the dropdown, then what the one picked is like ---- */}
+        <section aria-label="Material">
+          <SwipePair
+            spill
+            second={aboutMaterial}
+            onShow={(next) => setAboutMaterial(next)}
+            labels={["Pick a filament", "About this filament"]}
+            first={
+              <div className="max-w-[420px]">
+                <label htmlFor="material" className="sr-only">
+                  Material
+                </label>
+                <Dropdown
+                  id="material"
+                  // Auto first; with a colour picked, the materials that have it on the shelf come next.
+                  options={[
+                    AUTO_MATERIAL,
+                    ...(near
+                      ? [...catalog].sort((a, b) => Number(closestShelfColor(b, near) !== null) - Number(closestShelfColor(a, near) !== null))
+                      : catalog
+                    ).map((item) => item.name),
+                  ]}
+                  value={material}
+                  onChange={chooseMaterial}
+                  placeholder="Pick a filament, or Auto"
+                  hint={(name) => {
+                    if (name === AUTO_MATERIAL) return `${owner} picks the one that best suits what you are printing.`;
+                    const item = catalog.find((candidate) => candidate.name === name);
+                    if (!item) return "";
+                    if (!near) return item.description;
+                    const match = closestShelfColor(item, near);
+                    const stock = match ? `On the shelf in ${match.name}.` : `Not that color on the shelf — ${owner} can get one.`;
+                    return item.description ? `${stock} ${item.description}` : stock;
+                  }}
+                />
+              </div>
+            }
+            secondPanel={<MaterialFacts item={selectedMaterial} auto={auto} owner={owner} />}
           />
-          {selectedMaterial?.description && (
-            <p
-              id="material-about"
-              aria-live="polite"
-              className="m-0 mt-[8px] text-[14px] leading-[1.45] text-ink-2"
-            >
-              {selectedMaterial.description}
-            </p>
-          )}
-        </div>
+        </section>
 
         {/* ---- colour, or the chart of the materials until one is picked ---- */}
-        {selectedMaterial === null ? (
+        {auto ? null : selectedMaterial === null ? (
           <section className="mt-[22px]" aria-labelledby="compare-heading">
             <div className="mb-[8.8px] flex flex-wrap items-baseline justify-between gap-x-[13.2px] gap-y-[4px]">
               <h3 id="compare-heading" className="m-0 font-mono text-[12px] font-bold uppercase tracking-[0.1em] text-ink-2">

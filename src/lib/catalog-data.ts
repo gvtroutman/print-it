@@ -1,7 +1,15 @@
 import "server-only";
 
 import { db } from "@/lib/db";
-import type { CatalogMaterialChoice, ColorMode, Wish } from "@/lib/catalog";
+import {
+  ANY_COLOR,
+  AUTO_MATERIAL,
+  WHATEVER_HEX,
+  WHATEVER_STYLE,
+  type CatalogMaterialChoice,
+  type ColorMode,
+  type Wish,
+} from "@/lib/catalog";
 import { LibraryUnavailable, librarySwatch, swatchColour, swatchFits } from "@/lib/filament-library";
 
 /** Only materials with at least one available colour can be requested. */
@@ -91,7 +99,10 @@ export type SelectionResult =
  * prints the materials they print — and has to be that kind of filament.
  * Its name and colour come from the library, never from the form.
  */
-export async function resolveSelection(wish: Pick<Wish, "material" | "colorName" | "swatchId">): Promise<SelectionResult> {
+export async function resolveSelection(
+  wish: Pick<Wish, "material" | "colorName" | "swatchId"> & Partial<Pick<Wish, "colorHex">>,
+): Promise<SelectionResult> {
+  if (wish.material === AUTO_MATERIAL) return autoSelection(wish.colorName, wish.colorHex ?? null);
   if (wish.swatchId == null) {
     const found = await availableSelection(wish.material, wish.colorName);
     return found ? { ok: true, selection: { colorName: wish.colorName, ...found, toBuy: null } } : { ok: false, reason: "off" };
@@ -131,6 +142,29 @@ export async function resolveSelection(wish: Pick<Wish, "material" | "colorName"
       },
     },
   };
+}
+
+/**
+ * An Auto wish's colour. The owner picks the filament, so the colour is not
+ * held to one material's shelf: any colour, a shelf colour of any material
+ * by name, or the requester's own by hex. A spool to buy is a kind of
+ * filament, which Auto leaves open, so a swatch is not read.
+ */
+async function autoSelection(colorName: string, colorHex: string | null): Promise<SelectionResult> {
+  if (colorName === "" || colorName === ANY_COLOR) {
+    return { ok: true, selection: { colorName: ANY_COLOR, hex: WHATEVER_HEX, style: WHATEVER_STYLE, mode: "whatever", toBuy: null } };
+  }
+  const shelf = await db.catalogColor.findFirst({
+    where: { active: true, name: colorName, material: { active: true } },
+    orderBy: { material: { sortOrder: "asc" } },
+    select: { hex: true, style: true, mode: true },
+  });
+  if (shelf) return { ok: true, selection: { colorName, ...shelf, toBuy: null } };
+  if (colorHex) {
+    const hex = colorHex.toLowerCase();
+    return { ok: true, selection: { colorName, hex, style: hex, mode: "solid", toBuy: null } };
+  }
+  return { ok: false, reason: "off" };
 }
 
 /** What to tell the requester when `resolveSelection` says no. */
