@@ -1132,7 +1132,7 @@ export function UploadForm({
           {/* Important classes, because the cube sets its own size inline. */}
           <InkCube className="mx-auto mb-[8.8px] block !h-[72px] !w-[72px]" />
           <span className="block font-display text-[19px] text-ink">
-            {files.length > 0 ? "Drop more, or click to add" : "Drop files here, or click to choose"}
+            {files.length > 0 ? "Drop more, or click to add" : "Upload files"}
           </span>
           <span className="mt-[6px] block font-mono text-[12px] uppercase tracking-[0.04em] text-ink-3">
             {busy && !picked
@@ -1506,7 +1506,7 @@ export function UploadForm({
         )}
 
         {/* ---- the dropdown, and an info button that opens what the one picked is like below it ---- */}
-        <div className="flex max-w-[480px] items-start gap-[10px]">
+        <div className="flex max-w-[520px] items-center gap-[6px]">
           <div className="min-w-0 flex-1">
             <label htmlFor="material" className="sr-only">
               Material
@@ -1525,11 +1525,11 @@ export function UploadForm({
             aria-expanded={aboutMaterial}
             aria-controls="material-about"
             onClick={() => setAboutMaterial((on) => !on)}
-            className={`grid h-[54px] w-[54px] flex-none cursor-pointer place-items-center rounded-full border-[3px] border-ink font-display text-[22px] font-bold leading-none text-ink hover:bg-sun ${
-              aboutMaterial ? "bg-sun" : "bg-porcelain"
+            className={`grid h-[40px] w-[40px] flex-none cursor-pointer place-items-center border-0 bg-transparent p-0 text-ink transition-transform duration-150 hover:scale-115 motion-reduce:transition-none ${
+              aboutMaterial ? "scale-115" : ""
             }`}
           >
-            <span aria-hidden>i</span>
+            <NavIcon name="info" />
           </button>
         </div>
         <div

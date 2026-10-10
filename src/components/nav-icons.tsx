@@ -17,6 +17,7 @@ export type NavIconName =
   | "book"
   | "bell"
   | "pencil"
+  | "info"
   | "turtle"
   | "rabbit";
 
@@ -134,6 +135,12 @@ const STICKERS: Record<NavIconName, Sticker> = {
       ["M11.2 4.2l3-3 4.5 4.5-3 3Z", MAGNET.red],
     ],
     tilt: 4,
+  },
+  // A sky-blue "i": more about this.
+  info: {
+    parts: [["M10 2.5a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15Z", MAGNET.sky]],
+    lines: "M10 9.2v4.8M10 6.3v.1",
+    tilt: -5,
   },
   // A turtle plodding right: the bottom of the priority slider, whenever.
   turtle: {
