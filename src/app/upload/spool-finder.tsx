@@ -491,7 +491,8 @@ function MenuCircle({
  * as a circle, then "Any color" and a rainbow circle for your own. The full
  * picker — rainbow, dark · light, see-through — only opens from that last
  * circle, or when the colour already picked is none of the shelf's: the
- * circles slide off to the left as it slides in from the right.
+ * circles slide off to the left as it slides in from the right. Dragging
+ * sideways slides between the two by hand.
  */
 export function ColorMenu({
   colors,
@@ -548,17 +549,86 @@ export function ColorMenu({
     );
   }
 
+  // ---- dragging between the two: they follow the pointer, and swap past halfway or on a flick ----
+  const boxRef = useRef<HTMLDivElement>(null);
+  const gesture = useRef<{ id: number; x: number; y: number; dragging: boolean; lastX: number; lastT: number; vx: number } | null>(null);
+  // A drag ends in a click on whatever it started on; that click is swallowed.
+  const dragged = useRef(false);
+  /** Mid-drag: how far across, 0 the circles to 1 the picker, and the height between theirs. */
+  const [pull, setPull] = useState<{ p: number; h: number } | null>(null);
+
+  function pullAt(x: number, startX: number) {
+    const p = clamp((own ? 1 : 0) - (x - startX) / (boxRef.current!.offsetWidth * SWIPE));
+    const [from, to] = [menuRef.current!.offsetHeight, pickerRef.current!.offsetHeight];
+    return { p, h: from + (to - from) * p };
+  }
+
+  function onPointerDown(e: React.PointerEvent) {
+    // The rainbow pad and the sliders keep their own drags.
+    if (e.button !== 0 || (e.target as Element).closest("[role=slider], input[type=range]")) return;
+    gesture.current = { id: e.pointerId, x: e.clientX, y: e.clientY, dragging: false, lastX: e.clientX, lastT: e.timeStamp, vx: 0 };
+  }
+
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const g = gesture.current;
+    if (!g || g.id !== e.pointerId) return;
+    if (!g.dragging) {
+      const [dx, dy] = [e.clientX - g.x, e.clientY - g.y];
+      // Mostly up or down is a scroll, not a drag.
+      if (Math.abs(dy) > DRAG_START && Math.abs(dy) > Math.abs(dx)) return void (gesture.current = null);
+      if (Math.abs(dx) < DRAG_START) return;
+      g.dragging = true;
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
+    if (e.timeStamp > g.lastT) g.vx = (e.clientX - g.lastX) / (e.timeStamp - g.lastT);
+    g.lastX = e.clientX;
+    g.lastT = e.timeStamp;
+    setPull(pullAt(e.clientX, g.x));
+  }
+
+  function onPointerEnd(e: React.PointerEvent) {
+    const g = gesture.current;
+    if (!g || g.id !== e.pointerId) return;
+    gesture.current = null;
+    if (!g.dragging) return;
+    dragged.current = true;
+    setTimeout(() => (dragged.current = false));
+    // A flick goes the way it was thrown, however short; otherwise past halfway swaps.
+    const flick = Math.abs(g.vx) > FLICK ? g.vx < 0 : null;
+    setOwn(e.type === "pointercancel" ? own : flick ?? pullAt(e.clientX, g.x).p > 0.5);
+    setPull(null);
+  }
+
+  // Mid-drag the classes give way to where the pointer has them, with no easing.
+  const held = (opacity: number, shift: number): React.CSSProperties => ({
+    translate: `${shift * (100 / 3)}% 0`,
+    opacity,
+    transition: "none",
+  });
+
   return (
     // Clips the slide at the card's edge, with room for the chosen circle's ring.
+    // Up and down still scrolls the page on a phone; sideways drags are ours.
     <div
-      className="relative -m-[10px] overflow-hidden transition-[height] duration-[400ms] ease-out motion-reduce:transition-none"
-      style={height === null ? undefined : { height }}
+      ref={boxRef}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerEnd}
+      onPointerCancel={onPointerEnd}
+      onClickCapture={(e) => {
+        if (!dragged.current) return;
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+      className="relative -m-[10px] touch-pan-y select-none overflow-hidden transition-[height] duration-[400ms] ease-out motion-reduce:transition-none"
+      style={pull ? { height: pull.h, transition: "none" } : height === null ? undefined : { height }}
     >
       {/* ---- the circles: slide off to the left for your own ---- */}
       <div
         ref={menuRef}
         inert={own}
         className={`${PANEL} ${own ? "absolute inset-x-0 top-0 -translate-x-1/3 opacity-0" : "relative"}`}
+        style={pull ? held(1 - pull.p, -pull.p) : undefined}
       >
         <div role="radiogroup" aria-label="Color you want" className="flex flex-wrap gap-x-[8px] gap-y-[13.2px]">
           <MenuCircle label="Any color" active={value === null} dashed onClick={() => onChange(null, 1)} />
@@ -587,6 +657,7 @@ export function ColorMenu({
         ref={pickerRef}
         inert={!own}
         className={`${PANEL} ${own ? "relative" : "absolute inset-x-0 top-0 translate-x-1/3 opacity-0"}`}
+        style={pull ? held(pull.p, 1 - pull.p) : undefined}
       >
         <button
           type="button"
@@ -603,6 +674,15 @@ export function ColorMenu({
 
 /** Each half of the colour menu, sliding and fading as it swaps with the other. */
 const PANEL = "w-full p-[10px] transition-[opacity,translate] duration-[400ms] ease-out motion-reduce:transition-none";
+
+/** How far sideways, in pixels, a press has to move before it is a drag and not a tap. */
+const DRAG_START = 8;
+
+/** A drag across this share of the menu's width swaps all the way. */
+const SWIPE = 0.6;
+
+/** Pixels per millisecond that count as a flick. */
+const FLICK = 0.4;
 
 /**
  * A colour picker in three parts: a rainbow pad to aim a target at (hue
