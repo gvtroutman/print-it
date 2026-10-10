@@ -132,6 +132,7 @@ export function NavIcon({
   className = "",
   fill,
   flip = false,
+  edge = true,
 }: {
   name: NavIconName;
   className?: string;
@@ -139,6 +140,8 @@ export function NavIcon({
   fill?: string;
   /** Mirror it left to right, tilt and all: the bell swinging the other way. */
   flip?: boolean;
+  /** Show the white die-cut edge. The bell keeps it for when it is open. */
+  edge?: boolean;
 }) {
   const { parts, lines, tilt } = STICKERS[name];
   return (
@@ -157,7 +160,12 @@ export function NavIcon({
       strokeLinejoin="round"
     >
       {/* The die-cut edge: everything again in white, fatter, underneath. */}
-      <g stroke="var(--color-porcelain)" strokeWidth={2 + EDGE * 2} fill="var(--color-porcelain)">
+      <g
+        stroke="var(--color-porcelain)"
+        strokeWidth={2 + EDGE * 2}
+        fill="var(--color-porcelain)"
+        style={{ opacity: edge ? 1 : 0, transition: "opacity 160ms ease-out" }}
+      >
         {parts.map(([d], i) => (
           <path key={i} d={d} />
         ))}

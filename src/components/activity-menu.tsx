@@ -63,7 +63,8 @@ export function ActivityMenu({
         className="group relative flex h-[40px] w-[40px] cursor-pointer items-center justify-center rounded-full text-ink"
       >
         {/* Just the sticker, no button around it, so it is drawn a size up
-            and grows a touch on hover. A quiet bell is plain paper; with
+            and grows a touch on hover. Its white die-cut edge only shows
+            while the panel is open. A quiet bell is plain paper; with
             something new it goes yellow and swings the other way, clapper
             out on the left. */}
         <span className="flex scale-[1.3] transition-transform duration-[160ms] ease-out group-hover:scale-[1.45]">
@@ -71,6 +72,7 @@ export function ActivityMenu({
             name="bell"
             fill={unread > 0 ? undefined : "var(--color-cream-2)"}
             flip={unread > 0}
+            edge={open}
           />
         </span>
         {/* The count sits on the bell's shoulder, and only when there is
