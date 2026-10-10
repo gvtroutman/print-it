@@ -14,7 +14,8 @@ export type NavIconName =
   | "person"
   | "spool"
   | "people"
-  | "book";
+  | "book"
+  | "bell";
 
 /**
  * The wordmark's magnet letters, for the ones the theme has no token for.
@@ -114,6 +115,12 @@ const STICKERS: Record<NavIconName, Sticker> = {
     parts: [["M5 2.5h7l3.5 3.5v11.5H5z", MAGNET.paper]],
     lines: "M12 2.5V6h3.5M7.5 10h5M7.5 13h5",
     tilt: -4,
+  },
+  // A bell, mid-ring: notifications.
+  bell: {
+    parts: [["M10 3c-3 0-5 2.3-5 5.2v3.3L3.5 14.5h13L15 11.5V8.2C15 5.3 13 3 10 3Z", MAGNET.yellow]],
+    lines: "M10 1.5V3M8 16.5a2 2 0 0 0 4 0",
+    tilt: -10,
   },
 };
 

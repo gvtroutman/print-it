@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { dismiss, markAllRead, markRead } from "@/app/actions/notifications";
+import { NavIcon } from "@/components/nav-icons";
 
 export type FeedItem = {
   id: string;
@@ -14,9 +15,9 @@ export type FeedItem = {
 };
 
 /**
- * The Activity panel. Handoff §1: 360px, radius 14, lg shadow, a 160ms
- * fade-and-rise, an 8px dot per row, and a count badge that fills teal only
- * when something is unread. Each row has an X that takes it off the feed for
+ * The Notifications panel, behind a bell. Handoff §1: 360px, radius 14, lg
+ * shadow, a 160ms fade-and-rise, an 8px dot per row, and a count badge on the
+ * bell only when something is unread. Each row has an X that takes it off the feed for
  * good, and the panel's foot holds the places the activity leads to.
  */
 export function ActivityMenu({
@@ -57,16 +58,21 @@ export function ActivityMenu({
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="true"
-        className="stamp flex cursor-pointer items-center gap-[8px] rounded-chip border-[3px] border-ink bg-cream px-[15px] py-[6px] font-mono text-[12px] font-bold uppercase tracking-[0.08em] text-ink hover:bg-sun"
+        aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"}
+        title="Notifications"
+        className="stamp relative flex h-[40px] w-[40px] cursor-pointer items-center justify-center rounded-chip border-[3px] border-ink bg-cream text-ink hover:bg-sun"
       >
-        Activity
-        <span
-          className={`inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full px-[6px] text-[12px] font-bold tabular-nums ${
-            unread ? "bg-cherry-dk text-cream" : "bg-chrome text-ink-2"
-          }`}
-        >
-          {unread}
-        </span>
+        <NavIcon name="bell" />
+        {/* The count sits on the bell's shoulder, and only when there is
+            something to read: a bell with a 0 on it is just noise. */}
+        {unread > 0 && (
+          <span
+            aria-hidden
+            className="absolute -right-[10px] -top-[10px] inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full border-2 border-ink bg-cherry-dk px-[5px] font-mono text-[12px] font-bold tabular-nums text-cream"
+          >
+            {unread}
+          </span>
+        )}
       </button>
 
       {open && (

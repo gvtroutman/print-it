@@ -938,7 +938,7 @@ export async function buildOpenApiDocument() {
       "/api/notifications": {
         get: {
           tags: ["activity"],
-          summary: "Your Activity feed",
+          summary: "Your notifications",
           description:
             "Yours and only yours — there is no parameter naming a recipient, " +
             "because the session already does.",
@@ -1031,7 +1031,7 @@ export async function buildOpenApiDocument() {
           summary: "Dismiss one",
           description:
             "Take a notification off your feed for good — the X on a row in " +
-            "the Activity panel.\n\n" +
+            "the Notifications panel.\n\n" +
             "Somebody else's id is a no-op rather than a 404, for the same " +
             "reason as marking read.",
           parameters: [

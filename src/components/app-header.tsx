@@ -46,7 +46,7 @@ const NAV: Record<Actor["role"], NavGroup[]> = {
       items: [
         { label: "Materials", href: "/admin/catalog", icon: "spool" },
         { label: "Members", href: "/admin/invites", icon: "people" },
-        // The audit log is in the Activity menu, with History: it is the
+        // The audit log is in the Notifications menu, with History: it is the
         // record of what happened, not a place the work lives.
       ],
     },
