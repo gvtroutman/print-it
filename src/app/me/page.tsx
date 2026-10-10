@@ -5,6 +5,7 @@ import { printerName, requireUser, storyScope } from "@/lib/authz";
 import { storyRef } from "@/lib/scope";
 import { formatBytes } from "@/lib/models";
 import { relativeTime } from "@/lib/catalog";
+import { tornClass } from "@/lib/torn";
 import { AppHeader } from "@/components/app-header";
 import { Kicker, StatusChip } from "@/components/ui";
 import { FilamentSpool } from "@/components/color-swatch";
@@ -141,46 +142,48 @@ export default async function ProfilePage({
           {isAdmin ? "Everything the group has sent you" : "Your orders"}
         </h2>
 
-        <div className="overflow-hidden rounded-panel border-[3px] border-ink bg-porcelain shadow-stamp">
-          {stories.length === 0 ? (
-            <p className="m-0 p-[22px] font-mono text-[12px] uppercase tracking-[0.06em] text-ink-3">
-              {isAdmin ? "Nobody has sent you anything yet." : "No orders yet."}
-            </p>
-          ) : (
-            stories.map((story, i) => (
-              <div
-                key={story.id}
-                className={`flex flex-wrap items-center gap-[15px] p-[15px] ${
-                  i < stories.length - 1 ? "border-b-2 border-dashed border-rule" : ""
-                } ${story.status === "Declined" ? "bg-cream-2" : ""}`}
-              >
-                <FilamentSpool
-                  mode={story.colorMode}
-                  style={story.colorStyle ?? story.colorHex}
-                  className="h-[40px] w-[28px] flex-none"
-                />
-                <div className="min-w-[180px] flex-[1_1_240px]">
-                  <Link
-                    href={`/story/${story.id}`}
-                    className="block font-display text-[17px] leading-[1.2] text-ink hover:text-cherry-dk"
-                  >
-                    {story.title}
-                  </Link>
-                  <p className="m-0 mt-[3px] font-mono text-[11px] uppercase tracking-[0.04em] text-ink-3">
-                    {storyRef(story.id)} · {story.filename ?? "no model yet"}
-                    {isAdmin ? ` · ${story.uploader.name}` : ""} ·{" "}
-                    {relativeTime(story.createdAt)}
-                  </p>
+        <div className="torn-stamp">
+          <div className={`overflow-hidden rounded-panel border-[3px] border-ink bg-porcelain ${tornClass(stories.length)}`}>
+            {stories.length === 0 ? (
+              <p className="m-0 p-[22px] font-mono text-[12px] uppercase tracking-[0.06em] text-ink-3">
+                {isAdmin ? "Nobody has sent you anything yet." : "No orders yet."}
+              </p>
+            ) : (
+              stories.map((story, i) => (
+                <div
+                  key={story.id}
+                  className={`flex flex-wrap items-center gap-[15px] p-[15px] ${
+                    i < stories.length - 1 ? "border-b-2 border-dashed border-rule" : ""
+                  } ${story.status === "Declined" ? "bg-cream-2" : ""}`}
+                >
+                  <FilamentSpool
+                    mode={story.colorMode}
+                    style={story.colorStyle ?? story.colorHex}
+                    className="h-[40px] w-[28px] flex-none"
+                  />
+                  <div className="min-w-[180px] flex-[1_1_240px]">
+                    <Link
+                      href={`/story/${story.id}`}
+                      className="block font-display text-[17px] leading-[1.2] text-ink hover:text-cherry-dk"
+                    >
+                      {story.title}
+                    </Link>
+                    <p className="m-0 mt-[3px] font-mono text-[11px] uppercase tracking-[0.04em] text-ink-3">
+                      {storyRef(story.id)} · {story.filename ?? "no model yet"}
+                      {isAdmin ? ` · ${story.uploader.name}` : ""} ·{" "}
+                      {relativeTime(story.createdAt)}
+                    </p>
+                  </div>
+                  <StatusChip status={story.status} />
+                  {story.flagged && (
+                    <span className="rounded-chip border-2 border-ink bg-cherry px-[9px] py-[2px] font-mono text-[10.5px] font-bold uppercase text-ink">
+                      needs a look
+                    </span>
+                  )}
                 </div>
-                <StatusChip status={story.status} />
-                {story.flagged && (
-                  <span className="rounded-chip border-2 border-ink bg-cherry px-[9px] py-[2px] font-mono text-[10.5px] font-bold uppercase text-ink">
-                    needs a look
-                  </span>
-                )}
-              </div>
-            ))
-          )}
+              ))
+            )}
+          </div>
         </div>
 
         <p className="m-0 mt-[13.2px] font-mono text-[11px] uppercase tracking-[0.05em] text-ink-3">

@@ -238,6 +238,79 @@
   right: 16px;
 }
 
+/*
+ * A torn-off receipt: an edge cut into a row of teeth, as if the slip was
+ * ripped off the printer's roll. `.torn` tears the top; `.torn-both` adds the
+ * bottom, for a list too long to see both ends at once (`tornClass` in
+ * src/lib/torn.ts counts the rows). The torn edge's border becomes the tooth
+ * zone (transparent, so the card's own fill shows through) and the mask cuts
+ * the teeth. The 3px ink
+ * outline along them is painted as background layers, ink beyond the same
+ * zigzag moved in by 3px * sqrt(2), so `overflow-hidden` on the card cannot
+ * clip it the way it would a pseudo-element in the border.
+ *
+ * The mask also cuts away a box-shadow, so a torn card that should sit on its
+ * stamp shadow goes inside `.torn-stamp`, whose drop-shadow follows the teeth.
+ */
+.torn {
+  --tooth: 7px;
+  --lift: 4.25px;
+  --tear-up: conic-gradient(from 135deg at 50% 0, #000 90deg, #0000 0);
+  --tear-down: conic-gradient(from -45deg at 50% 100%, #000 90deg, #0000 0);
+  border-top: calc(var(--tooth) + var(--lift) + 1px) solid transparent;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  background-image:
+    conic-gradient(from 135deg at 50% 0, #0000 90deg, var(--color-ink) 0),
+    linear-gradient(var(--color-ink) 0 0);
+  background-origin: border-box;
+  background-size:
+    calc(2 * var(--tooth)) var(--tooth),
+    100% calc(var(--lift) + 1px);
+  background-position:
+    50% var(--lift),
+    50% 0;
+  background-repeat: repeat-x, no-repeat;
+  -webkit-mask:
+    linear-gradient(#000 0 0) bottom / 100% calc(100% - var(--tooth)) no-repeat,
+    var(--tear-up) top / calc(2 * var(--tooth)) var(--tooth) repeat-x;
+  mask:
+    linear-gradient(#000 0 0) bottom / 100% calc(100% - var(--tooth)) no-repeat,
+    var(--tear-up) top / calc(2 * var(--tooth)) var(--tooth) repeat-x;
+}
+.torn.torn-both {
+  border-bottom: calc(var(--tooth) + var(--lift) + 1px) solid transparent;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  background-image:
+    conic-gradient(from 135deg at 50% 0, #0000 90deg, var(--color-ink) 0),
+    linear-gradient(var(--color-ink) 0 0),
+    conic-gradient(from -45deg at 50% 100%, #0000 90deg, var(--color-ink) 0),
+    linear-gradient(var(--color-ink) 0 0);
+  background-size:
+    calc(2 * var(--tooth)) var(--tooth),
+    100% calc(var(--lift) + 1px),
+    calc(2 * var(--tooth)) var(--tooth),
+    100% calc(var(--lift) + 1px);
+  background-position:
+    50% var(--lift),
+    50% 0,
+    50% calc(100% - var(--lift)),
+    50% 100%;
+  background-repeat: repeat-x, no-repeat, repeat-x, no-repeat;
+  -webkit-mask:
+    linear-gradient(#000 0 0) center / 100% calc(100% - 2 * var(--tooth)) no-repeat,
+    var(--tear-up) top / calc(2 * var(--tooth)) var(--tooth) repeat-x,
+    var(--tear-down) bottom / calc(2 * var(--tooth)) var(--tooth) repeat-x;
+  mask:
+    linear-gradient(#000 0 0) center / 100% calc(100% - 2 * var(--tooth)) no-repeat,
+    var(--tear-up) top / calc(2 * var(--tooth)) var(--tooth) repeat-x,
+    var(--tear-down) bottom / calc(2 * var(--tooth)) var(--tooth) repeat-x;
+}
+.torn-stamp {
+  filter: drop-shadow(3px 3px 0 var(--color-ink));
+}
+
 /* ---------------------------------------------------------------------------
    Motion. Kept to the 150–300ms band; every one of these is interruptible and
    none of them animate layout.

@@ -5,6 +5,7 @@ import { nextStatus, storyRef } from "@/lib/scope";
 import { printerName, requireAdmin } from "@/lib/authz";
 import { formatBytes } from "@/lib/models";
 import { PRIORITY_RANK, quantityText, relativeTime } from "@/lib/catalog";
+import { tornClass } from "@/lib/torn";
 import { AppHeader } from "@/components/app-header";
 import { AdminActions } from "@/components/admin-actions";
 import { Kicker, Notice, StatusChip, PriorityChip, SpoolToBuyChip } from "@/components/ui";
@@ -81,7 +82,7 @@ export default async function QueuePage({
               {waiting.map((story) => (
                 <article
                   key={story.id}
-                  className="flex flex-wrap items-start gap-[17.6px] rounded-card border-[3px] border-ink bg-porcelain p-[15px]"
+                  className="flex flex-wrap items-start gap-[17.6px] rounded-card border-[3px] border-ink bg-porcelain p-[15px] torn"
                 >
                   <div className="min-w-[220px] flex-[1_1_280px]">
                     <p className="m-0 flex flex-wrap items-center gap-[8px] font-mono text-[11.5px] font-bold tracking-[0.06em] text-ink-3">
@@ -125,56 +126,58 @@ export default async function QueuePage({
         <h2 className="m-0 mb-[13.2px] font-display text-[24px] text-ink">
           Rest of the queue
         </h2>
-        <div className="overflow-hidden rounded-panel border-[3px] border-ink bg-porcelain shadow-stamp">
-          {working.length === 0 ? (
-            <p className="m-0 p-[22px] font-mono text-[12px] uppercase tracking-[0.06em] text-ink-3">
-              Nothing on the go.
-            </p>
-          ) : (
-            working.map((story, i) => (
-              <div
-                key={story.id}
-                className={`flex flex-wrap items-center gap-[15px] p-[15px] ${
-                  i < working.length - 1 ? "border-b-2 border-dashed border-rule" : ""
-                }`}
-              >
-                <FilamentSpool
-                  mode={story.colorMode}
-                  style={story.colorStyle ?? story.colorHex}
-                  className="h-[40px] w-[28px] flex-none"
-                />
-                <div className="min-w-[180px] flex-[1_1_240px]">
-                  <Link
-                    href={`/story/${story.id}`}
-                    className="block font-display text-[17px] leading-[1.2] text-ink hover:text-cherry-dk"
-                  >
-                    {story.title}
-                  </Link>
-                  <p className="m-0 mt-[3px] font-mono text-[11px] uppercase tracking-[0.04em] text-ink-3">
-                    {story.filename ?? "no model yet"} · {story.uploader.name} ·{" "}
-                    {relativeTime(story.createdAt)}
-                  </p>
-                </div>
-                <StatusChip status={story.status} />
-                {story.swatchId !== null && <SpoolToBuyChip />}
-                {story.flagged && (
-                  <span className="rounded-chip border-2 border-ink bg-cherry px-[9px] py-[2px] font-mono text-[10.5px] font-bold uppercase text-ink">
-                    needs a look
-                  </span>
-                )}
-                {nextStatus(story.status) && (
-                  <AdminActions
-                    storyId={story.id}
-                    status={story.status}
-                    flagged={story.flagged}
-                    flagReason={story.flagReason}
-                    from="/queue"
-                    compact
+        <div className="torn-stamp">
+          <div className={`overflow-hidden rounded-panel border-[3px] border-ink bg-porcelain ${tornClass(working.length)}`}>
+            {working.length === 0 ? (
+              <p className="m-0 p-[22px] font-mono text-[12px] uppercase tracking-[0.06em] text-ink-3">
+                Nothing on the go.
+              </p>
+            ) : (
+              working.map((story, i) => (
+                <div
+                  key={story.id}
+                  className={`flex flex-wrap items-center gap-[15px] p-[15px] ${
+                    i < working.length - 1 ? "border-b-2 border-dashed border-rule" : ""
+                  }`}
+                >
+                  <FilamentSpool
+                    mode={story.colorMode}
+                    style={story.colorStyle ?? story.colorHex}
+                    className="h-[40px] w-[28px] flex-none"
                   />
-                )}
-              </div>
-            ))
-          )}
+                  <div className="min-w-[180px] flex-[1_1_240px]">
+                    <Link
+                      href={`/story/${story.id}`}
+                      className="block font-display text-[17px] leading-[1.2] text-ink hover:text-cherry-dk"
+                    >
+                      {story.title}
+                    </Link>
+                    <p className="m-0 mt-[3px] font-mono text-[11px] uppercase tracking-[0.04em] text-ink-3">
+                      {story.filename ?? "no model yet"} · {story.uploader.name} ·{" "}
+                      {relativeTime(story.createdAt)}
+                    </p>
+                  </div>
+                  <StatusChip status={story.status} />
+                  {story.swatchId !== null && <SpoolToBuyChip />}
+                  {story.flagged && (
+                    <span className="rounded-chip border-2 border-ink bg-cherry px-[9px] py-[2px] font-mono text-[10.5px] font-bold uppercase text-ink">
+                      needs a look
+                    </span>
+                  )}
+                  {nextStatus(story.status) && (
+                    <AdminActions
+                      storyId={story.id}
+                      status={story.status}
+                      flagged={story.flagged}
+                      flagReason={story.flagReason}
+                      from="/queue"
+                      compact
+                    />
+                  )}
+                </div>
+              ))
+            )}
+          </div>
         </div>
 
         <div className="mt-[35.2px]">

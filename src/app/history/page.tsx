@@ -5,6 +5,7 @@ import { storyRef } from "@/lib/scope";
 import { HISTORY_STATUSES, listHistory } from "@/lib/stories";
 import { relativeTime } from "@/lib/catalog";
 import { knownMaterialNames } from "@/lib/catalog-data";
+import { tornClass } from "@/lib/torn";
 import { AppHeader } from "@/components/app-header";
 import { Kicker, StatusChip } from "@/components/ui";
 import { FilamentSpool } from "@/components/color-swatch";
@@ -132,49 +133,51 @@ export default async function HistoryPage({
           )}
         </form>
 
-        <div className="overflow-hidden rounded-panel border-[3px] border-ink bg-porcelain shadow-stamp">
-          {stories.length === 0 ? (
-            <p className="m-0 p-[22px] font-mono text-[12px] uppercase tracking-[0.06em] text-ink-3">
-              {hasFilter
-                ? "Nothing matches those filters."
-                : isAdmin
-                  ? "Nothing has finished yet."
-                  : "No finished prints yet — they land here once they're delivered, done or declined."}
-            </p>
-          ) : (
-            stories.map((story, i) => (
-              <div
-                key={story.id}
-                className={`flex flex-wrap items-center gap-[15px] p-[15px] ${
-                  i < stories.length - 1 ? "border-b-2 border-dashed border-rule" : ""
-                } ${story.status === "Declined" ? "bg-cream-2" : ""}`}
-              >
-                <FilamentSpool
-                  mode={story.colorMode}
-                  style={story.colorStyle ?? story.colorHex}
-                  className="h-[40px] w-[28px] flex-none"
-                />
-                <div className="min-w-[180px] flex-[1_1_240px]">
-                  <Link
-                    href={`/story/${story.id}`}
-                    className="block font-display text-[17px] leading-[1.2] text-ink hover:text-cherry-dk"
-                  >
-                    {story.title}
-                  </Link>
-                  <p className="m-0 mt-[3px] font-mono text-[11px] uppercase tracking-[0.04em] text-ink-3">
-                    {storyRef(story.id)} · {story.material}
-                    {isAdmin ? ` · ${story.uploader.name}` : ""} · {relativeTime(story.createdAt)}
-                  </p>
+        <div className="torn-stamp">
+          <div className={`overflow-hidden rounded-panel border-[3px] border-ink bg-porcelain ${tornClass(stories.length)}`}>
+            {stories.length === 0 ? (
+              <p className="m-0 p-[22px] font-mono text-[12px] uppercase tracking-[0.06em] text-ink-3">
+                {hasFilter
+                  ? "Nothing matches those filters."
+                  : isAdmin
+                    ? "Nothing has finished yet."
+                    : "No finished prints yet — they land here once they're delivered, done or declined."}
+              </p>
+            ) : (
+              stories.map((story, i) => (
+                <div
+                  key={story.id}
+                  className={`flex flex-wrap items-center gap-[15px] p-[15px] ${
+                    i < stories.length - 1 ? "border-b-2 border-dashed border-rule" : ""
+                  } ${story.status === "Declined" ? "bg-cream-2" : ""}`}
+                >
+                  <FilamentSpool
+                    mode={story.colorMode}
+                    style={story.colorStyle ?? story.colorHex}
+                    className="h-[40px] w-[28px] flex-none"
+                  />
+                  <div className="min-w-[180px] flex-[1_1_240px]">
+                    <Link
+                      href={`/story/${story.id}`}
+                      className="block font-display text-[17px] leading-[1.2] text-ink hover:text-cherry-dk"
+                    >
+                      {story.title}
+                    </Link>
+                    <p className="m-0 mt-[3px] font-mono text-[11px] uppercase tracking-[0.04em] text-ink-3">
+                      {storyRef(story.id)} · {story.material}
+                      {isAdmin ? ` · ${story.uploader.name}` : ""} · {relativeTime(story.createdAt)}
+                    </p>
+                  </div>
+                  <StatusChip status={story.status} />
+                  {/* Only the person who filed it may re-queue it — an admin
+                      seeing a ticket is not its owner (the action re-checks). */}
+                  {story.uploaderId === user.id && (
+                    <RequeueStory storyId={story.id} label={storyRef(story.id)} compact />
+                  )}
                 </div>
-                <StatusChip status={story.status} />
-                {/* Only the person who filed it may re-queue it — an admin
-                    seeing a ticket is not its owner (the action re-checks). */}
-                {story.uploaderId === user.id && (
-                  <RequeueStory storyId={story.id} label={storyRef(story.id)} compact />
-                )}
-              </div>
-            ))
-          )}
+              ))
+            )}
+          </div>
         </div>
       </main>
     </>

@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/authz";
 import { storyRef } from "@/lib/scope";
 import { LIST_LIMIT_MAX, listPeopleWithPrints, listStories } from "@/lib/stories";
 import { quantityText, relativeTime } from "@/lib/catalog";
+import { tornClass } from "@/lib/torn";
 import { AppHeader } from "@/components/app-header";
 import { Kicker, PriorityChip, StatusChip } from "@/components/ui";
 import { FilamentSpool } from "@/components/color-swatch";
@@ -130,41 +131,43 @@ export default async function PrintsByPersonPage({
                 ? `Nothing from ${whose} yet`
                 : `${total} ${total === 1 ? "ticket" : "tickets"} from ${whose}`}
             </h2>
-            <div className="overflow-hidden rounded-panel border-[3px] border-ink bg-porcelain shadow-stamp">
-              {stories.length === 0 ? (
-                <p className="m-0 p-[22px] font-mono text-[12px] uppercase tracking-[0.06em] text-ink-3">
-                  {total === 0 ? "No uploads." : "Nothing older than that."}
-                </p>
-              ) : (
-                stories.map((story, i) => (
-                  <div
-                    key={story.id}
-                    className={`flex flex-wrap items-center gap-[15px] p-[15px] ${
-                      i < stories.length - 1 ? "border-b-2 border-dashed border-rule" : ""
-                    } ${story.status === "Declined" ? "bg-cream-2" : ""}`}
-                  >
-                    <FilamentSpool
-                      mode={story.colorMode}
-                      style={story.colorStyle ?? story.colorHex}
-                      className="h-[40px] w-[28px] flex-none"
-                    />
-                    <div className="min-w-[180px] flex-[1_1_240px]">
-                      <Link
-                        href={`/story/${story.id}`}
-                        className="block break-words font-display text-[17px] leading-[1.2] text-ink hover:text-cherry-dk"
-                      >
-                        {story.title}
-                      </Link>
-                      <p className="m-0 mt-[3px] font-mono text-[11px] uppercase tracking-[0.04em] text-ink-3">
-                        {storyRef(story.id)} · {story.uploader.name} · {quantityText(story.quantity)} ·{" "}
-                        {story.material} · {relativeTime(story.createdAt)}
-                      </p>
+            <div className="torn-stamp">
+              <div className={`overflow-hidden rounded-panel border-[3px] border-ink bg-porcelain ${tornClass(stories.length)}`}>
+                {stories.length === 0 ? (
+                  <p className="m-0 p-[22px] font-mono text-[12px] uppercase tracking-[0.06em] text-ink-3">
+                    {total === 0 ? "No uploads." : "Nothing older than that."}
+                  </p>
+                ) : (
+                  stories.map((story, i) => (
+                    <div
+                      key={story.id}
+                      className={`flex flex-wrap items-center gap-[15px] p-[15px] ${
+                        i < stories.length - 1 ? "border-b-2 border-dashed border-rule" : ""
+                      } ${story.status === "Declined" ? "bg-cream-2" : ""}`}
+                    >
+                      <FilamentSpool
+                        mode={story.colorMode}
+                        style={story.colorStyle ?? story.colorHex}
+                        className="h-[40px] w-[28px] flex-none"
+                      />
+                      <div className="min-w-[180px] flex-[1_1_240px]">
+                        <Link
+                          href={`/story/${story.id}`}
+                          className="block break-words font-display text-[17px] leading-[1.2] text-ink hover:text-cherry-dk"
+                        >
+                          {story.title}
+                        </Link>
+                        <p className="m-0 mt-[3px] font-mono text-[11px] uppercase tracking-[0.04em] text-ink-3">
+                          {storyRef(story.id)} · {story.uploader.name} · {quantityText(story.quantity)} ·{" "}
+                          {story.material} · {relativeTime(story.createdAt)}
+                        </p>
+                      </div>
+                      <PriorityChip priority={story.priority} quiet />
+                      <StatusChip status={story.status} />
                     </div>
-                    <PriorityChip priority={story.priority} quiet />
-                    <StatusChip status={story.status} />
-                  </div>
-                ))
-              )}
+                  ))
+                )}
+              </div>
             </div>
             {nextCursor !== null && (
               <p className="m-0 mt-[17.6px]">
