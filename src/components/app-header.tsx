@@ -151,13 +151,13 @@ export async function AppHeader({
                       key={item.href}
                       href={item.href}
                       aria-current={current ? "page" : undefined}
-                      className={`flex items-center gap-[8px] rounded-chip border-2 px-[13px] py-[8px] font-mono text-[12.5px] font-bold uppercase tracking-[0.08em] transition-colors sm:px-[15px] sm:py-[7px] ${
+                      className={`flex items-center gap-[10px] rounded-chip border-2 px-[13px] py-[8px] font-mono text-[12.5px] font-bold uppercase tracking-[0.08em] transition-colors sm:px-[15px] sm:py-[7px] ${
                         current
                           ? "border-ink bg-sun text-ink"
                           : "border-transparent text-ink hover:border-ink hover:bg-cream-2"
                       }`}
                     >
-                      <NavIcon name={item.icon} />
+                      <NavIcon name={item.icon} size={36} />
                       {item.label}
                     </Link>
                   );

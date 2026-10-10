@@ -73,10 +73,10 @@ const STICKERS: Record<NavIconName, Sticker> = {
   // A collection box with a heart on the front: the usual "donate" mark.
   jar: {
     parts: [
-      ["M3 7h14v10H3z", MAGNET.teal],
-      ["M10 15.5c-2.4-1.7-4-3.1-4-4.8a2.1 2.1 0 0 1 4-1 2.1 2.1 0 0 1 4 1c0 1.7-1.6 3.1-4 4.8Z", MAGNET.red],
+      ["M2.5 3.5h15v14h-15z", MAGNET.teal],
+      ["M10 14c-2.4-1.7-4-3.1-4-4.8a2.1 2.1 0 0 1 4-1 2.1 2.1 0 0 1 4 1c0 1.7-1.6 3.1-4 4.8Z", MAGNET.red],
     ],
-    lines: "M2 7h16",
+    lines: "M1.5 3.5h17",
     tilt: 6,
   },
   // A box with a tick: to do.
@@ -176,8 +176,11 @@ export function NavIcon({
   fill,
   flip = false,
   edge = true,
+  size = 28,
 }: {
   name: NavIconName;
+  /** Pixels across. The menus draw theirs a size up from the inline 28. */
+  size?: number;
   className?: string;
   /** Paint every part this colour instead of its own, e.g. a quiet bell. */
   fill?: string;
@@ -194,8 +197,13 @@ export function NavIcon({
       // Bigger than the line it sits on; the negative margin keeps the chip
       // the height the text alone would give it, so the sticker overhangs
       // into the padding like one stuck on afterwards.
-      className={`-my-[5px] h-[28px] w-[28px] shrink-0 ${className}`}
-      style={{ transform: `${flip ? "scaleX(-1) " : ""}rotate(${tilt}deg)` }}
+      className={`shrink-0 ${className}`}
+      style={{
+        width: size,
+        height: size,
+        marginBlock: -(size - 18) / 2,
+        transform: `${flip ? "scaleX(-1) " : ""}rotate(${tilt}deg)`,
+      }}
       fill="none"
       stroke="currentColor"
       strokeWidth={2}

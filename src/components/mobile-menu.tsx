@@ -98,13 +98,13 @@ export function MobileMenu({
                       href={item.href}
                       onClick={() => setOpen(false)}
                       aria-current={current ? "page" : undefined}
-                      className={`flex items-center gap-[10px] rounded-chip border-2 px-[13px] py-[9px] font-mono text-[12.5px] font-bold uppercase tracking-[0.08em] ${
+                      className={`flex items-center gap-[12px] rounded-chip border-2 px-[13px] py-[9px] font-mono text-[12.5px] font-bold uppercase tracking-[0.08em] ${
                         current
                           ? "border-ink bg-sun text-ink"
                           : "border-transparent text-ink hover:border-ink hover:bg-cream-2"
                       }`}
                     >
-                      <NavIcon name={item.icon} />
+                      <NavIcon name={item.icon} size={36} />
                       {item.label}
                     </Link>
                   );
