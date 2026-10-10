@@ -293,15 +293,20 @@ function StepBadge({ n, done }: { n: StepNo; done: boolean }) {
  * saying what was settled there, and tapping it opens it again. The fields
  * stay mounted while folded, only hidden, so moving between cards never loses
  * a file, a typed word or the spool library's search.
+ *
+ * The open card can be folded too. With all three folded, none is pushed
+ * aside, so they share the row evenly: the whole order at a glance.
  */
 function StepCard({
   n,
   title,
   open,
+  allFolded,
   done,
   summary,
   disabled,
   onOpen,
+  onClose,
   cardRef,
   footer,
   children,
@@ -309,11 +314,14 @@ function StepCard({
   n: StepNo;
   title: string;
   open: boolean;
+  /** No card is open, so the folded ones share the row. */
+  allFolded: boolean;
   done: boolean;
   /** What the folded card says about this step. */
   summary: ReactNode;
   disabled: boolean;
   onOpen: () => void;
+  onClose: () => void;
   cardRef: (el: HTMLElement | null) => void;
   footer: ReactNode;
   children: ReactNode;
@@ -323,7 +331,9 @@ function StepCard({
     <section
       ref={cardRef}
       aria-labelledby={headingId}
-      className={`min-w-0 scroll-mt-[112px] ${open ? "lg:flex-1" : "lg:w-[148px] lg:flex-none xl:w-[184px]"}`}
+      className={`min-w-0 scroll-mt-[112px] ${
+        open || allFolded ? "lg:flex-1" : "lg:w-[148px] lg:flex-none xl:w-[184px]"
+      }`}
     >
       <div
         className={`h-full rounded-panel border-[3px] border-ink bg-porcelain ${open ? "shadow-stamp-lg" : "shadow-stamp"}`}
@@ -345,10 +355,23 @@ function StepCard({
             <span className="flex-none font-mono text-[11.5px] font-bold uppercase tracking-[0.1em] text-ink">
               {n} of 3
             </span>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={disabled}
+              aria-label={`Fold ${title}`}
+              title="Fold"
+              className="stamp grid h-[32px] w-[32px] flex-none cursor-pointer place-items-center rounded-full border-[3px] border-ink bg-porcelain p-0 text-ink hover:bg-cherry-wash disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <svg viewBox="0 0 20 20" width={14} height={14} aria-hidden="true">
+                <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" />
+              </svg>
+            </button>
           </div>
         ) : (
           <button
             type="button"
+            data-step-open
             onClick={onOpen}
             disabled={disabled}
             className="group flex h-full w-full cursor-pointer items-stretch rounded-[13px] border-0 bg-transparent p-0 text-left text-ink transition-colors hover:bg-sun-wash disabled:cursor-not-allowed disabled:hover:bg-transparent lg:flex-col"
@@ -467,17 +490,27 @@ export function UploadForm({
   const [nearAlpha, setNearAlpha] = useState(1);
   const [note, setNote] = useState(again?.note ?? "");
 
-  // The card that is open, and the furthest one reached by moving on.
-  const [step, setStep] = useState<StepNo>(1);
+  // The card that is open (null when all are folded), and the furthest one
+  // reached by moving on.
+  const [step, setStep] = useState<StepNo | null>(1);
   const [reached, setReached] = useState<StepNo>(1);
   const cards = useRef<(HTMLElement | null)[]>([]);
   // Off until a card is opened, so the page does not grab focus as it loads.
   const moved = useRef(false);
+  // The card last folded by its own button, so focus can land on it folded.
+  const folded = useRef<StepNo | null>(null);
 
   // The card just opened gets focus and, when its top is out of sight, the
   // window: on a phone the one before folds into a bar above it.
   useEffect(() => {
     if (!moved.current) return;
+    if (step === null) {
+      // Focus stays where it was: on the card just folded, now a button.
+      if (folded.current) {
+        cards.current[folded.current - 1]?.querySelector<HTMLElement>("[data-step-open]")?.focus();
+      }
+      return;
+    }
     const card = cards.current[step - 1];
     if (!card) return;
     card.querySelector<HTMLElement>("[data-step-heading]")?.focus({ preventScroll: true });
@@ -711,8 +744,18 @@ export function UploadForm({
     setReached((r) => (n > r ? n : r));
   }
 
+  /** Fold the open card, leaving all three folded side by side. */
+  function foldAll() {
+    moved.current = true;
+    folded.current = step;
+    setPhase({ kind: "idle" });
+    setQuantityDraft(null);
+    setStep(null);
+  }
+
   /** On to the next card, once this one is settled. */
   function advance() {
+    if (step === null) return;
     const problem = problemOn(step);
     if (problem) return setPhase({ kind: "error", message: problem });
     goTo(step === 1 ? 2 : 3);
@@ -894,7 +937,9 @@ export function UploadForm({
         done={reached > 1 && problemOn(1) === null}
         summary={whatSummary}
         disabled={busy}
+        allFolded={step === null}
         onOpen={() => goTo(1)}
+        onClose={foldAll}
         cardRef={(el) => void (cards.current[0] = el)}
         footer={
           // A lone child in the footer's justify-between row; mx-auto centres it.
@@ -1247,7 +1292,9 @@ export function UploadForm({
         done={reached > 2 && problemOn(2) === null}
         summary={colorSummary}
         disabled={busy}
+        allFolded={step === null}
         onOpen={() => goTo(2)}
+        onClose={foldAll}
         cardRef={(el) => void (cards.current[1] = el)}
         footer={
           <>
@@ -1411,7 +1458,9 @@ export function UploadForm({
         done={false}
         summary={sendSummary}
         disabled={busy}
+        allFolded={step === null}
         onOpen={() => goTo(3)}
+        onClose={foldAll}
         cardRef={(el) => void (cards.current[2] = el)}
         footer={
           <>
