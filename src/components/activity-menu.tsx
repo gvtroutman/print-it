@@ -170,12 +170,17 @@ export function ActivityMenu({
           {/* The places the activity leads to live here rather than in the
               nav: History is where it ends up once a print is finished, the
               audit log is the owner's full record of it, and the API console
-              is for anyone who wants the same feed over HTTP. */}
+              is for the owner wanting the same feed over HTTP. Members get
+              neither: both are admin-only surfaces. */}
           <div className="mt-[8.8px] flex flex-col gap-[2px] border-t-2 border-ink pt-[8.8px]">
             {[
               { label: "History", href: "/history" },
-              ...(role === "admin" ? [{ label: "Audit log", href: "/admin/audit" }] : []),
-              { label: "API & docs", href: "/docs" },
+              ...(role === "admin"
+                ? [
+                    { label: "Audit log", href: "/admin/audit" },
+                    { label: "API & docs", href: "/docs" },
+                  ]
+                : []),
             ].map((link) => (
               <Link
                 key={link.href}

@@ -105,8 +105,8 @@ export async function middleware(request: NextRequest) {
    * They come from Better Auth's default permission statements — not from
    * anything this app asserts — so they can widen on a version bump without a
    * line of this repository changing. Nothing here writes to the audit trail
-   * either, and every path is listed at /api/openapi.json for any signed-in
-   * client to read.
+   * either, and every path is listed at /api/openapi.json for an admin
+   * session to read.
    *
    * It matters because src/lib/reauth.ts exists on the reasoning that four
    * actions outlive a session, so each asks for the password or passkey again

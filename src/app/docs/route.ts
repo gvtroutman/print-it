@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { headers } from "next/headers";
 
 import { currentUser } from "@/lib/authz";
@@ -19,6 +19,10 @@ import { sourceUrl } from "@/lib/runtime";
  * describes an invite-only app to the people already inside it. Middleware
  * only checks that a session cookie is *present*, so the real check is here —
  * a forged cookie gets a redirect to sign-in, not a console.
+ *
+ * And it is the owner's alone. A member gets a 404, like every other admin
+ * surface (`requireAdmin`), and so does the owner while previewing the member
+ * view, since `currentUser` hands them back as a client.
  *
  * Everything it loads comes from this origin: `scripts/vendor-swagger.ts`
  * copies Swagger UI into `public/docs/` at build time, so the page needs no
@@ -81,6 +85,7 @@ const INIT = `
 export async function GET() {
   const user = await currentUser();
   if (!user) redirect("/signin?next=%2Fdocs");
+  if (user.role !== "admin") notFound();
 
   const nonce = nonceFrom((await headers()).get("x-nonce"));
   const n = nonce ? ` nonce="${nonce}"` : "";

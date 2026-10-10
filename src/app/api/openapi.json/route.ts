@@ -11,6 +11,9 @@ import { buildOpenApiDocument } from "@/lib/openapi";
  * place to enumerate what it can do or how its authorisation is shaped. The
  * people who need it are already inside.
  *
+ * And only the owner, like the console: a member is answered 403. The
+ * endpoints it describes still work for members; the map of them does not.
+ *
  * `/api/openapi.json` rather than `/openapi.json` so it inherits the one rule
  * that makes an API usable: middleware never redirects `/api/*`, so a caller
  * with no session is told 401 instead of being handed a sign-in page that a
@@ -19,4 +22,6 @@ import { buildOpenApiDocument } from "@/lib/openapi";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export const GET = withActor(async () => ok(await buildOpenApiDocument()));
+export const GET = withActor(async () => ok(await buildOpenApiDocument()), {
+  admin: true,
+});

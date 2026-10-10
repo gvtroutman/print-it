@@ -226,7 +226,7 @@ async function main() {
    * thief has the session, not the passkey" — but a copied admin cookie inside
    * its twenty idle minutes could reach the same ends through these endpoints
    * without meeting that bar, unaudited, and they are listed at
-   * /api/openapi.json for any signed-in client to read. set-user-password sets
+   * /api/openapi.json for that same admin session to read. set-user-password sets
    * a colleague's password without revoking their sessions; impersonate-user
    * mints a session as anybody; set-role is persistence that survives the real
    * admin changing their password.
@@ -588,7 +588,15 @@ async function main() {
           r.status === 404, `status ${r.status}`);
   }
 
-  const docsHtml = await (await client.raw(`${APP}/docs`)).text();
+  // A member gets neither: the map is the owner's.
+  const memberOpenapi = await client.raw(`${APP}/api/openapi.json`);
+  probe("A01-openapi-member", "/api/openapi.json is refused to a member",
+        memberOpenapi.status === 403, `status ${memberOpenapi.status}`);
+  const memberDocs = await client.raw(`${APP}/docs`);
+  probe("A01-docs-member", "/docs is a 404 to a member",
+        memberDocs.status === 404, `status ${memberDocs.status}`);
+
+  const docsHtml = await (await apiAdmin.raw(`${APP}/docs`)).text();
   const docsExternal = [
     ...docsHtml.matchAll(/<(?:script|link|img|iframe)\b[^>]*\b(?:src|href)="([^"]+)"/g),
   ].map((m) => m[1]!).filter((u) => /^(?:https?:)?\/\//.test(u));

@@ -5,7 +5,8 @@
 Everything the app does over HTTP, and how to drive it yourself.
 
 There is a console at **`/docs`** — Swagger UI, served from this origin, with
-your session already attached. It is linked from the account menu. This page is
+your session already attached. It is the printer owner's alone, linked from
+their notifications panel; members get a 404 there. This page is
 the reading version: what the endpoints are for, and the handful of decisions
 that will otherwise surprise you.
 
@@ -192,9 +193,11 @@ drift when a plugin is added. Request bodies are converted from the same Zod
 schemas the handlers validate with, so the document cannot promise a rule the
 server does not enforce.
 
-Both it and `/docs` need a session. They describe an invite-only tool to the
-people already inside it, and an unauthenticated endpoint is not the place to
-publish a map of your authority model.
+Both it and `/docs` need the owner's session. They describe an invite-only
+tool, and neither an unauthenticated endpoint nor a member's account is the
+place to publish a map of your authority model. A member is answered 403 by
+`/api/openapi.json` and 404 by `/docs`; the endpoints themselves still work for
+them, scoped as ever.
 
 Swagger UI is **vendored, not loaded from a CDN** —
 `npm run vendor:swagger` copies it out of `node_modules` into `public/docs/`,

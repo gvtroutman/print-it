@@ -199,8 +199,16 @@ async function main() {
   // ------------------------------------------------------------------
   section("the document describes the app that is running");
 
-  const { status: docStatus, body: doc } = await client.json<Doc>(`${APP}/api/openapi.json`);
-  check("a signed-in client can read it", docStatus === 200, `status ${docStatus}`);
+  // The map is the owner's: a member is refused both the document and the
+  // console, while the endpoints themselves still answer them.
+  const memberDoc = await client.raw(`${APP}/api/openapi.json`);
+  check("a member is refused it", memberDoc.status === 403, `status ${memberDoc.status}`);
+  const memberConsole = await client.raw(`${APP}/docs`);
+  check("and gets a 404 from /docs", memberConsole.status === 404,
+        `status ${memberConsole.status}`);
+
+  const { status: docStatus, body: doc } = await ruben.json<Doc>(`${APP}/api/openapi.json`);
+  check("the owner can read it", docStatus === 200, `status ${docStatus}`);
   check("it is OpenAPI 3.1", doc.openapi === "3.1.0", String(doc.openapi));
   check("it names this deployment as the server",
         doc.servers?.[0]?.url === APP, JSON.stringify(doc.servers));
@@ -627,7 +635,7 @@ async function main() {
 
   const console_ = await ruben.raw(`${APP}/docs`);
   const html = await console_.text();
-  check("/docs serves a document to a signed-in caller",
+  check("/docs serves a document to the owner",
         console_.status === 200 &&
         (console_.headers.get("content-type") ?? "").includes("text/html"),
         `status ${console_.status}`);
