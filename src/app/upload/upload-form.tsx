@@ -45,7 +45,6 @@ import { Button, Label, Notice } from "@/components/ui";
 import { MaterialFacts } from "@/components/material-chart";
 import { InkCube } from "@/components/ink-cube";
 import { NavIcon } from "@/components/nav-icons";
-import { PrioritySlider } from "@/components/priority-slider";
 
 import { ColorMenu, OtherColors, colorNameOf } from "./spool-finder";
 
@@ -549,7 +548,8 @@ export function UploadForm({
   // obviously. Coercing each keystroke turned an emptied box straight back
   // into "1", so clearing it to type 3 produced 13.
   const [quantityDraft, setQuantityDraft] = useState<string | null>(null);
-  const [priority, setPriority] = useState<number>(again?.priority ?? DEFAULT_STORY_PRIORITY);
+  // No slider any more: a new request takes the default, a repeat keeps its own.
+  const priority = again?.priority ?? DEFAULT_STORY_PRIORITY;
   const [color, setColor] = useState<string | null>(initialColor?.name ?? null);
   // A spool the owner can get instead of one on the shelf. One or the other:
   // picking either clears the other.
@@ -1076,7 +1076,7 @@ export function UploadForm({
       {byCircle ? autoColorName : toBuy ? `${toBuy.name}, to get` : color ?? "No color yet"}
     </>
   );
-  const sendSummary = `Priority ${priority} · ${quantity} ${quantity === 1 ? "copy" : "copies"}`;
+  const sendSummary = `${quantity} ${quantity === 1 ? "copy" : "copies"}`;
 
   const back = (to: StepNo) => (
     <Button type="button" variant="ghost" disabled={busy} onClick={() => goTo(to)}>
@@ -1739,14 +1739,8 @@ export function UploadForm({
           </>
         }
       >
-        {/* ---- priority ---- */}
-        <div className="max-w-[420px]">
-          <Label htmlFor="priority">Priority</Label>
-          <PrioritySlider id="priority" value={priority} onChange={setPriority} />
-        </div>
-
         {/* ---- note ---- */}
-        <div className="mt-[22px]">
+        <div>
           {/* Named, not "he" — the printer owner is a role anyone can hold. */}
           <Label htmlFor="note">Anything {owner} should know</Label>
           <textarea
