@@ -465,7 +465,7 @@ export function ColorMenu({
       onShow={(next, tapped) => (tapped ? open(next) : setOwn(next))}
       labels={["Shelf colors", "Your own color"]}
       first={
-        <div role="radiogroup" aria-label="Color you want" className="flex flex-wrap gap-x-[8px] gap-y-[13.2px]">
+        <div role="radiogroup" aria-label="Color you want" className="flex flex-wrap justify-center gap-x-[8px] gap-y-[13.2px]">
           <MenuCircle label="Any color" active={value === null} dashed onClick={() => onChange(null, 1)} />
           {shelf.map((c) => (
             <MenuCircle
