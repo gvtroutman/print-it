@@ -210,8 +210,11 @@ export function swatchFits(material: string, swatch: LibrarySwatch): boolean {
   return wanted.trim() !== "" && ` ${words(swatch.type)} `.includes(wanted);
 }
 
-/** A swatch photo ready to serve: around 10 KB of JPEG. */
-type Photo = { bytes: Uint8Array<ArrayBuffer>; type: string };
+/**
+ * A swatch photo ready to serve: around 10 KB of JPEG. `full` says whether it
+ * is the full photo cut down, or the library's small thumbnail standing in.
+ */
+type Photo = { bytes: Uint8Array<ArrayBuffer>; type: string; full: boolean };
 
 /** Photos held in memory, oldest dropped first. At ~10 KB each, about 10 MB. */
 const PHOTO_CACHE = 1000;
@@ -278,11 +281,25 @@ async function fetchImage(url: string, max: number): Promise<{ bytes: Uint8Array
  * the white table it was shot on trimmed off, then cropped to the card's
  * shape. Null when there is no full photo or sharp cannot read it.
  */
+/**
+ * sharp, loaded once. Null when it cannot load — its native libvips missing
+ * from the bundle, say — and then no full photo is fetched for nothing.
+ */
+let sharpModule: Promise<(typeof import("sharp"))["default"] | null> | null = null;
+const loadSharp = () =>
+  (sharpModule ??= import("sharp")
+    .then((m) => m.default)
+    .catch((error) => {
+      console.error("[filament-library] sharp will not load; serving thumbnails", error);
+      return null;
+    }));
+
 async function sharpened(url: string): Promise<Photo | null> {
+  const sharp = await loadSharp();
+  if (!sharp) return null;
   const source = await fetchImage(url, MAX_SOURCE_BYTES);
   if (!source) return null;
   try {
-    const { default: sharp } = await import("sharp");
     // Two passes: sharp trims before it resizes, whatever the call order, and
     // trimming the full-size image would decode all of it. The first pass
     // shrinks on load.
@@ -292,7 +309,7 @@ async function sharpened(url: string): Promise<Photo | null> {
       .resize({ width: PHOTO_WIDTH, height: PHOTO_HEIGHT, fit: "cover" })
       .jpeg({ quality: 80, mozjpeg: true })
       .toBuffer();
-    return { bytes: new Uint8Array(out), type: "image/jpeg" };
+    return { bytes: new Uint8Array(out), type: "image/jpeg", full: true };
   } catch (error) {
     console.error(`[filament-library] could not resize ${url}`, error);
     return null;
@@ -316,10 +333,13 @@ export async function swatchPhoto(id: number): Promise<Photo | null> {
   let pending = making.get(id);
   if (!pending) {
     pending = inTurn(async () => {
-      const photo =
-        (swatch.photoUrl ? await sharpened(swatch.photoUrl) : null) ??
-        (swatch.imageUrl ? await fetchImage(swatch.imageUrl, MAX_THUMB_BYTES) : null);
-      if (photo) {
+      const thumb = async () => {
+        const got = swatch.imageUrl ? await fetchImage(swatch.imageUrl, MAX_THUMB_BYTES) : null;
+        return got && { ...got, full: false };
+      };
+      const photo = (swatch.photoUrl ? await sharpened(swatch.photoUrl) : null) ?? (await thumb());
+      // A thumbnail is not kept: once the full photo can be made, it should be.
+      if (photo?.full) {
         photos.set(id, photo);
         if (photos.size > PHOTO_CACHE) photos.delete(photos.keys().next().value!);
       }

@@ -51,6 +51,16 @@ const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   serverExternalPackages: ["@prisma/client", "nodemailer"],
+  /**
+   * sharp's native module loads libvips as a shared library at run time,
+   * which the tracer cannot see, so without this the standalone bundle has
+   * sharp but not libvips and every resize fails. The swatch photo route is
+   * the only code that resizes (src/lib/filament-library.ts). The builder is
+   * Alpine, so `@img` holds only the linuxmusl packages.
+   */
+  outputFileTracingIncludes: {
+    "/api/filament-library/[id]/image": ["./node_modules/sharp/**/*", "./node_modules/@img/**/*"],
+  },
   experimental: {
     /**
      * Let an upload actually be as large as the app says it is.

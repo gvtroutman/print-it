@@ -145,8 +145,12 @@ export type LibrarySwatch = {
   photoUrl: string | null;
 };
 
-/** Where the app serves a library swatch's photo from. */
-export const swatchImagePath = (id: number) => `/api/filament-library/${id}/image`;
+/**
+ * Where the app serves a library swatch's photo from. The version changes
+ * whenever what is served there does, because browsers keep a photo a day:
+ * v2 is the full photo cut down, which replaced the library's thumbnail.
+ */
+export const swatchImagePath = (id: number) => `/api/filament-library/${id}/image?v=2`;
 
 /**
  * A library swatch as the browser sees it: what `GET /api/filament-library`

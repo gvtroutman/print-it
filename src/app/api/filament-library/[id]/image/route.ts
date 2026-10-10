@@ -23,7 +23,11 @@ export const GET = withActor<{ id: string }>(async (_request, _actor, params) =>
       headers: {
         "content-type": photo.type,
         "content-length": String(photo.bytes.length),
-        "cache-control": "private, max-age=86400",
+        // The full photo for a day. The thumbnail only stands in for it, so a
+        // browser should ask again soon rather than keep the small one.
+        "cache-control": photo.full ? "private, max-age=86400" : "private, max-age=300",
+        // Which one this is, for anyone checking from the browser's tools.
+        "x-swatch-photo": photo.full ? "full" : "thumbnail",
         "x-content-type-options": "nosniff",
       },
     });
