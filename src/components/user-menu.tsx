@@ -51,7 +51,7 @@ export function UserMenu({
         aria-expanded={open}
         aria-haspopup="true"
         aria-label={`Account menu for ${name}`}
-        className="stamp flex h-[36px] w-[36px] cursor-pointer items-center justify-center rounded-full border-[3px] border-ink bg-aqua font-mono text-[12px] font-bold text-ink hover:bg-sun"
+        className="flex h-[36px] w-[36px] cursor-pointer items-center justify-center rounded-full border-[3px] border-ink bg-aqua font-mono text-[12px] font-bold text-ink transition-colors duration-[160ms] hover:bg-sun"
       >
         {initials}
       </button>

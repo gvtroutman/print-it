@@ -60,9 +60,11 @@ export function ActivityMenu({
         aria-haspopup="true"
         aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"}
         title="Notifications"
-        className="stamp relative flex h-[40px] w-[40px] cursor-pointer items-center justify-center rounded-chip border-[3px] border-ink bg-cream text-ink hover:bg-sun"
+        className="relative flex h-[40px] w-[40px] cursor-pointer items-center justify-center rounded-chip border-[3px] border-ink bg-cream text-ink transition-colors duration-[160ms] hover:bg-sun"
       >
-        <NavIcon name="bell" />
+        {/* The bell only goes yellow when there is something new; a quiet
+            bell is plain paper. */}
+        <NavIcon name="bell" fill={unread > 0 ? undefined : "var(--color-cream-2)"} />
         {/* The count sits on the bell's shoulder, and only when there is
             something to read: a bell with a 0 on it is just noise. */}
         {unread > 0 && (

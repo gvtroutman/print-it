@@ -127,7 +127,16 @@ const STICKERS: Record<NavIconName, Sticker> = {
 /** How far the white die-cut edge reaches past the ink line. */
 const EDGE = 2.2;
 
-export function NavIcon({ name, className = "" }: { name: NavIconName; className?: string }) {
+export function NavIcon({
+  name,
+  className = "",
+  fill,
+}: {
+  name: NavIconName;
+  className?: string;
+  /** Paint every part this colour instead of its own, e.g. a quiet bell. */
+  fill?: string;
+}) {
   const { parts, lines, tilt } = STICKERS[name];
   return (
     <svg
@@ -151,8 +160,8 @@ export function NavIcon({ name, className = "" }: { name: NavIconName; className
         ))}
         {lines && <path d={lines} fill="none" />}
       </g>
-      {parts.map(([d, fill], i) => (
-        <path key={i} d={d} fill={fill} />
+      {parts.map(([d, own], i) => (
+        <path key={i} d={d} fill={fill ?? own} />
       ))}
       {lines && <path d={lines} />}
     </svg>
