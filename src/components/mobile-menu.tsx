@@ -65,7 +65,7 @@ export function MobileMenu({
         aria-label={`Menu for ${name}`}
         className="stamp flex h-[36px] w-[104px] cursor-pointer items-center justify-center rounded-chip border-[3px] border-ink bg-sun text-ink"
       >
-        <span aria-hidden className="flex w-[36px] flex-col gap-[3.5px]">
+        <span aria-hidden className="flex w-[18px] flex-col gap-[3.5px]">
           <span className="h-[2.5px] rounded-full bg-ink" />
           <span className="h-[2.5px] rounded-full bg-ink" />
           <span className="h-[2.5px] rounded-full bg-ink" />
