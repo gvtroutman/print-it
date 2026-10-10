@@ -48,7 +48,7 @@ import { FilamentSpool } from "@/components/color-swatch";
 import { MaterialChart } from "@/components/material-chart";
 import { InkCube } from "@/components/ink-cube";
 
-import { ColorGrid, SpoolFinder } from "./spool-finder";
+import { ColorCard, ColorGrid } from "./spool-finder";
 
 /**
  * The shelf colour of a material that looks most like `hex`, or null when
@@ -524,7 +524,7 @@ export function UploadForm({
       return setPhase({ kind: "error", message: "Pick a material first — the chart shows what each one is good at." });
     }
     if (color === null && toBuy === null) {
-      return setPhase({ kind: "error", message: `Pick a color from the shelf, or a spool ${owner} can get.` });
+      return setPhase({ kind: "error", message: `Pick a color in the library, or a spool ${owner} can get from Other colors.` });
     }
     if (again) return void sendAgain(again);
     if (linked.kind === "listed" && picked) {
@@ -1035,56 +1035,65 @@ export function UploadForm({
             Compare materials
           </button>
         </div>
-        {/* Three across on a phone, each spool shrinking to its column; from sm up
-            they keep their full size and wrap. */}
-        <div className="grid grid-cols-3 gap-x-[10px] gap-y-[13.2px] sm:flex sm:flex-wrap sm:gap-[13.2px]">
-          {selectedMaterial.colors.map((c) => {
-            const active = c.name === color;
-            return (
-              <button
-                key={c.name}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                aria-label={`${c.name} filament`}
-                onClick={() => {
-                  setColor(c.name);
-                  setToBuy(null);
-                }}
-                className="flex min-w-0 cursor-pointer flex-col items-center gap-[7px] border-0 bg-transparent p-0 sm:w-[110px]"
-              >
-                <FilamentSpool
-                  mode={c.mode}
-                  style={c.style}
-                  className="aspect-[100/144] w-full max-w-[100px]"
-                />
-                <span
-                  className={`text-center font-mono text-[11px] font-bold uppercase tracking-[0.04em] ${
-                    active ? "text-cherry-dk" : "text-ink-2"
-                  }`}
-                >
-                  {c.name}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-        {near && !toBuy && closestShelfColor(selectedMaterial, near) === null && (
-          <p aria-live="polite" className="m-0 mt-[13.2px] text-[13.5px] leading-[1.45] text-ink-2">
-            Nothing on the {selectedMaterial.name} shelf looks like your color. Pick a spool {owner} can get below, or
-            one of these.
-          </p>
-        )}
-        {/* Keyed by material: another material is another library search. */}
-        <SpoolFinder
+        {/* Keyed by material: another material opens on its own shelf, with a fresh library search. */}
+        <ColorCard
           key={selectedMaterial.name}
           material={selectedMaterial.name}
           owner={owner}
+          shelfCount={selectedMaterial.colors.length}
           picked={toBuy}
           onPick={chooseToBuy}
           near={near}
           onNear={chooseNear}
           suggested={near !== null && closestShelfColor(selectedMaterial, near) === null}
+          shelf={
+            <>
+              {/* Three across on a phone, each spool shrinking to its column; from sm up
+                  they keep their full size and wrap. */}
+              <div
+                role="radiogroup"
+                aria-label={`${selectedMaterial.name} colors ${owner} has`}
+                className="grid grid-cols-3 gap-x-[10px] gap-y-[13.2px] sm:flex sm:flex-wrap sm:gap-[13.2px]"
+              >
+                {selectedMaterial.colors.map((c) => {
+                  const active = c.name === color;
+                  return (
+                    <button
+                      key={c.name}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      aria-label={`${c.name} filament`}
+                      onClick={() => {
+                        setColor(c.name);
+                        setToBuy(null);
+                      }}
+                      className="flex min-w-0 cursor-pointer flex-col items-center gap-[7px] border-0 bg-transparent p-0 sm:w-[110px]"
+                    >
+                      <FilamentSpool
+                        mode={c.mode}
+                        style={c.style}
+                        className="aspect-[100/144] w-full max-w-[100px]"
+                      />
+                      <span
+                        className={`text-center font-mono text-[11px] font-bold uppercase tracking-[0.04em] ${
+                          active ? "text-cherry-dk" : "text-ink-2"
+                        }`}
+                      >
+                        {c.name}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              {near && !toBuy && closestShelfColor(selectedMaterial, near) === null && (
+                <p aria-live="polite" className="m-0 mt-[13.2px] text-[13.5px] leading-[1.45] text-ink-2">
+                  Nothing {owner} has in {selectedMaterial.name} looks like your color. Look in Other colors for a
+                  spool {owner} can get, or pick one of these.
+                </p>
+              )}
+            </>
+          }
         />
       </fieldset>
       )}

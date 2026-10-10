@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { COLOR_GRID, type SwatchChoice } from "@/lib/catalog";
 import { SwatchPhoto } from "@/components/swatch-photo";
@@ -17,21 +17,24 @@ type Search =
 /** How long typing has to pause before the library is asked again. */
 const DEBOUNCE_MS = 300;
 
+type Tab = "shelf" | "library";
+
 /**
- * Spools the owner does not have but can buy: the filamentcolors.xyz library,
- * narrowed to the material picked, searched by words and shade. The server
- * does the searching (the browser may not reach that site), and reads the
- * picked swatch back from its own copy when the request is sent.
+ * One card for a material's colours, with two tabs. "In library" is the
+ * owner's shelf — `shelf`, the spools already there — and is what the card
+ * opens on. "Other colors" is the filamentcolors.xyz library: spools the
+ * owner does not have but can buy.
  *
- * Closed it is one button, so the shelf stays the obvious choice; a pick made
- * here replaces the shelf colour, and a shelf colour picked replaces this.
- * `near` is the colour picked from the grid at the top of the form, and the
- * library answers closest to it first. `suggested` says nothing on the shelf
- * looks like it, and opens this without being asked.
+ * A pick in either tab replaces the other. The card opens on the other
+ * colours when a spool to buy is already picked, and switches there when
+ * `suggested` says nothing on the shelf looks like the colour picked up top.
+ * Key it by material: another material starts back on its shelf.
  */
-export function SpoolFinder({
+export function ColorCard({
   material,
   owner,
+  shelf,
+  shelfCount,
   picked,
   onPick,
   near,
@@ -40,24 +43,163 @@ export function SpoolFinder({
 }: {
   material: string;
   owner: string;
+  shelf: ReactNode;
+  shelfCount: number;
   picked: SwatchChoice | null;
   onPick: (swatch: SwatchChoice | null) => void;
   near: string | null;
   onNear: (hex: string | null) => void;
   suggested: boolean;
 }) {
-  const [open, setOpen] = useState(picked !== null || suggested);
+  const id = useId();
+  const [tab, setTab] = useState<Tab>(picked !== null || suggested ? "library" : "shelf");
+  // The library is only asked once its tab has been opened, then stays
+  // mounted so a search typed there survives a look back at the shelf.
+  const [visited, setVisited] = useState(tab === "library");
+
+  function show(next: Tab) {
+    setTab(next);
+    if (next === "library") setVisited(true);
+  }
+
+  // Another colour with nothing like it on the shelf opens the other colours,
+  // even after going back to the shelf.
+  useEffect(() => {
+    if (suggested) show("library");
+  }, [suggested, near]);
+
+  const tabs: { key: Tab; label: string; count?: number }[] = [
+    { key: "shelf", label: "In library", count: shelfCount },
+    { key: "library", label: "Other colors" },
+  ];
+
+  function onTabKey(e: React.KeyboardEvent) {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight" && e.key !== "Home" && e.key !== "End") return;
+    e.preventDefault();
+    const next: Tab = e.key === "Home" ? "shelf" : e.key === "End" ? "library" : tab === "shelf" ? "library" : "shelf";
+    show(next);
+    document.getElementById(`${id}-tab-${next}`)?.focus();
+  }
+
+  return (
+    <div>
+      <div
+        role="tablist"
+        aria-label={`${material} colors`}
+        // Folder tabs on top of the card, not inside it: the open one is joined
+        // to the card by covering its top edge.
+        className="relative z-10 flex gap-[6px] px-[13.2px]"
+      >
+        {tabs.map((t) => {
+          const active = t.key === tab;
+          return (
+            <button
+              key={t.key}
+              id={`${id}-tab-${t.key}`}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              aria-controls={`${id}-panel-${t.key}`}
+              tabIndex={active ? 0 : -1}
+              onClick={() => show(t.key)}
+              onKeyDown={onTabKey}
+              // The open tab sits on the card's edge, joined to its panel.
+              className={`-mb-[3px] flex cursor-pointer items-center gap-[7px] rounded-t-[12px] border-[3px] px-[14px] py-[8px] font-display text-[16px] font-bold transition-colors ${
+                active
+                  ? "border-ink border-b-porcelain bg-porcelain text-ink"
+                  : "border-transparent bg-transparent text-ink-3 hover:text-ink"
+              }`}
+            >
+              {t.label}
+              {t.count !== undefined && (
+                <span
+                  className={`rounded-full px-[7px] py-[1px] font-mono text-[11px] font-bold ${
+                    active ? "bg-sun text-ink" : "bg-cream-2 text-ink-2"
+                  }`}
+                >
+                  {t.count}
+                </span>
+              )}
+              {t.key === "library" && picked && (
+                <span aria-label="(picked)" className="h-[9px] w-[9px] rounded-full bg-cherry-dk" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <div className="rounded-panel border-[3px] border-ink bg-porcelain shadow-stamp">
+        <div
+          id={`${id}-panel-shelf`}
+          role="tabpanel"
+          aria-labelledby={`${id}-tab-shelf`}
+          hidden={tab !== "shelf"}
+          className="p-[17.6px]"
+        >
+          {picked && (
+            <p aria-live="polite" className="m-0 mb-[13.2px] text-[13.5px] leading-[1.45] text-ink-2">
+              You picked <b className="text-ink">{picked.name}</b> from the other colors. Tap a spool here to switch to
+              one {owner} already has.
+            </p>
+          )}
+          {shelf}
+        </div>
+
+        <div
+          id={`${id}-panel-library`}
+          role="tabpanel"
+          aria-labelledby={`${id}-tab-library`}
+          hidden={tab !== "library"}
+          className="p-[17.6px]"
+        >
+          {visited && (
+            <SpoolFinder
+              material={material}
+              owner={owner}
+              picked={picked}
+              onPick={onPick}
+              onBack={() => {
+                onPick(null);
+                show("shelf");
+              }}
+              near={near}
+              onNear={onNear}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Spools the owner does not have but can buy: the filamentcolors.xyz library,
+ * narrowed to the material picked, searched by words and shade. The server
+ * does the searching (the browser may not reach that site), and reads the
+ * picked swatch back from its own copy when the request is sent. `near` is
+ * the colour picked from the grid at the top of the form, and the library
+ * answers closest to it first.
+ */
+function SpoolFinder({
+  material,
+  owner,
+  picked,
+  onPick,
+  onBack,
+  near,
+  onNear,
+}: {
+  material: string;
+  owner: string;
+  picked: SwatchChoice | null;
+  onPick: (swatch: SwatchChoice | null) => void;
+  onBack: () => void;
+  near: string | null;
+  onNear: (hex: string | null) => void;
+}) {
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState<Search>({ kind: "loading" });
 
-  // Another colour with nothing like it on the shelf opens the library again,
-  // even after it was closed.
   useEffect(() => {
-    if (suggested) setOpen(true);
-  }, [suggested, near]);
-
-  useEffect(() => {
-    if (!open) return;
     const controller = new AbortController();
     // The last results stay up, faded, until the new ones arrive: a blank
     // panel on every chip read as "nothing there".
@@ -70,7 +212,7 @@ export function SpoolFinder({
         const res = await fetch(`/api/filament-library?${params}`, { signal: controller.signal });
         const body = await res.json().catch(() => ({}));
         if (!res.ok) {
-          return setSearch({ kind: "error", message: body.error ?? "The library did not answer. Try again." });
+          return setSearch({ kind: "error", message: body.error ?? "filamentcolors.xyz did not answer. Try again." });
         }
         setSearch({ kind: "found", found: body as Found });
       } catch {
@@ -81,46 +223,13 @@ export function SpoolFinder({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [open, material, query, near]);
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="mt-[17.6px] flex w-full cursor-pointer items-center gap-[13.2px] rounded-card border-[3px] border-dashed border-ink-3 bg-porcelain px-[15px] py-[12px] text-left text-ink transition-colors hover:border-ink hover:bg-sun-wash"
-      >
-        <span aria-hidden className="font-display text-[26px] leading-none">+</span>
-        <span>
-          <span className="block font-display text-[17px] font-bold">Not on the shelf? Find a spool {owner} can get</span>
-          <span className="block text-[13px] text-ink-2">
-            Thousands of real {material} colors, from the filamentcolors.xyz library.
-          </span>
-        </span>
-      </button>
-    );
-  }
+  }, [material, query, near]);
 
   return (
-    <section
-      aria-labelledby="spool-finder-heading"
-      className="mt-[17.6px] rounded-panel border-[3px] border-ink bg-porcelain p-[17.6px] shadow-stamp"
-    >
-      <div className="mb-[11px] flex flex-wrap items-baseline justify-between gap-x-[13.2px] gap-y-[4px]">
-        <h3 id="spool-finder-heading" className="m-0 font-display text-[19px] text-ink">
-          Spools {owner} can get
-        </h3>
-        <button
-          type="button"
-          onClick={() => {
-            onPick(null);
-            setOpen(false);
-          }}
-          className="cursor-pointer border-0 bg-transparent p-0 font-mono text-[11.5px] font-bold uppercase tracking-[0.08em] text-ink-3 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
-        >
-          {picked ? "Back to the shelf" : "Close"}
-        </button>
-      </div>
+    <>
+      <p className="m-0 mb-[11px] text-[13.5px] leading-[1.45] text-ink-2">
+        Thousands of real {material} colors {owner} doesn&apos;t have yet, but can get.
+      </p>
 
       {picked && (
         <div
@@ -137,12 +246,19 @@ export function SpoolFinder({
                 see the real swatch ↗
               </a>
             </p>
+            <button
+              type="button"
+              onClick={onBack}
+              className="mt-[4px] cursor-pointer border-0 bg-transparent p-0 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-2 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
+            >
+              Back to the library
+            </button>
           </div>
         </div>
       )}
       {picked && (
         <p className="m-0 mb-[13.2px] text-[13.5px] leading-[1.45] text-ink-2">
-          {owner} has to buy this spool first, so it can take a little longer than a color on the shelf.
+          {owner} has to buy this spool first, so it can take a little longer than a color in the library.
         </p>
       )}
 
@@ -188,7 +304,7 @@ export function SpoolFinder({
       <div className="mt-[13.2px] min-h-[120px]">
         {search.kind === "loading" && (
           <p className="m-0 py-[22px] text-center font-mono text-[12px] uppercase tracking-[0.06em] text-ink-3">
-            Rummaging through the library…
+            Rummaging through the swatches…
           </p>
         )}
         {search.kind === "error" && (
@@ -255,7 +371,7 @@ export function SpoolFinder({
           </>
         )}
       </div>
-    </section>
+    </>
   );
 }
 
