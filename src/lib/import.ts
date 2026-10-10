@@ -68,15 +68,22 @@ const MAX_LISTED_FILES = 200;
  * moves: with it set, the stand-in is the *only* host the importer will talk
  * to. Do not set it in a deployment.
  */
-function printables(): { api: string; fileOrigin: string } {
+function printables(): { api: string; fileOrigin: string; mediaOrigin: string } {
   const override = process.env.IMPORT_PRINTABLES_BASE;
   if (override) {
     const base = new URL(override);
-    return { api: new URL("/graphql/", base).toString(), fileOrigin: base.origin };
+    return {
+      api: new URL("/graphql/", base).toString(),
+      fileOrigin: base.origin,
+      mediaOrigin: base.origin,
+    };
   }
   return {
     api: "https://api.printables.com/graphql/",
     fileOrigin: "https://files.printables.com",
+    // Where the pictures in search results live. Only ever asked for a
+    // thumbnail, on a path rebuilt here from parts that were checked.
+    mediaOrigin: "https://media.printables.com",
   };
 }
 
@@ -127,7 +134,7 @@ async function readCapped(response: Response, limit: number): Promise<Uint8Array
 const unavailable = (what: string) =>
   problem(502, `Printables ${what}. ${UPLOAD_INSTEAD}`);
 
-async function graphql(query: string, variables: Record<string, string>): Promise<unknown> {
+async function graphql(query: string, variables: Record<string, string | number>): Promise<unknown> {
   let response: Response;
   try {
     response = await fetch(printables().api, {
@@ -231,6 +238,16 @@ export type ImportListing = {
 const isPrintable = (name: string) =>
   (ACCEPTED_EXTENSIONS as readonly string[]).includes(extensionOf(name));
 
+/**
+ * A model's page, built from the API's own id and slug. The slug is
+ * decoration on a link people will click; kept only if it looks like one, as
+ * the id alone still finds the model.
+ */
+function modelPage(id: string, slug: string | null | undefined): string {
+  const tail = slug && /^[a-z0-9-]{1,200}$/.test(slug) ? `-${slug}` : "";
+  return `https://www.printables.com/model/${id}${tail}`;
+}
+
 async function listPrintables(modelId: string): Promise<ImportListing> {
   const parsed = ListingSchema.safeParse(await graphql(LISTING_QUERY, { id: modelId }));
   if (!parsed.success) {
@@ -243,9 +260,6 @@ async function listPrintables(modelId: string): Promise<ImportListing> {
   // asked for, something is answering that is not what this code expects.
   if (print.id !== modelId) throw unavailable("answered about a different model");
 
-  // The slug is decoration on a link people will click. Kept only if it looks
-  // like one; the id alone still finds the model.
-  const slug = print.slug && /^[a-z0-9-]{1,200}$/.test(print.slug) ? `-${print.slug}` : "";
   const printable = print.stls.filter((file) => isPrintable(file.name));
 
   return {
@@ -253,7 +267,7 @@ async function listPrintables(modelId: string): Promise<ImportListing> {
     model: {
       id: print.id,
       name: print.name,
-      url: `https://www.printables.com/model/${print.id}${slug}`,
+      url: modelPage(print.id, print.slug),
       author: print.user?.publicUsername ?? null,
       license: print.license?.name ?? null,
     },
@@ -370,4 +384,170 @@ export async function fetchImportable(
   if (!bytes) throw unavailable("sent more than the file it listed");
 
   return { name: file.name, bytes, listing };
+}
+
+// ---------------------------------------------------------------------------
+// Finding a model to import
+// ---------------------------------------------------------------------------
+
+/** A page of results: enough to scan at a glance, small enough to answer fast. */
+export const SEARCH_PAGE_SIZE = 12;
+/** Twenty pages in. Past that, a better search beats more scrolling. */
+const MAX_SEARCH_OFFSET = 240;
+const MAX_QUERY_LENGTH = 100;
+const THUMB_TIMEOUT_MS = 10_000;
+/** A 320×240 WebP is under 20 kB. This is only so a wrong answer cannot be huge. */
+const MAX_THUMB_BYTES = 512 * 1024;
+
+const SearchSchema = z.object({
+  data: z.object({
+    searchPrints2: z
+      .object({
+        totalCount: z.number().int().nonnegative(),
+        items: z
+          .array(
+            z.object({
+              id: z.string().regex(/^\d{1,12}$/),
+              name: z.string().max(500),
+              slug: z.string().max(300).nullish(),
+              image: z.object({ filePath: z.string().max(1000).nullish() }).nullish(),
+              user: z.object({ publicUsername: z.string().max(200).nullish() }).nullish(),
+              likesCount: z.number().int().nonnegative().nullish(),
+              downloadCount: z.number().int().nonnegative().nullish(),
+            }),
+          )
+          .max(100),
+      })
+      .nullable(),
+  }),
+});
+
+const SEARCH_QUERY =
+  "query PppSearch($query: String!, $limit: Int, $offset: Int) { searchPrints2(query: $query, " +
+  "limit: $limit, offset: $offset) { totalCount items { id name slug image { filePath } " +
+  "user { publicUsername } likesCount downloadCount } } }";
+
+/**
+ * Where a model's picture is, as the site names it:
+ * `media/prints/<model>/images/<folder>/<file>.<ext>`.
+ *
+ * The parts are what is kept, not the string. A thumbnail is asked for on a
+ * path rebuilt from them, so nothing the site or a browser sent ends up in
+ * the address as it was sent. A picture whose name does not fit simply has no
+ * thumbnail.
+ */
+const IMAGE_PATH =
+  /^media\/prints\/(\d{1,12})\/images\/([A-Za-z0-9_-]{1,200})\/([A-Za-z0-9_.-]{1,200})\.(jpe?g|png|webp|gif)$/i;
+
+export type SearchHit = {
+  id: string;
+  name: string;
+  /** The model's page — what the link step is then handed. */
+  url: string;
+  author: string | null;
+  /** This app's own address for the picture, or null if it has none. */
+  thumb: string | null;
+  likes: number | null;
+  downloads: number | null;
+};
+
+export type SearchResults = {
+  source: ImportSource;
+  query: string;
+  total: number;
+  offset: number;
+  hits: SearchHit[];
+};
+
+/**
+ * Models matching some words, for someone who knows what they want printed
+ * but has no link to it yet.
+ *
+ * Finding is all this does. What a result holds, and the file itself, still go
+ * through `listImportable` and `fetchImportable` by the model's link, so a
+ * search result is never trusted for anything but the id in it.
+ */
+export async function searchImportable(rawQuery: unknown, rawOffset: unknown): Promise<SearchResults> {
+  importSourcesOrRefuse();
+  const query = typeof rawQuery === "string" ? rawQuery.replace(/\s+/g, " ").trim() : "";
+  if (query.length < 2) throw problem(422, "Type at least two letters to search for.");
+  if (query.length > MAX_QUERY_LENGTH) {
+    throw problem(422, `That search is too long — ${MAX_QUERY_LENGTH} characters at most.`);
+  }
+  const offset = rawOffset === undefined || rawOffset === null ? 0 : Number(rawOffset);
+  if (!Number.isInteger(offset) || offset < 0 || offset > MAX_SEARCH_OFFSET) {
+    throw problem(400, "That is not a page of results this can show.");
+  }
+
+  const parsed = SearchSchema.safeParse(
+    await graphql(SEARCH_QUERY, { query, limit: SEARCH_PAGE_SIZE, offset }),
+  );
+  if (!parsed.success || !parsed.data.data.searchPrints2) {
+    if (!parsed.success) {
+      console.error("[import] printables search has an unexpected shape", parsed.error.issues[0]);
+    }
+    throw problem(
+      502,
+      "Printables search answered in a shape this app does not recognise — its API may have changed. " +
+        "Paste a link to the model instead.",
+    );
+  }
+  const found = parsed.data.data.searchPrints2;
+
+  return {
+    source: "printables",
+    query,
+    total: found.totalCount,
+    offset,
+    hits: found.items.slice(0, SEARCH_PAGE_SIZE).map((item) => {
+      const path = item.image?.filePath ?? "";
+      return {
+        id: item.id,
+        name: item.name,
+        url: modelPage(item.id, item.slug),
+        author: item.user?.publicUsername ?? null,
+        thumb: IMAGE_PATH.test(path) ? `/api/import/thumb?path=${encodeURIComponent(path)}` : null,
+        likes: item.likesCount ?? null,
+        downloads: item.downloadCount ?? null,
+      };
+    }),
+  };
+}
+
+/**
+ * A search result's picture, small, fetched by this server so the browser
+ * never calls Printables itself and `img-src` stays at 'self'.
+ *
+ * Null when the path is not a picture this app named, or the site will not
+ * hand one over: a missing thumbnail is a blank tile, not an error.
+ */
+export async function fetchThumbnail(rawPath: unknown): Promise<{ bytes: Uint8Array; type: string } | null> {
+  if (enabledSources().length === 0) return null;
+  const match = typeof rawPath === "string" ? IMAGE_PATH.exec(rawPath) : null;
+  if (!match) return null;
+  const [, model, folder, name, ext] = match;
+  // The site keeps a 320×240 WebP beside each picture, filed under the
+  // original's extension. A tenth of the size of the full photo, or less.
+  const target = new URL(
+    `/media/prints/${model}/images/${folder}/thumbs/inside/320x240/${ext!.toLowerCase()}/${name}.webp`,
+    printables().mediaOrigin,
+  );
+
+  let response: Response;
+  try {
+    response = await fetch(target, {
+      headers: { "user-agent": userAgent() },
+      redirect: "error",
+      signal: AbortSignal.timeout(THUMB_TIMEOUT_MS),
+    });
+  } catch {
+    return null;
+  }
+  const type = (response.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
+  if (response.status !== 200 || !["image/webp", "image/jpeg", "image/png"].includes(type)) {
+    await response.body?.cancel().catch(() => {});
+    return null;
+  }
+  const bytes = await readCapped(response, MAX_THUMB_BYTES).catch(() => null);
+  return bytes && bytes.length > 0 ? { bytes, type } : null;
 }

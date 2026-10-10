@@ -1147,6 +1147,87 @@ export async function buildOpenApiDocument() {
         },
       },
 
+      "/api/import/search": {
+        post: {
+          tags: ["files"],
+          summary: "Find a model to import by name",
+          description:
+            "For someone who knows what they want printed but has no link to " +
+            "it: searches the site this instance imports from and answers " +
+            "with up to 12 models a page. A result is only a way to a link — " +
+            "send its `url` to `POST /api/import/files` and go on from there.\n\n" +
+            "**Off unless the instance switches it on**, as for " +
+            "`POST /api/import/files`; where it is off this answers `501`.\n\n" +
+            "`thumb` is this app's own address for the model's picture, or null.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["query"],
+                  properties: {
+                    query: { type: "string", minLength: 2, maxLength: 100, examples: ["benchy"] },
+                    offset: {
+                      type: "integer",
+                      minimum: 0,
+                      maximum: 240,
+                      description: "Where the page starts: the previous answer's `offset` plus its number of hits.",
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "One page of models, in the site's order.",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      source: { type: "string", enum: [...IMPORT_SOURCES] },
+                      query: { type: "string", description: "The search, with its spacing tidied." },
+                      total: { type: "integer", description: "How many models match, over every page." },
+                      offset: { type: "integer" },
+                      hits: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            id: { type: "string", examples: ["3161"] },
+                            name: { type: "string", examples: ["3D BENCHY"] },
+                            url: {
+                              type: "string",
+                              format: "uri",
+                              description: "The model's page — what `POST /api/import/files` takes.",
+                            },
+                            author: { type: ["string", "null"] },
+                            thumb: { type: ["string", "null"] },
+                            likes: { type: ["integer", "null"] },
+                            downloads: { type: ["integer", "null"] },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            "400": errorResponse("The body is not a JSON object, or `offset` is not a page this can show."),
+            "403": errorResponse("A cross-origin request."),
+            "422": errorResponse("Fewer than two letters, or more than 100."),
+            "501": errorResponse("Importing is not switched on for this instance."),
+            "502": errorResponse(
+              "The site could not be reached, or answered in a way this app does not " +
+                "recognise. Its API is not a published one and can change.",
+            ),
+            ...COMMON_ERRORS,
+          },
+        },
+      },
+
       "/api/import/files": {
         post: {
           tags: ["files"],

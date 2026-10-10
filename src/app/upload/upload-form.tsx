@@ -118,8 +118,30 @@ type Listing = {
  */
 type Linked =
   | { kind: "idle" }
-  | { kind: "looking" }
+  | { kind: "looking"; url: string }
   | { kind: "listed"; url: string; listing: Listing; fileId: string | null };
+
+/** One model from `POST /api/import/search`. Picking it looks up its `url`. */
+type SearchHit = {
+  id: string;
+  name: string;
+  url: string;
+  author: string | null;
+  thumb: string | null;
+  likes: number | null;
+  downloads: number | null;
+};
+
+/** The results showing, and where the next page starts. */
+type Found = { query: string; total: number; hits: SearchHit[]; next: number };
+
+/** The server's own limit on how deep the pages go. */
+const MAX_SEARCH_OFFSET = 240;
+
+/** Something that looks like a link rather than words to search for. */
+const LINKISH = /^\s*(?:https?:\/\/|www\.)/i;
+
+const compactCount = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
 
 /**
  * A single-choice dropdown: the chosen option and a chevron, opening onto the
@@ -447,6 +469,9 @@ export function UploadForm({
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [link, setLink] = useState("");
   const [linked, setLinked] = useState<Linked>({ kind: "idle" });
+  // Models found by searching the import site, when the box held words.
+  const [found, setFound] = useState<Found | null>(null);
+  const [searching, setSearching] = useState(false);
   // Reference links sent with the order — not the import link above.
   const [links, setLinks] = useState<string[]>([]);
   const [linkDraft, setLinkDraft] = useState("");
@@ -607,8 +632,8 @@ export function UploadForm({
    * site itself — `connect-src 'self'` would refuse it, and the server is the
    * one that has to fetch the file anyway.
    */
-  async function lookUp() {
-    const url = link.trim();
+  async function lookUp(from: string = link) {
+    const url = from.trim();
     if (!url || linked.kind === "looking") return;
     // The same parse the server makes, for an answer before the round trip.
     if (!identifySource(url, importSources)) {
@@ -616,7 +641,7 @@ export function UploadForm({
       return setPhase({ kind: "error", message: `That is not a link to a model on ${sourceNames}.` });
     }
     setPhase({ kind: "idle" });
-    setLinked({ kind: "looking" });
+    setLinked({ kind: "looking", url });
     try {
       const res = await fetch("/api/import/files", {
         method: "POST",
@@ -643,6 +668,59 @@ export function UploadForm({
       setLinked({ kind: "idle" });
       setPhase({ kind: "error", message: "The connection dropped. Try again." });
     }
+  }
+
+  /**
+   * Find models by name, for someone with no link to paste. Like the lookup,
+   * the server asks the site; a result is only a way to a link, which then
+   * goes through `lookUp` exactly as a pasted one would. `more` adds the next
+   * page to the results already showing.
+   */
+  async function search(more = false) {
+    const query = more && found ? found.query : link.replace(/\s+/g, " ").trim();
+    if (searching || linked.kind === "looking") return;
+    if (query.length < 2) {
+      return setPhase({ kind: "error", message: "Type at least two letters to search for." });
+    }
+    setPhase({ kind: "idle" });
+    // A new search is a new look round; a model picked from the last one goes.
+    if (!more) setLinked({ kind: "idle" });
+    setSearching(true);
+    try {
+      const res = await fetch("/api/import/search", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ query, offset: more && found ? found.next : 0 }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (!more) setFound(null);
+        return setPhase({ kind: "error", message: body.error ?? "That search did not go through. Try again." });
+      }
+      const page = body as { query: string; total: number; offset: number; hits: SearchHit[] };
+      const next = page.offset + page.hits.length;
+      setFound((current) =>
+        more && current
+          ? {
+              ...current,
+              total: page.total,
+              next,
+              // The site's order can shift between pages; a model shows once.
+              hits: [...current.hits, ...page.hits.filter((h) => !current.hits.some((c) => c.id === h.id))],
+            }
+          : { query: page.query, total: page.total, hits: page.hits, next },
+      );
+    } catch {
+      setPhase({ kind: "error", message: "The connection dropped. Try again." });
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  /** The import box: a link is looked up, anything else is searched for. */
+  function findModel() {
+    if (LINKISH.test(link)) void lookUp();
+    else void search();
   }
 
   /**
@@ -710,7 +788,7 @@ export function UploadForm({
   /** Why a card cannot be left behind yet, or null when it is settled. */
   function problemOn(n: StepNo): string | null {
     if (n === 1) {
-      if (linked.kind === "listed" && !picked) return "Pick which file to print from that link, or clear the link.";
+      if (linked.kind === "listed" && !picked) return "Pick which file to print from that model, or choose another.";
       // An import is fetched by the server from two ids; there is no upload
       // for files from this disk to travel in.
       if (linked.kind === "listed" && files.length > 0) {
@@ -1214,44 +1292,130 @@ export function UploadForm({
           </div>
         )}
 
-        {/* ---- or a link (only where the instance has switched importing on) ---- */}
+        {/* ---- or find one (only where the instance has switched importing on) ---- */}
         {!again && importSources.length > 0 && (
           <div className="mt-[17.6px]">
-            <Label htmlFor="import-link">Or paste a {sourceNames} link</Label>
+            <Label htmlFor="import-link">Or find a model on {sourceNames}</Label>
             <div className="flex flex-wrap gap-[8.8px]">
               <input
                 id="import-link"
-                type="url"
-                inputMode="url"
+                type="search"
+                enterKeyHint="search"
+                autoComplete="off"
                 value={link}
                 disabled={busy}
                 onChange={(e) => setLink(e.target.value)}
-                // Enter here means "look this up", not "next card": the
-                // link is not settled until a file has been picked.
+                // Enter here means "find this", not "next card": the model is
+                // not settled until a file has been picked.
                 onKeyDown={(e) => {
                   if (e.key !== "Enter") return;
                   e.preventDefault();
-                  void lookUp();
+                  findModel();
                 }}
-                placeholder="https://www.printables.com/model/…"
+                placeholder="Search by name, or paste a link"
                 className="min-w-[240px] flex-1 rounded-card border-[3px] border-ink bg-porcelain px-[15px] py-[12px] text-[16px] text-ink placeholder:text-ink-3"
               />
               <Button
                 type="button"
                 variant="secondary"
-                disabled={busy || linked.kind === "looking" || !link.trim()}
-                onClick={() => void lookUp()}
+                disabled={busy || searching || linked.kind === "looking" || !link.trim()}
+                onClick={findModel}
               >
-                {linked.kind === "looking" ? "Looking…" : "Find the files"}
+                {linked.kind === "looking"
+                  ? "Looking…"
+                  : searching
+                    ? "Searching…"
+                    : LINKISH.test(link)
+                      ? "Find the files"
+                      : "Search"}
               </Button>
             </div>
+
+            {/* ---- what the search found. Folded away while a model is picked. ---- */}
+            {found && linked.kind !== "listed" && (
+              <div aria-live="polite" className="mt-[13.2px]">
+                {found.hits.length === 0 ? (
+                  <p className="m-0 text-[15px] text-ink-2">
+                    Nothing on {sourceNames} matches “{found.query}”. Try fewer or different words.
+                  </p>
+                ) : (
+                  <>
+                    <p className="m-0 mb-[8.8px] font-mono text-[11.5px] uppercase tracking-[0.04em] text-ink-3">
+                      {found.total.toLocaleString("en")} {found.total === 1 ? "model" : "models"} for “{found.query}” ·
+                      pick one to see its files
+                    </p>
+                    <ul
+                      aria-label="Models found"
+                      className="m-0 grid list-none grid-cols-2 gap-[11px] p-0 sm:grid-cols-[repeat(auto-fill,minmax(150px,1fr))]"
+                    >
+                      {found.hits.map((hit) => {
+                        const opening = linked.kind === "looking" && linked.url === hit.url;
+                        return (
+                          <li key={hit.id}>
+                            <button
+                              type="button"
+                              disabled={busy || linked.kind === "looking"}
+                              onClick={() => void lookUp(hit.url)}
+                              className={`flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-card border-[3px] border-ink p-0 text-left transition-colors disabled:cursor-not-allowed ${
+                                opening ? "bg-sun" : "bg-cream hover:bg-sun disabled:opacity-50"
+                              }`}
+                            >
+                              <span className="block aspect-[4/3] w-full flex-none border-b-[3px] border-ink bg-cream-2">
+                                {hit.thumb && (
+                                  <img src={hit.thumb} alt="" loading="lazy" className="block h-full w-full object-cover" />
+                                )}
+                              </span>
+                              <span className="block px-[10px] py-[8px]">
+                                <span className="line-clamp-2 break-words text-[14px] font-bold leading-[1.25] text-ink">
+                                  {hit.name}
+                                </span>
+                                <span className="mt-[3px] block truncate font-mono text-[11px] uppercase tracking-[0.04em] text-ink-3">
+                                  {opening
+                                    ? "Looking…"
+                                    : [
+                                        hit.author ? `by ${hit.author}` : null,
+                                        hit.likes ? `♥ ${compactCount.format(hit.likes)}` : null,
+                                      ]
+                                        .filter(Boolean)
+                                        .join(" · ")}
+                                </span>
+                              </span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {found.hits.length < found.total && found.next <= MAX_SEARCH_OFFSET && (
+                      <button
+                        type="button"
+                        disabled={busy || searching || linked.kind === "looking"}
+                        onClick={() => void search(true)}
+                        className="mx-auto mt-[13.2px] flex w-fit cursor-pointer border-0 bg-transparent p-0 font-mono text-[12px] font-bold uppercase tracking-[0.08em] text-ink-2 underline decoration-2 underline-offset-4 hover:text-cherry-dk disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {searching ? "Finding more…" : "Show more"}
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
 
             {linked.kind === "listed" && (
               <div
                 aria-live="polite"
                 className="mt-[13.2px] rounded-panel border-[3px] border-ink bg-porcelain px-[22px] py-[17.6px] shadow-stamp"
               >
-                <p className="m-0 break-words font-display text-[19px] text-ink">{linked.listing.model.name}</p>
+                <div className="flex items-start justify-between gap-[13.2px]">
+                  <p className="m-0 min-w-0 break-words font-display text-[19px] text-ink">{linked.listing.model.name}</p>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setLinked({ kind: "idle" })}
+                    className="flex-none cursor-pointer border-0 bg-transparent p-0 pt-[4px] font-mono text-[12px] font-bold uppercase tracking-[0.08em] text-ink-2 underline decoration-2 underline-offset-4 hover:text-cherry-dk disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {found ? "← Other results" : "Not this one"}
+                  </button>
+                </div>
                 <p className="m-0 mt-[3px] font-mono text-[12px] uppercase tracking-[0.04em] text-ink-3">
                   {[
                     linked.listing.model.author ? `by ${linked.listing.model.author}` : null,

@@ -90,7 +90,7 @@ async function signIn(user: { id: string; email: string }): Promise<Browser> {
   return b;
 }
 
-type Hits = { graphql: number; files: number; elsewhere: number; lastUserAgent: string | null };
+type Hits = { graphql: number; files: number; media: number; elsewhere: number; lastUserAgent: string | null };
 const hits = async (): Promise<Hits> => (await fetch(`${STUB}/_hits`)).json() as Promise<Hits>;
 const resetHits = () => fetch(`${STUB}/_reset`, { method: "POST" });
 
@@ -246,8 +246,8 @@ async function main() {
   check("the catalogue says importing is on, and from where", catalog.importSources.join() === "printables");
 
   const uploadPage = rendered(await (await aylaB.raw(`${APP}/upload`)).text());
-  check("the request form offers the link step", uploadPage.includes("paste a Printables link"),
-        "no link field on /upload");
+  check("the request form offers the find-a-model step", uploadPage.includes("find a model on Printables"),
+        "no search or link field on /upload");
 
   // ── listing ──────────────────────────────────────────────────────────────
   section("a link lists what could be printed");
@@ -290,6 +290,68 @@ async function main() {
   const none = await (await aylaB.post("/api/import/files", { url: link(4012) })).json();
   check("a model with nothing printable lists nothing, and says what was skipped",
         Array.isArray(none.files) && none.files.length === 0 && none.otherFiles === 1, JSON.stringify(none));
+
+  // ── searching ────────────────────────────────────────────────────────────
+  section("words find models, and only ever lead to a link");
+
+  await resetHits();
+  const foundRes = await aylaB.post("/api/import/search", { query: "  benchy  " });
+  const found = await foundRes.json();
+  const benchy = found.hits?.find((h: { id: string }) => h.id === "3161");
+  check("a search is answered", foundRes.status === 200 && found.total === 1 && found.query === "benchy",
+        `status ${foundRes.status} ${JSON.stringify(found).slice(0, 200)}`);
+  check("a result's link is rebuilt from the site's id and slug",
+        benchy?.url === "https://www.printables.com/model/3161-3d-benchy", benchy?.url);
+  check("and it carries its author and likes", benchy?.author === "Stub Research" && benchy?.likes === 1234,
+        JSON.stringify(benchy));
+  check("its picture is offered from this app, not the site",
+        typeof benchy?.thumb === "string" && benchy.thumb.startsWith("/api/import/thumb?path="), String(benchy?.thumb));
+  check("searching asks the API once and fetches nothing", (await hits()).graphql === 1 && (await hits()).media === 0);
+
+  const oddFound = await (await aylaB.post("/api/import/search", { query: "odd slug" })).json();
+  const oddHit = oddFound.hits?.[0];
+  check("a picture path that climbs out of the media folder gets no thumbnail, and an odd slug no place in the link",
+        oddHit?.thumb === null && oddHit?.url === "https://www.printables.com/model/4011", JSON.stringify(oddHit));
+
+  await resetHits();
+  const thumbRes = await aylaB.raw(APP + benchy?.thumb);
+  check("the thumbnail is served as a picture", thumbRes.status === 200 &&
+        thumbRes.headers.get("content-type") === "image/webp", `status ${thumbRes.status}`);
+  check("fetched once from the site's media folder", (await hits()).media === 1, JSON.stringify(await hits()));
+
+  await resetHits();
+  const sneaky = [
+    "media/prints/4011/images/../../../../_hits.png",
+    `${STUB}/_hits`,
+    "//evil.example/media/prints/1/images/a/b.png",
+    "media/prints/3161/images/1_stub/benchy.png?x=/../_hits",
+  ];
+  let sneakyStatuses = "";
+  for (const path of sneaky) {
+    sneakyStatuses += `${(await aylaB.raw(`${APP}/api/import/thumb?path=${encodeURIComponent(path)}`)).status} `;
+  }
+  const afterSneaky = await hits();
+  check("a thumbnail path that is not a picture the site named is a 404",
+        sneakyStatuses.trim() === "404 404 404 404", sneakyStatuses);
+  check("…and no connection is made for any of them",
+        afterSneaky.graphql + afterSneaky.files + afterSneaky.media + afterSneaky.elsewhere === 0,
+        JSON.stringify(afterSneaky));
+
+  await resetHits();
+  const short = await aylaB.post("/api/import/search", { query: "b" });
+  check("one letter is not a search, and the site is not asked", short.status === 422 && (await hits()).graphql === 0,
+        `status ${short.status}`);
+  check("a page past the last one is refused",
+        (await aylaB.post("/api/import/search", { query: "benchy", offset: 100000 })).status === 400);
+  check("without a session it is 401", (await anon.post("/api/import/search", { query: "benchy" })).status === 401);
+  check("a cross-origin page cannot make the server search",
+        (await aylaB.post("/api/import/search", { query: "benchy" }, { origin: "https://evil.example" })).status === 403);
+  check("nor fetch a thumbnail without a session", (await anon.raw(APP + benchy?.thumb)).status === 401);
+
+  const changed = await aylaB.post("/api/import/search", { query: "shape change" });
+  const changedBody = await changed.json();
+  check("when the search API changes, the message says so in words",
+        changed.status === 502 && /API may have changed/.test(String(changedBody.error)), JSON.stringify(changedBody));
 
   // ── importing ────────────────────────────────────────────────────────────
   section("an imported file becomes a story");

@@ -134,14 +134,24 @@ const BLOBS = {
 };
 
 const file = (id, name, size) => ({ id: String(id), name, fileSize: size });
-const model = (id, name, slug, stls) => ({
+const model = (id, name, slug, stls, image = null) => ({
   id: String(id),
   name,
   slug,
   user: { publicUsername: "Stub Research" },
   license: { name: "Creative Commons — Public Domain" },
   stls,
+  // Only search answers with this; the listing query never asks for it.
+  image: image && { filePath: image },
 });
+
+/** The start of a real WebP, which is all a thumbnail check needs. */
+const webp = Buffer.concat([Buffer.from("RIFF\x24\x00\x00\x00WEBPVP8 ", "latin1"), Buffer.alloc(24)]);
+
+/** Where the site keeps a picture's small copy, by path. */
+const THUMBS = {
+  "/media/prints/3161/images/1_stub/thumbs/inside/320x240/png/benchy.webp": webp,
+};
 
 /**
  * One behaviour per model id. The comment on each is what the importer is
@@ -154,7 +164,7 @@ const MODELS = {
     file(102, "plate.3mf", threeMf.length),
     file(103, "assembly-guide.pdf", 52_000),
     file(104, "scan-of-the-whole-harbour.stl", 300 * 1024 * 1024),
-  ]),
+  ], "media/prints/3161/images/1_stub/benchy.png"),
   // Named .stl, is a web page. Fetched, inspected, refused: 422, nothing kept.
   4001: model(4001, "Not what it says", "not-what-it-says", [file(201, "page.stl", html.length)]),
   // The download link points at another origin. Refused before connecting.
@@ -170,7 +180,9 @@ const MODELS = {
   // One file, so the form has nothing to ask.
   4010: model(4010, "Just the one", "just-the-one", [file(1001, "only.stl", box.length)]),
   // A slug that is not a slug. The stored link must not carry it.
-  4011: model(4011, "Odd slug", '"><script>alert(1)</script>', [file(1101, "benchy.stl", box.length)]),
+  // Its picture's path climbs out of the media folder. Search must offer no thumbnail.
+  4011: model(4011, "Odd slug", '"><script>alert(1)</script>', [file(1101, "benchy.stl", box.length)],
+    "media/prints/4011/images/../../../../_hits.png"),
   // No printable files at all.
   4012: model(4012, "Photos only", "photos-only", [file(1201, "render.png", 9_000)]),
 };
@@ -192,7 +204,7 @@ const LINKS = {
 // Serving
 // ---------------------------------------------------------------------------
 
-const hits = { graphql: 0, files: 0, elsewhere: 0 };
+const hits = { graphql: 0, files: 0, media: 0, elsewhere: 0 };
 /** The last request's User-Agent, so the suite can see how the app introduces itself. */
 let lastUserAgent = null;
 
@@ -234,6 +246,27 @@ async function graphql(req, res) {
     return json(res, 200, { data: { getDownloadLink: { ok: true, errors: null, output: { link, ttl: 86400 } } } });
   }
 
+  if (query.includes("searchPrints2")) {
+    const words = String(variables.query ?? "").toLowerCase();
+    // The API changing shape under the app: `items` became `results`.
+    if (words === "shape change") {
+      return json(res, 200, { data: { searchPrints2: { totalCount: 1, results: [] } } });
+    }
+    const all = Object.values(MODELS).filter((m) => m.name.toLowerCase().includes(words));
+    const offset = Number(variables.offset ?? 0);
+    const limit = Number(variables.limit ?? 10);
+    const items = all.slice(offset, offset + limit).map((m) => ({
+      id: m.id,
+      name: m.name,
+      slug: m.slug,
+      image: m.image,
+      user: m.user,
+      likesCount: 1234,
+      downloadCount: 5678,
+    }));
+    return json(res, 200, { data: { searchPrints2: { totalCount: all.length, items } } });
+  }
+
   const id = String(variables.id ?? "");
   // The API falling over.
   if (id === "4005") return json(res, 500, { errors: [{ message: "internal" }] });
@@ -254,7 +287,7 @@ const main = createServer(async (req, res) => {
 
   if (url.pathname === "/_hits") return json(res, 200, { ...hits, lastUserAgent });
   if (url.pathname === "/_reset" && req.method === "POST") {
-    hits.graphql = hits.files = hits.elsewhere = 0;
+    hits.graphql = hits.files = hits.media = hits.elsewhere = 0;
     lastUserAgent = null;
     return json(res, 200, { ok: true });
   }
@@ -273,6 +306,13 @@ const main = createServer(async (req, res) => {
     res.writeHead(200, { "content-type": "application/sla" });
     res.write(box);
     return res.end(Buffer.alloc(4096));
+  }
+
+  const thumb = THUMBS[url.pathname];
+  if (thumb && req.method === "GET") {
+    hits.media++;
+    res.writeHead(200, { "content-type": "image/webp", "content-length": thumb.length });
+    return res.end(thumb);
   }
 
   const blob = BLOBS[url.pathname];

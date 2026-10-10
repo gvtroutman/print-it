@@ -74,6 +74,7 @@ no header that names a user.
 | `GET` | `/api/catalog` | The materials and colours on offer right now, and which sites — if any — this instance imports from. |
 | `GET` | `/api/filament-library` | Spools of one material the owner can buy, searched in the filamentcolors.xyz library, with SpoolmanDB filling in (negative ids) where it finds too few. Send one's `id` as `swatchId` instead of `colorName`. |
 | `POST` | `/api/upload` | Upload a model and open a request. Multipart. |
+| `POST` | `/api/import/search` | Find models by name on the import site, 12 a page (`offset` for more). Each result's `url` goes to `/api/import/files`. `501` unless the instance imports. |
 | `POST` | `/api/import/files` | What a link to a model offers: the model and its printable files. `501` unless the instance imports. |
 | `POST` | `/api/import` | Open a request from one of those files instead of an upload. |
 | `GET` | `/api/models/{id}` | The model's bytes. |

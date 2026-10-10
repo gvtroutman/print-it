@@ -7,6 +7,12 @@ Notable changes. Every entry names a released version; deployments pin
 
 ### Added
 
+- **Find a model by name.** Where importing is switched on, the request
+  form's import box also searches Printables: type a few words and pick from
+  a grid of models with their picture, author and likes, 12 at a time; the
+  model's files then come up as if its link had been pasted. The server
+  fetches the pictures (`GET /api/import/thumb`), so the browser never calls
+  Printables itself. New `POST /api/import/search`.
 - **Ask for a colour the owner can get.** Under the shelf colours, the
   request form can search the filamentcolors.xyz swatch library for spools of
   the chosen material, by words and from a colour grid (closest-looking
