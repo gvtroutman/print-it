@@ -431,9 +431,9 @@ export function UploadForm({
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
-  // A fresh request starts with no material picked: the colour step shows
-  // every filament side by side instead of one material's spools, so the
-  // choice is made on purpose rather than defaulted past. Printing
+  // A fresh request starts on Auto, the filament left to the owner, so the
+  // dropdown shows the choice it opens with and the colour comes from the
+  // circles up top. Printing
   // again starts from what was asked for last time — where that is still on
   // the shelf. A material or colour the owner has since retired falls back to
   // the usual default, and `gone` says which, because a choice that quietly
@@ -484,7 +484,7 @@ export function UploadForm({
   const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
 
   const [title, setTitle] = useState(again?.title ?? "");
-  const [material, setMaterial] = useState<string | null>(againAuto ? AUTO_MATERIAL : initialMaterial?.name ?? null);
+  const [material, setMaterial] = useState<string | null>(initialMaterial?.name ?? AUTO_MATERIAL);
   // Whether the material's facts are showing rather than its dropdown.
   const [aboutMaterial, setAboutMaterial] = useState(false);
   const [quantity, setQuantity] = useState<number>(again?.quantity ?? 1);
