@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/authz";
-import { AuthShell, H1, Kicker, Lead, Notice } from "@/components/ui";
+import { AuthShell, H1, Lead, Notice } from "@/components/ui";
 import { SignInForm } from "./signin-form";
 import { safeRedirect } from "@/lib/safe-redirect";
 
@@ -28,13 +28,8 @@ export default async function SignInPage({
 
   return (
     <AuthShell>
-      <Kicker>Members only · ask at the counter</Kicker>
-      <H1>What&rsquo;ll it be?</H1>
-      <Lead>
-        Members: there is no password to type. Open the link the printer owner
-        gave you on this device and you are in — ask them for one if you need
-        it. Printer owner: your passkey, or your username and password.
-      </Lead>
+      <H1>Welcome back!</H1>
+      <Lead>Got a link from the printer owner? Just open it &mdash; no password needed.</Lead>
 
       {reset && (
         <div className="mb-[22px]">

@@ -72,19 +72,6 @@ export function SignInForm({ next }: { next: string }) {
 
   return (
     <div className="flex flex-col gap-[22px]">
-      {passkeySupported && (
-        <>
-          <Button type="button" onClick={signInWithPasskey} className="w-full">
-            Sign in with a passkey
-          </Button>
-          <div className="flex items-center gap-[13.2px]">
-            <span className="h-[3px] flex-1 rounded-full bg-ink" />
-            <span className="font-mono text-[11.5px] font-bold uppercase tracking-[0.14em] text-ink-3">or</span>
-            <span className="h-[3px] flex-1 rounded-full bg-ink" />
-          </div>
-        </>
-      )}
-
       <form onSubmit={signInWithPassword} className="flex flex-col gap-[13.2px]">
         <div>
           <Label htmlFor="username">Username</Label>
@@ -114,24 +101,26 @@ export function SignInForm({ next }: { next: string }) {
             onChange={(e) => setPassword(e.target.value)}
           />
         </div>
-        {/* Secondary on purpose: one primary per screen, and the passkey is
-            the path worth pushing people onto. */}
-        <Button
-          type="submit"
-          variant="secondary"
-          disabled={busy}
-          className="w-full"
-        >
+        <Button type="submit" disabled={busy} className="w-full">
           {busy ? "Checking…" : "Sign in"}
         </Button>
+        {/* A quiet link, not a second big button: the username field already
+            offers a saved passkey on its own (conditional UI above). */}
+        {passkeySupported && (
+          <button
+            type="button"
+            onClick={signInWithPasskey}
+            className="cursor-pointer self-center bg-transparent text-[14px] font-semibold text-ink-2 underline underline-offset-4 hover:text-ink"
+          >
+            Use a passkey instead
+          </button>
+        )}
       </form>
 
       {error && <Notice tone="warn">{error}</Notice>}
 
-      <p className="m-0 border-t-2 border-dashed border-rule pt-[13.2px] text-[13.5px] leading-[1.5] text-ink-2">
-        Print It! is invite-only — there is no sign-up. If you have not
-        been invited yet, or you have forgotten your password, ask whoever owns
-        the printer.
+      <p className="m-0 text-center text-[13.5px] leading-[1.5] text-ink-3">
+        No account, or forgot your password? Ask the printer owner.
       </p>
     </div>
   );
