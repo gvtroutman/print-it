@@ -280,29 +280,27 @@ function BambuPanel({
   );
 }
 
-/** Five whole-hour wheels and a tenth, like a car's mileage counter. */
+/**
+ * Five whole-hour wheels and a tenth, like a car's mileage counter. Narrower
+ * wheels on a phone, where the full-size ones push the h past the card's edge.
+ */
 function Odometer({ hours }: { hours: number }) {
   const [whole, tenth] = hours.toFixed(1).split(".");
   const wheels = whole.padStart(5, "0").split("");
+  const wheel =
+    "flex w-[27px] items-center justify-center rounded-[6px] border-[3px] border-ink py-[4px] font-mono text-[23px] font-bold sm:w-[34px] sm:text-[28px]";
   return (
     <div className="inline-flex items-stretch gap-[3px]" aria-label={`${hours.toFixed(1)} hours`}>
       {wheels.map((digit, i) => (
-        <span
-          key={i}
-          aria-hidden
-          className="flex w-[34px] items-center justify-center rounded-[6px] border-[3px] border-ink bg-ink py-[4px] font-mono text-[28px] font-bold text-cream"
-        >
+        <span key={i} aria-hidden className={`${wheel} bg-ink text-cream`}>
           {digit}
         </span>
       ))}
-      <span aria-hidden className="mx-[2px] mb-[9px] h-[9px] w-[9px] self-end rounded-full bg-ink" />
-      <span
-        aria-hidden
-        className="flex w-[34px] items-center justify-center rounded-[6px] border-[3px] border-ink bg-sun py-[4px] font-mono text-[28px] font-bold text-ink"
-      >
+      <span aria-hidden className="mx-[2px] mb-[8px] h-[8px] w-[8px] self-end rounded-full bg-ink sm:mb-[9px] sm:h-[9px] sm:w-[9px]" />
+      <span aria-hidden className={`${wheel} bg-sun text-ink`}>
         {tenth}
       </span>
-      <span aria-hidden className="ml-[8px] self-end font-display text-[30px] font-bold leading-none text-ink">
+      <span aria-hidden className="ml-[6px] self-end font-display text-[25px] font-bold leading-none text-ink sm:ml-[8px] sm:text-[30px]">
         h
       </span>
     </div>
