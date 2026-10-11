@@ -19,6 +19,14 @@ export type Actor = {
    * then "client", and every rule here treats them as one.
    */
   previewing?: true;
+  /**
+   * May sign another device in for themselves. Switched on per member by the
+   * printer owner; always on for the owner, so the preview shows the member
+   * menu with everything in it.
+   */
+  canAddDevice: boolean;
+  /** May invite somebody. Same rules as `canAddDevice`. */
+  canAddMember: boolean;
 };
 
 /**

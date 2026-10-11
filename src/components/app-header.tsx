@@ -122,6 +122,8 @@ export async function AppHeader({
                 role={user.role}
                 passkeyCount={passkeyCount}
                 previewing={user.previewing === true}
+                canAddDevice={user.canAddDevice}
+                canAddMember={user.canAddMember}
               />
             </div>
           </div>
@@ -184,6 +186,8 @@ export async function AppHeader({
             role={user.role}
             passkeyCount={passkeyCount}
             previewing={user.previewing === true}
+            canAddDevice={user.canAddDevice}
+            canAddMember={user.canAddMember}
           />
           <div className="justify-self-end">
             <ActivityMenu

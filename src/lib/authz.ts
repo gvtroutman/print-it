@@ -118,17 +118,24 @@ async function signedInUser(): Promise<{ actor: Actor; sessionId: string } | nul
     initials?: string | null;
     role?: string | null;
     banned?: boolean | null;
+    canAddDevice?: boolean | null;
+    canAddMember?: boolean | null;
   };
 
   if (u.banned) return null;
 
+  const admin = u.role === "admin";
   return {
     actor: {
       id: u.id,
       name: u.name,
       email: u.email,
       initials: u.initials ?? "??",
-      role: u.role === "admin" ? "admin" : "client",
+      role: admin ? "admin" : "client",
+      // The owner's switches are for members; the owner holds both so the
+      // member preview shows the full menu.
+      canAddDevice: admin || u.canAddDevice === true,
+      canAddMember: admin || u.canAddMember === true,
     },
     sessionId: session.session.id,
   };

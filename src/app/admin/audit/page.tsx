@@ -39,6 +39,7 @@ const LENSES: Array<{ key: Lens; label: string; actions?: string[] }> = [
       "invite.sent", "invite.resent", "invite.revoked", "invite.accepted",
       "invite.rejected", "auth.signed_in", "auth.signed_out", "user.role_changed",
       "device.link_requested", "device.linked",
+      "access.revoked", "access.restored", "access.permission_changed",
     ],
   },
   {

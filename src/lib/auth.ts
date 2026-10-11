@@ -243,6 +243,10 @@ export const auth = betterAuth({
       initials: { type: "string", required: false, input: false },
       role: { type: "string", required: false, input: false, defaultValue: "client" },
       invitedById: { type: "string", required: false, input: false },
+      // The owner's per-member switches. Read off the row on every request
+      // (the cookie cache is off), so flipping one takes effect at once.
+      canAddDevice: { type: "boolean", required: false, input: false, defaultValue: false },
+      canAddMember: { type: "boolean", required: false, input: false, defaultValue: false },
     },
 
     /**

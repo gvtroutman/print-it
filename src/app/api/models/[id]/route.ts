@@ -72,6 +72,10 @@ export async function GET(
           email: row.email,
           initials: row.initials ?? "??",
           role: row.role === "admin" ? "admin" : "client",
+          // A slicer link fetches one model. It carries none of the
+          // account's switches, which only the account menu reads anyway.
+          canAddDevice: false,
+          canAddMember: false,
         } satisfies Actor;
         viaLink = true;
       }

@@ -58,6 +58,13 @@ model User {
   invitedBy    User?   @relation("Invitations", fields: [invitedById], references: [id], onDelete: SetNull)
   invitedUsers User[]  @relation("Invitations")
 
+  /// What a member may do for themselves. Off for everybody until the printer
+  /// owner switches one on from the guest list; "Add device" and "Add member"
+  /// then appear in that member's account menu. Both are moot for the owner,
+  /// who can always do either from the admin pages.
+  canAddDevice Boolean @default(false)
+  canAddMember Boolean @default(false)
+
   // --- admin plugin ---
   banned     Boolean?  @default(false)
   banReason  String?

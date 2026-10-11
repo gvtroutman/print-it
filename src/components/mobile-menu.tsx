@@ -28,6 +28,8 @@ export function MobileMenu({
   role,
   passkeyCount,
   previewing,
+  canAddDevice,
+  canAddMember,
 }: {
   nav: NavGroup[];
   active: string;
@@ -37,6 +39,8 @@ export function MobileMenu({
   role: "client" | "admin";
   passkeyCount: number;
   previewing?: boolean;
+  canAddDevice?: boolean;
+  canAddMember?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
@@ -121,6 +125,8 @@ export function MobileMenu({
               role={role}
               passkeyCount={passkeyCount}
               previewing={previewing}
+              canAddDevice={canAddDevice}
+              canAddMember={canAddMember}
             />
           </div>
         </div>

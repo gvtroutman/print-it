@@ -1,10 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { notFound } from "next/navigation";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/authz";
+import { requireAdmin, requireUser, type Actor } from "@/lib/authz";
 import { requireFreshAuth } from "@/lib/reauth";
 import { record } from "@/lib/audit";
 import { contactEmail } from "@/lib/contact-email";
@@ -54,15 +55,46 @@ const InviteSchema = z
     path: ["name"],
   });
 
+/**
+ * Who may invite, or sign a device in: the printer owner, or a member the
+ * owner has switched that on for from the guest list. Answers 404 otherwise,
+ * the same as `requireAdmin`, so a member poking at an action they were not
+ * given learns nothing from it.
+ */
+async function requirePermitted(flag: "canAddDevice" | "canAddMember"): Promise<Actor> {
+  const user = await requireUser();
+  if (!user[flag]) notFound();
+  return user;
+}
+
+/**
+ * Re-authentication, where there is something to re-prove. The owner has a
+ * password or a passkey and is asked for it again — in the owner view and in
+ * the member preview alike, since the account behind both is theirs. A member
+ * has neither: their device *is* their sign-in, and there is nothing a stolen
+ * cookie could be asked for that it does not already hold.
+ */
+async function requireFreshAuthFor(actor: Actor, memberPage: string): Promise<void> {
+  if (actor.role === "admin") await requireFreshAuth("/admin/invites");
+  else if (actor.previewing) await requireFreshAuth(memberPage);
+}
+
+/** The pages that list or mint invitations and device links. */
+function revalidateAccessPages(): void {
+  revalidatePath("/admin/invites");
+  revalidatePath("/add-member");
+  revalidatePath("/add-device");
+}
+
 export async function sendInviteAction(
   _prev: InviteFormState,
   formData: FormData,
 ): Promise<InviteFormState> {
   // Every action re-checks the role. Rendering the page is not authorisation.
-  const admin = await requireAdmin();
+  const admin = await requirePermitted("canAddMember");
   // An invitation mints a whole new account, which outlives any stolen
   // session. Prove it is you.
-  await requireFreshAuth("/admin/invites");
+  await requireFreshAuthFor(admin, "/add-member");
 
   const parsed = InviteSchema.safeParse({
     email: String(formData.get("email") ?? "").trim(),
@@ -90,7 +122,7 @@ export async function sendInviteAction(
         hasEmail: invite.email !== null,
       },
     });
-    revalidatePath("/admin/invites");
+    revalidateAccessPages();
     return { sent: who, handoverUrl };
   } catch (e) {
     if (e instanceof InviteError) return { error: e.message };
@@ -239,14 +271,18 @@ export async function resetPasswordAction(
  *
  * Earlier devices stay signed in. Taking a device away is what "Revoke
  * access?" is for.
+ *
+ * A member the owner has switched "Add device" on for can mint one for
+ * themselves — only themselves: the form may name no other account.
  */
 export async function deviceLinkAction(
   _prev: InviteFormState,
   formData: FormData,
 ): Promise<InviteFormState> {
-  const admin = await requireAdmin();
-  await requireFreshAuth("/admin/invites");
-  const userId = String(formData.get("userId") ?? "");
+  const admin = await requirePermitted("canAddDevice");
+  const userId = String(formData.get("userId") || admin.id);
+  if (admin.role !== "admin" && userId !== admin.id) notFound();
+  await requireFreshAuthFor(admin, "/add-device");
 
   const target = await db.user.findUnique({
     where: { id: userId },
@@ -292,9 +328,45 @@ export async function deviceLinkAction(
     },
   });
 
-  revalidatePath("/admin/invites");
+  revalidateAccessPages();
   const who = to ?? target.name;
   return delivered ? { sent: who } : { sent: who, handoverUrl: url };
+}
+
+/**
+ * Switch one of a member's permissions on or off.
+ *
+ * Two of them, both things the owner would otherwise do by hand from this
+ * page: signing another of the member's devices in, and inviting somebody.
+ * Handing either over is handing over access — an invitation mints an
+ * account — so it sits behind the same re-authentication as the actions it
+ * delegates, and goes in the audit log both ways.
+ */
+export async function setMemberPermissionAction(formData: FormData): Promise<void> {
+  const admin = await requireAdmin();
+  await requireFreshAuth("/admin/invites");
+  const userId = String(formData.get("userId") ?? "");
+  const permission = String(formData.get("permission") ?? "");
+  const on = String(formData.get("on") ?? "") === "true";
+  if (permission !== "canAddDevice" && permission !== "canAddMember") return;
+
+  const target = await db.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, name: true, role: true },
+  });
+  // The owner holds both already; there is nothing to switch.
+  if (!target || target.role !== "client") return;
+
+  await db.user.update({ where: { id: target.id }, data: { [permission]: on } });
+
+  await record({
+    action: "access.permission_changed",
+    actor: admin,
+    subject: contactEmail(target.email) ?? target.name,
+    detail: { forName: target.name, permission, on },
+  });
+
+  revalidatePath("/admin/invites");
 }
 
 /**

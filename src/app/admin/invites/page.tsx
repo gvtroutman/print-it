@@ -13,6 +13,7 @@ import { InviteForm } from "./invite-form";
 import { ResetPassword } from "@/components/reset-password";
 import { DeviceLink } from "@/components/device-link";
 import { MemberAccess } from "@/components/member-access";
+import { MemberSwitches } from "@/components/member-switches";
 import { ResendInvite } from "@/components/resend-invite";
 import { revokeInviteAction } from "./actions";
 
@@ -72,6 +73,8 @@ export default async function InvitesPage() {
         email: true,
         initials: true,
         banned: true,
+        canAddDevice: true,
+        canAddMember: true,
         // Members who registered before sign-in went passwordless still have
         // one, and still need a way to reset it.
         accounts: { where: { providerId: "credential" }, select: { id: true } },
@@ -159,6 +162,19 @@ export default async function InvitesPage() {
                       userId={m.id}
                       name={m.name.split(" ")[0] ?? m.name}
                       suspended={m.banned === true}
+                    />
+                  </div>
+                  {/* On its own row under the actions: these are settings,
+                      not things to do, and they read better apart. */}
+                  <div className="flex basis-full flex-wrap items-center gap-[8.8px]">
+                    <span className="font-mono text-[11.5px] uppercase text-ink-3">
+                      May, from their menu:
+                    </span>
+                    <MemberSwitches
+                      userId={m.id}
+                      name={m.name.split(" ")[0] ?? m.name}
+                      canAddDevice={m.canAddDevice}
+                      canAddMember={m.canAddMember}
                     />
                   </div>
                 </div>

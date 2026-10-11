@@ -33,6 +33,7 @@ export type AuditAction =
   | "device.linked"
   | "access.revoked"
   | "access.restored"
+  | "access.permission_changed"
   // work
   | "story.created"
   | "upload.rejected"

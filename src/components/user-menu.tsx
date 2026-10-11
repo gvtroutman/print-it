@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { endPreviewAction, startPreviewAction } from "@/app/actions/preview";
@@ -16,6 +17,8 @@ export function UserMenu({
   role,
   passkeyCount,
   previewing,
+  canAddDevice,
+  canAddMember,
 }: {
   name: string;
   initials: string;
@@ -25,6 +28,9 @@ export function UserMenu({
   passkeyCount: number;
   /** The printer owner, looking at the member view. */
   previewing?: boolean;
+  /** The owner's per-member switches; see `Actor` in scope.ts. */
+  canAddDevice?: boolean;
+  canAddMember?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
@@ -68,6 +74,8 @@ export function UserMenu({
           role={role}
           passkeyCount={passkeyCount}
           previewing={previewing}
+          canAddDevice={canAddDevice}
+          canAddMember={canAddMember}
         />
       </div>
     </div>
@@ -86,6 +94,10 @@ export function UserMenu({
  *
  * A member's email is not shown here. It is not how they sign in and not how
  * anybody reaches them in the app, so on their own card it was only clutter.
+ *
+ * Under the card, a member may get "Add device" and "Add member": the two
+ * things the printer owner can hand them from the guest list. Each shows only
+ * when its switch is on, so a member with neither sees the menu as it was.
  */
 export function AccountPanel({
   name,
@@ -94,6 +106,8 @@ export function AccountPanel({
   role,
   passkeyCount,
   previewing,
+  canAddDevice,
+  canAddMember,
 }: {
   name: string;
   /** Shown as an avatar beside the name. The phone menu passes it; the
@@ -103,7 +117,17 @@ export function AccountPanel({
   role: "client" | "admin";
   passkeyCount: number;
   previewing?: boolean;
+  canAddDevice?: boolean;
+  canAddMember?: boolean;
 }) {
+  // The owner has their own pages for both; these are the member's way in.
+  const extras = role === "client"
+    ? [
+        canAddDevice && { label: "Add device", href: "/add-device" },
+        canAddMember && { label: "Add member", href: "/add-member" },
+      ].filter((x): x is { label: string; href: string } => Boolean(x))
+    : [];
+
   // Spans, not paragraphs: on the owner's card this sits inside a button.
   const card = (
     <span className="flex items-center gap-[12px]">
@@ -121,7 +145,7 @@ export function AccountPanel({
           <span className="mt-[2px] block break-all font-mono text-[11.5px] text-ink-3">{email}</span>
         )}
         <span className="mt-[8.8px] inline-block rounded-chip border-2 border-ink bg-cream-2 px-[8px] font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink">
-          {previewing ? "Previewing as a member" : role === "admin" ? "Printer owner" : "Invited member"}
+          {previewing ? "Member view" : role === "admin" ? "Printer owner" : "Invited member"}
         </span>
       </span>
     </span>
@@ -150,6 +174,20 @@ export function AccountPanel({
       ) : (
         card
       )}
+      {extras.length > 0 && (
+        <ul className="m-0 mt-[13.2px] flex list-none flex-col gap-[6px] p-0">
+          {extras.map((item) => (
+            <li key={item.href}>
+              <Link
+                href={item.href}
+                className="stamp flex w-full items-center rounded-chip border-[3px] border-ink bg-porcelain px-[13.2px] py-[8px] font-mono text-[12.5px] font-bold uppercase tracking-[0.08em] text-ink hover:bg-sun"
+              >
+                {item.label}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
       {/* How you sign in. The printer owner gets a way to change it;
           a member's device is their sign-in, and there is nothing to
           change. */}
@@ -170,8 +208,9 @@ export function AccountPanel({
           </>
         ) : (
           <p className="m-0 font-mono text-[11.5px] uppercase text-ink-3">
-            This device keeps you signed in. For another one, ask the
-            printer owner for a link.
+            {canAddDevice
+              ? "This device keeps you signed in. Add device signs in another."
+              : "This device keeps you signed in. For another one, ask the printer owner for a link."}
           </p>
         )}
       </div>
