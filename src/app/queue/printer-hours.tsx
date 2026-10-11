@@ -98,7 +98,7 @@ export async function PrinterHours() {
 
               <div className="flex flex-wrap items-end gap-[22px] p-[22px]">
                 <div className="flex-[1_1_260px]">
-                  <p className={`${label} mb-[8px]`}>Hours on the clock</p>
+                  <p className={`${label} mb-[8px]`}>Hours</p>
                   <Odometer hours={hours} />
                   <p className="m-0 mt-[10px] text-[14px] text-ink-2">{summary.join(" · ")}</p>
                 </div>
@@ -283,8 +283,7 @@ function BambuPanel({
 /**
  * Five whole-hour wheels and a tenth, like a car's mileage counter. Full size
  * from 400px up, which takes in the big phones (an S25 Ultra is 412px wide);
- * narrower wheels below that, where the full-size ones push the h past the
- * card's edge.
+ * narrower wheels below that, where the full-size ones overrun the card's edge.
  */
 function Odometer({ hours }: { hours: number }) {
   const [whole, tenth] = hours.toFixed(1).split(".");
@@ -304,12 +303,6 @@ function Odometer({ hours }: { hours: number }) {
       />
       <span aria-hidden className={`${wheel} bg-sun text-ink`}>
         {tenth}
-      </span>
-      <span
-        aria-hidden
-        className="ml-[6px] self-end font-display text-[25px] font-bold leading-none text-ink min-[400px]:ml-[8px] min-[400px]:text-[32px]"
-      >
-        h
       </span>
     </div>
   );
