@@ -262,12 +262,12 @@ function BambuPanel({
   );
 }
 
-/** Five whole-hour wheels, like a car's mileage counter. Whole hours, as the printer's own screen shows them. */
+/** Five whole-hour wheels and a tenth, like a car's mileage counter. */
 function Odometer({ hours }: { hours: number }) {
-  const whole = Math.floor(hours);
-  const wheels = String(whole).padStart(5, "0").split("");
+  const [whole, tenth] = hours.toFixed(1).split(".");
+  const wheels = whole.padStart(5, "0").split("");
   return (
-    <div className="inline-flex items-stretch gap-[3px]" aria-label={`${whole} hours`}>
+    <div className="inline-flex items-stretch gap-[3px]" aria-label={`${hours.toFixed(1)} hours`}>
       {wheels.map((digit, i) => (
         <span
           key={i}
@@ -277,6 +277,12 @@ function Odometer({ hours }: { hours: number }) {
           {digit}
         </span>
       ))}
+      <span
+        aria-hidden
+        className="ml-[2px] flex w-[34px] items-center justify-center rounded-[6px] border-[3px] border-ink bg-sun py-[4px] font-mono text-[28px] font-bold text-ink"
+      >
+        {tenth}
+      </span>
       <span aria-hidden className="ml-[8px] self-end font-display text-[20px] text-ink">
         h
       </span>
