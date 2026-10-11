@@ -281,30 +281,40 @@ function BambuPanel({
 }
 
 /**
- * Five whole-hour wheels and a tenth, like a car's mileage counter. The six
- * wheels share the width of the column they sit in (a container, so `cqw` is
- * that column), less the gaps and the decimal point, up to 56px each: they
- * fill a phone edge to edge and stop growing on a wide screen.
+ * Five whole-hour flaps and a tenth, like a split-flap board. The six flaps
+ * share the width of the column they sit in (a container, so `cqw` is that
+ * column), less the gaps and the decimal point, up to 56px each: they fill a
+ * phone edge to edge and stop growing on a wide screen.
  */
 function Odometer({ hours }: { hours: number }) {
   const [whole, tenth] = hours.toFixed(1).split(".");
   const wheels = whole.padStart(5, "0").split("");
-  const wheel =
-    "flex w-[min(56px,calc((100cqw_-_34px)/6))] items-center justify-center rounded-[6px] border-[3px] border-ink py-[4px] font-mono text-[min(46px,calc((100cqw_-_34px)/6*0.82))] font-bold";
   return (
     <div className="inline-flex items-stretch gap-[3px]" aria-label={`${hours.toFixed(1)} hours`}>
       {wheels.map((digit, i) => (
-        <span key={i} aria-hidden className={`${wheel} bg-ink text-cream`}>
-          {digit}
-        </span>
+        <Flap key={i} digit={digit} className="bg-ink text-cream" />
       ))}
       <span
         aria-hidden
         className="mx-[2px] mb-[10px] h-[10px] w-[10px] self-end rounded-full bg-ink"
       />
-      <span aria-hidden className={`${wheel} bg-sun text-ink`}>
-        {tenth}
-      </span>
+      <Flap digit={tenth} className="bg-sun text-ink" />
     </div>
+  );
+}
+
+/** One split-flap card: a lighter top half, the seam through the digit, a hinge pin at each end. */
+function Flap({ digit, className }: { digit: string; className: string }) {
+  return (
+    <span
+      aria-hidden
+      className={`relative flex w-[min(56px,calc((100cqw_-_34px)/6))] items-center justify-center overflow-hidden rounded-[6px] border-[3px] border-ink py-[4px] font-mono text-[min(46px,calc((100cqw_-_34px)/6*0.82))] font-bold ${className}`}
+    >
+      <span className="absolute inset-x-0 top-0 h-1/2 bg-white/15" />
+      <span className="relative">{digit}</span>
+      <span className="absolute inset-x-0 top-1/2 h-[2px] -translate-y-1/2 bg-ink" />
+      <span className="absolute left-0 top-1/2 h-[6px] w-[3px] -translate-y-1/2 rounded-r-[1px] bg-ink-3" />
+      <span className="absolute right-0 top-1/2 h-[6px] w-[3px] -translate-y-1/2 rounded-l-[1px] bg-ink-3" />
+    </span>
   );
 }
