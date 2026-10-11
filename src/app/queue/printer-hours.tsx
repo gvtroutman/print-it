@@ -289,7 +289,7 @@ function Odometer({ hours }: { hours: number }) {
   const [whole, tenth] = hours.toFixed(1).split(".");
   const wheels = whole.padStart(5, "0").split("");
   const wheel =
-    "flex w-[27px] items-center justify-center rounded-[6px] border-[3px] border-ink py-[4px] font-mono text-[23px] font-bold min-[400px]:w-[36px] min-[400px]:text-[30px]";
+    "flex w-[30px] items-center justify-center rounded-[6px] border-[3px] border-ink py-[4px] font-mono text-[25px] font-bold min-[400px]:w-[40px] min-[400px]:text-[33px]";
   return (
     <div className="inline-flex items-stretch gap-[3px]" aria-label={`${hours.toFixed(1)} hours`}>
       {wheels.map((digit, i) => (
