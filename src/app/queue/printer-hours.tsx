@@ -97,7 +97,7 @@ export async function PrinterHours() {
               </div>
 
               <div className="flex flex-wrap items-end gap-[22px] p-[22px]">
-                <div className="flex-[1_1_260px]">
+                <div className="@container flex-[1_1_260px]">
                   <p className={`${label} mb-[8px]`}>Hours</p>
                   <Odometer hours={hours} />
                   <p className="m-0 mt-[10px] text-[14px] text-ink-2">{summary.join(" · ")}</p>
@@ -281,15 +281,16 @@ function BambuPanel({
 }
 
 /**
- * Five whole-hour wheels and a tenth, like a car's mileage counter. Full size
- * from 400px up, which takes in the big phones (an S25 Ultra is 412px wide);
- * narrower wheels below that, where the full-size ones overrun the card's edge.
+ * Five whole-hour wheels and a tenth, like a car's mileage counter. The six
+ * wheels share the width of the column they sit in (a container, so `cqw` is
+ * that column), less the gaps and the decimal point, up to 56px each: they
+ * fill a phone edge to edge and stop growing on a wide screen.
  */
 function Odometer({ hours }: { hours: number }) {
   const [whole, tenth] = hours.toFixed(1).split(".");
   const wheels = whole.padStart(5, "0").split("");
   const wheel =
-    "flex w-[30px] items-center justify-center rounded-[6px] border-[3px] border-ink py-[4px] font-mono text-[25px] font-bold min-[400px]:w-[40px] min-[400px]:text-[33px]";
+    "flex w-[min(56px,calc((100cqw_-_34px)/6))] items-center justify-center rounded-[6px] border-[3px] border-ink py-[4px] font-mono text-[min(46px,calc((100cqw_-_34px)/6*0.82))] font-bold";
   return (
     <div className="inline-flex items-stretch gap-[3px]" aria-label={`${hours.toFixed(1)} hours`}>
       {wheels.map((digit, i) => (
@@ -299,7 +300,7 @@ function Odometer({ hours }: { hours: number }) {
       ))}
       <span
         aria-hidden
-        className="mx-[2px] mb-[8px] h-[8px] w-[8px] self-end rounded-full bg-ink min-[400px]:mb-[10px] min-[400px]:h-[10px] min-[400px]:w-[10px]"
+        className="mx-[2px] mb-[10px] h-[10px] w-[10px] self-end rounded-full bg-ink"
       />
       <span aria-hidden className={`${wheel} bg-sun text-ink`}>
         {tenth}
