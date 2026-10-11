@@ -295,16 +295,14 @@ function Odometer({ hours }: { hours: number }) {
           {digit}
         </span>
       ))}
-      <span aria-hidden className="mb-[8px] self-end px-[1px] font-mono text-[28px] font-bold leading-none text-ink">
-        .
-      </span>
+      <span aria-hidden className="mx-[2px] mb-[9px] h-[9px] w-[9px] self-end rounded-full bg-ink" />
       <span
         aria-hidden
         className="flex w-[34px] items-center justify-center rounded-[6px] border-[3px] border-ink bg-sun py-[4px] font-mono text-[28px] font-bold text-ink"
       >
         {tenth}
       </span>
-      <span aria-hidden className="ml-[8px] self-end font-display text-[20px] text-ink">
+      <span aria-hidden className="ml-[8px] self-end font-display text-[30px] font-bold leading-none text-ink">
         h
       </span>
     </div>
