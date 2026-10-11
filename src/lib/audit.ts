@@ -75,6 +75,7 @@ export type AuditAction =
   | "donation.kofi_received"
   // printers
   | "printer.hours_logged"
+  | "printer.reading_removed"
   | "printer.bambu_connected"
   | "printer.bambu_disconnected";
 

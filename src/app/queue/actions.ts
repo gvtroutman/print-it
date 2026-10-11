@@ -68,6 +68,24 @@ export async function logHoursAction(formData: FormData): Promise<void> {
   );
 }
 
+/** Taking back a reading logged by mistake. The audit keeps what it said. */
+export async function removeReadingAction(formData: FormData): Promise<void> {
+  const admin = await requireAdmin();
+  const id = String(formData.get("readingId") ?? "");
+  const reading = await db.printerReading.findUnique({ where: { id }, include: { printer: true } });
+  if (!reading) back("error", "That reading is already gone.");
+
+  await db.printerReading.delete({ where: { id } });
+  await record({
+    action: "printer.reading_removed",
+    actor: admin,
+    subject: reading.printer.name,
+    detail: { hours: reading.hours, loggedAt: reading.createdAt.toISOString() },
+  });
+  revalidatePath("/queue");
+  back("toast", `${reading.printer.name}: removed the ${reading.hours} h reading`);
+}
+
 /**
  * Connecting Bambu Lab, in two plain forms: an email, then the code Bambu
  * sends to it. The email waits in a short-lived cookie between the two, so it

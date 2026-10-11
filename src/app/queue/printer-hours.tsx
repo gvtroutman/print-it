@@ -13,6 +13,7 @@ import {
   bambuSendCodeAction,
   bambuSyncAction,
   logHoursAction,
+  removeReadingAction,
 } from "./actions";
 import { LocalTime } from "./local-time";
 
@@ -31,7 +32,7 @@ const label = "m-0 font-mono text-[11.5px] uppercase tracking-[0.05em] text-ink-
  * between readings. Below it: the prints themselves, with when and how long.
  */
 export async function PrinterHours() {
-  const [printers, link, jar] = await Promise.all([
+  const [printers, totals, link, jar] = await Promise.all([
     db.printer.findMany({
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       include: {
@@ -39,6 +40,8 @@ export async function PrinterHours() {
         prints: { orderBy: { startedAt: "desc" }, take: 300 },
       },
     }),
+    // Every synced print, not just the 300 listed, for a meter with no reading under it.
+    db.printerPrint.groupBy({ by: ["printerId"], _sum: { seconds: true } }),
     bambuLink(),
     cookies(),
   ]);
@@ -56,7 +59,9 @@ export async function PrinterHours() {
         // Prints after the newest reading are not on it yet; with no reading, the history is all there is.
         const since = latest?.createdAt ?? new Date(0);
         const sinceReading = prints.filter((p) => p.startedAt >= since);
-        const printedHours = sinceReading.reduce((sum, p) => sum + p.seconds, 0) / 3600;
+        const printedHours = latest
+          ? sinceReading.reduce((sum, p) => sum + p.seconds, 0) / 3600
+          : (totals.find((t) => t.printerId === printer.id)?._sum.seconds ?? 0) / 3600;
         const hours = (latest?.hours ?? 0) + printedHours;
 
         let perWeek: number | null = null;
@@ -133,19 +138,32 @@ export async function PrinterHours() {
                 </div>
               )}
 
-              {printer.readings.length > 1 && (
-                <ol className="m-0 list-none border-t-2 border-dashed border-rule p-0 px-[22px] py-[11px]">
-                  {printer.readings.slice(0, 5).map((reading) => (
-                    <li
-                      key={reading.id}
-                      className="flex flex-wrap gap-x-[12px] py-[3px] font-mono text-[12px] text-ink-2"
-                    >
-                      <span className="w-[80px] font-bold text-ink">{reading.hours.toFixed(1)} h</span>
-                      <span className="text-ink-3">
-                        {reading.createdAt.toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}
-                      </span>                  </li>
-                  ))}
-                </ol>
+              {printer.readings.length > 0 && (
+                <div className="border-t-2 border-dashed border-rule px-[22px] py-[11px]">
+                  <p className={`${label} mb-[6px]`}>Your readings</p>
+                  <ol className="m-0 list-none p-0">
+                    {printer.readings.slice(0, 5).map((reading) => (
+                      <li
+                        key={reading.id}
+                        className="flex flex-wrap items-baseline gap-x-[12px] py-[3px] font-mono text-[12px] text-ink-2"
+                      >
+                        <span className="w-[80px] font-bold text-ink">{reading.hours.toFixed(1)} h</span>
+                        <span className="text-ink-3">
+                          <LocalTime iso={reading.createdAt.toISOString()} format="date" />
+                        </span>
+                        <form action={removeReadingAction}>
+                          <input type="hidden" name="readingId" value={reading.id} />
+                          <button
+                            type="submit"
+                            className="cursor-pointer border-0 bg-transparent p-0 font-mono text-[12px] font-bold text-ink-2 underline"
+                          >
+                            Remove
+                          </button>
+                        </form>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
               )}
             </article>
           </PrinterPeek>
