@@ -112,7 +112,7 @@ export async function AppHeader({
               <ActivityMenu
                 items={items}
                 unread={unread}
-                title={user.role === "admin" ? "New from the group" : "Updates on your prints"}
+                title="Notifications"
                 role={user.role}
               />
               <UserMenu
@@ -193,7 +193,7 @@ export async function AppHeader({
             <ActivityMenu
               items={items}
               unread={unread}
-              title={user.role === "admin" ? "New from the group" : "Updates on your prints"}
+              title="Notifications"
               role={user.role}
             />
           </div>
