@@ -77,7 +77,7 @@ if (isProd && !isBuildPhase) {
 }
 
 export const auth = betterAuth({
-  appName: "Pretty Please Print",
+  appName: "Print It!",
   baseURL,
   secret: process.env.BETTER_AUTH_SECRET,
   database: prismaAdapter(db, { provider: "postgresql" }),
@@ -403,7 +403,7 @@ export const auth = betterAuth({
 
     passkey({
       rpID: process.env.PASSKEY_RP_ID ?? "localhost",
-      rpName: process.env.PASSKEY_RP_NAME ?? "Pretty Please Print",
+      rpName: process.env.PASSKEY_RP_NAME ?? "Print It!",
       origin: baseURL,
       authenticatorSelection: {
         // Discoverable credentials let someone sign in without typing a

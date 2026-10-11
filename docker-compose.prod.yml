@@ -1,4 +1,4 @@
-# Pretty Please Print — the whole stack in containers.
+# Print It! — the whole stack in containers.
 #
 # This file CONSUMES published images; it does not build them. A deployment
 # pulls a tag that CI built, signed and scanned, exactly like ciphra's VPS —

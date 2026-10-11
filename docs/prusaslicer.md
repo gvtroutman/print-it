@@ -203,7 +203,7 @@ with a `.reg` file:
 ```reg
 Windows Registry Editor Version 5.00
 [HKEY_CLASSES_ROOT\ppp]
-@="URL:Pretty Please Print"
+@="URL:Print It!"
 "URL Protocol"=""
 [HKEY_CLASSES_ROOT\ppp\shell\open\command]
 @="\"C:\\Program Files\\Git\\bin\\bash.exe\" \"C:/path/to/prusa-open.sh\" \"%1\""

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # ppp → PrusaSlicer bridge. Handles a `ppp://slice/<id>` link by fetching the
-# model from a Pretty Please Print instance and opening it in a local slicer.
+# model from a Print It! instance and opening it in a local slicer.
 #
 # Runs ON THE PERSON'S OWN MACHINE — the one with the printer, PrusaSlicer, and
 # a browser — not on the server. It is the whole reason "Open in PrusaSlicer"

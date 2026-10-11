@@ -57,7 +57,7 @@ mkdir -p "$apps_dir"
 cat >"$desktop" <<DESKTOP
 [Desktop Entry]
 Type=Application
-Name=Pretty Please Print → PrusaSlicer
+Name=Print It! → PrusaSlicer
 Comment=Open a ppp:// model link in PrusaSlicer
 Exec=$handler %u
 Terminal=false
@@ -99,7 +99,7 @@ if [ -f "$conf" ]; then
 else
   umask 077
   cat >"$conf" <<'CONF'
-# Pretty Please Print → PrusaSlicer bridge config. Read by prusa-open.sh.
+# Print It! → PrusaSlicer bridge config. Read by prusa-open.sh.
 #
 # There is nothing secret in here. The clicked link carries its own credential
 # — minted by the app for whoever was looking at that ticket, good for half an

@@ -1,5 +1,5 @@
 {
-  "name": "pretty-please-print",
+  "name": "print-it",
   "version": "0.3.0",
   "private": true,
   "description": "Invite-only 3D print requests for a small office — upload a model, follow it through the print stages.",

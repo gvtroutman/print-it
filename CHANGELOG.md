@@ -54,6 +54,13 @@ Notable changes. Every entry names a released version; deployments pin
 
 ### Changed
 
+- **The old name is gone from everything a person reads.** Emails, the
+  passkey prompt, the OpenAPI title, the README, the slicer handler's menu
+  entry and the package name now say *Print It!* too. Cookies,
+  `ppp://` slicer links, the `ppp-app` and `ppp-migrate`
+  images and the `PPP_TAG` setting are still unchanged, so nobody is signed
+  out and no deployment has to move.
+
 - **Tickets are numbered `PI-` now**, not `PPP-`, and count from the ticket's
   own id instead of adding 100: PI-4 is the ticket that was PPP-104. It shows
   on the board, the ticket page, API responses (`ref`), the audit trail and

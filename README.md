@@ -1,4 +1,4 @@
-# Pretty Please Print
+# Print It!
 
 [![CI](https://github.com/danileau/prettypleaseprint/actions/workflows/ci.yml/badge.svg)](https://github.com/danileau/prettypleaseprint/actions/workflows/ci.yml)
 [![Licence: AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue.svg)](LICENSE)

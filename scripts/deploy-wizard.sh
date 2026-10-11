@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# ppp deploy wizard — the single entry point for deploying Pretty Please Print.
+# ppp deploy wizard — the single entry point for deploying Print It!.
 #
 # Runs ON THE NAS, in the directory holding docker-compose.prod.yml and
 # .env.docker. That placement is the whole design: the NAS has no source tree,
