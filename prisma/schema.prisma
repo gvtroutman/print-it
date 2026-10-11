@@ -661,8 +661,12 @@ model Printer {
   name      String
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
+  /// The Bambu Cloud device whose jobs land on this card. Claimed by the
+  /// first sync that sees a device no card follows yet.
+  bambuDeviceId String? @unique
 
   readings PrinterReading[]
+  prints   PrinterPrint[]
 
   @@map("printer")
 }
@@ -680,4 +684,45 @@ model PrinterReading {
 
   @@index([printerId, createdAt])
   @@map("printerReading")
+}
+
+/// One job from Bambu Cloud, copied by the sync in `src/lib/bambu.ts` and
+/// overwritten by the next one. Never edited here.
+model PrinterPrint {
+  /// Bambu's task id.
+  id        String    @id
+  printerId String
+  printer   Printer   @relation(fields: [printerId], references: [id], onDelete: Cascade)
+  title     String
+  startedAt DateTime
+  endedAt   DateTime?
+  /// Seconds the job actually ran, end minus start. 0 while it is printing.
+  seconds   Int
+  /// The slicer's estimate, in seconds.
+  estimate  Int       @default(0)
+  /// "finished", "failed" (Bambu does not tell failed from cancelled), "printing".
+  outcome   String
+  /// Filament the slice planned, in grams.
+  grams     Float?
+  syncedAt  DateTime  @updatedAt
+
+  @@index([printerId, startedAt])
+  @@map("printerPrint")
+}
+
+/// The owner's Bambu Lab account, signed in by emailed code. One row at most,
+/// id "owner". No password is ever stored, only the tokens Bambu hands back.
+model BambuLink {
+  id           String    @id @default("owner")
+  email        String
+  accessToken  String
+  refreshToken String    @default("")
+  expiresAt    DateTime?
+  lastSyncAt   DateTime?
+  /// Why the last sync failed, shown on the card; "" when it worked.
+  lastError    String    @default("")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("bambuLink")
 }

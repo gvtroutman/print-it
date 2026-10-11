@@ -74,7 +74,9 @@ export type AuditAction =
   | "donation.removed"
   | "donation.kofi_received"
   // printers
-  | "printer.hours_logged";
+  | "printer.hours_logged"
+  | "printer.bambu_connected"
+  | "printer.bambu_disconnected";
 
 function clientIp(h: Headers): string | null {
   return clientIpFrom(h, ipSource());
