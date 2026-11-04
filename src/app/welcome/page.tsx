@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/authz";
+import { requireFreshAuth } from "@/lib/reauth";
 import { AuthShell, H1, Kicker, Lead } from "@/components/ui";
 import { PasskeyPrompt } from "./passkey-prompt";
 
@@ -22,6 +23,7 @@ export default async function WelcomePage() {
   // Passkeys are an accelerator for a password, and members have none: their
   // device is already their sign-in.
   if (user.role !== "admin") redirect("/upload");
+  await requireFreshAuth("/welcome");
   const ua = (await headers()).get("user-agent");
 
   return (

@@ -29,14 +29,14 @@ export const POST = withActor(async (request, actor) => {
   importSourcesOrRefuse();
 
   const body = await jsonBody(request);
-  const checked = await checkWish({
+  const checked = await checkWish(actor, {
     title: body.title ?? "",
     material: body.material,
     colorName: body.colorName ?? "",
+    filamentColorId: body.filamentColorId,
     colorHex: body.colorHex ?? null,
     swatchId: body.swatchId,
     quantity: body.quantity,
-    priority: body.priority ?? undefined,
     note: body.note ?? "",
     printSettings: body.printSettings ?? "",
     links: body.links ?? [],

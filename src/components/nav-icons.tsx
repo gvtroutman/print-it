@@ -11,12 +11,19 @@ export type NavIconName =
   | "bulb"
   | "jar"
   | "check"
+  | "checkmark"
   | "person"
   | "spool"
+  | "cube"
+  | "send"
   | "people"
   | "book"
+  | "note"
+  | "lock"
   | "bell"
   | "pencil"
+  | "laser"
+  | "blade"
   | "info"
   | "turtle"
   | "rabbit";
@@ -42,6 +49,12 @@ type Sticker = {
   parts: Array<[d: string, fill: string]>;
   /** Open strokes drawn on top in ink. */
   lines?: string;
+  /** The bell's hinged stroke, separate so it can swing behind the shell. */
+  clapper?: string;
+  /** Solid ink details without an outline or white die-cut edge. */
+  ink?: string;
+  /** Fine details need a lighter outline to stay open at small sizes. */
+  strokeWidth?: number;
   /** Degrees. Alternating signs keep the row from leaning one way. */
   tilt: number;
 };
@@ -85,6 +98,12 @@ const STICKERS: Record<NavIconName, Sticker> = {
     lines: "M7 10.2l2.2 2.3L13.5 7.5",
     tilt: -5,
   },
+  // A round green sticker with a tick: something has been filled in.
+  checkmark: {
+    parts: [["M10 2.5a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15Z", MAGNET.green]],
+    lines: "M6 10l2.8 2.9L14 7.1",
+    tilt: -7,
+  },
   // One person.
   person: {
     parts: [
@@ -93,16 +112,33 @@ const STICKERS: Record<NavIconName, Sticker> = {
     ],
     tilt: 4,
   },
-  // A spool of filament lying on its side: flanges left and right, the
-  // winding between them.
+  // A filament reel in three-quarter view: rounded flanges, wound filament,
+  // a hollow hub and a loose end make it readable even at menu size.
   spool: {
     parts: [
-      ["M7 6.5h6v7H7z", MAGNET.yellow],
-      ["M4 3.5v13h3v-13z", MAGNET.red],
-      ["M13 3.5v13h3v-13z", MAGNET.red],
+      ["M12 1.8a5.7 6.7 0 1 0 0 13.4 5.7 6.7 0 1 0 0-13.4Z", MAGNET.red],
+      ["M7.5 4.8l4.5-2c3.1 0 5.1 2.5 5.1 5.7s-2 5.7-5.1 5.7l-4.5 2Z", MAGNET.yellow],
+      ["M7.5 3.8a5.7 6.7 0 1 0 0 13.4 5.7 6.7 0 1 0 0-13.4Z", MAGNET.red],
+      ["M7.5 8.2a2 2.3 0 1 0 0 4.6 2 2.3 0 1 0 0-4.6Z", MAGNET.paper],
     ],
-    lines: "M9 8.5v3M11 8.5v3",
-    tilt: -7,
+    lines: "M5 6.8a3.8 4.7 0 0 1 5.3 1M5 14.2a3.8 4.7 0 0 0 5.3-1M13.5 6.5l2.3-1M14.1 9.8l2.7-1.2M13.4 13.5c3.4 0 5.1 1.1 5.1 3.3",
+    strokeWidth: 1.5,
+    tilt: -8,
+  },
+  // A model's three faces: what to print.
+  cube: {
+    parts: [
+      ["M3 6.5 10 10.5v8l-7-4Z", MAGNET.sky],
+      ["M10 10.5 17 6.5v8l-7 4Z", MAGNET.teal],
+      ["M10 2.5 17 6.5 10 10.5 3 6.5Z", MAGNET.yellow],
+    ],
+    tilt: -5,
+  },
+  // A paper plane taking the request to the printer owner.
+  send: {
+    parts: [["M2 9.5 18 2l-5 16-4.5-5Z", MAGNET.green]],
+    lines: "M8.5 13 18 2M8.5 13v4l2.5-2.5",
+    tilt: 5,
   },
   // Two people.
   people: {
@@ -120,10 +156,34 @@ const STICKERS: Record<NavIconName, Sticker> = {
     lines: "M12 2.5V6h3.5M7.5 10h5M7.5 13h5",
     tilt: -4,
   },
+  // A pen resting on a sheet of paper: add or edit a note.
+  note: {
+    parts: [
+      ["M3 2.5h8l3.5 3.5v11.5H3Z", "var(--color-porcelain)"],
+      ["M8.5 12.5 11 15 7.5 16Z", MAGNET.paper],
+      ["M8.5 12.5 15.5 5.5 18 8 11 15Z", MAGNET.sky],
+      ["M15.5 5.5 16.7 4.3a1.8 1.8 0 0 1 2.5 2.5L18 8Z", MAGNET.teal],
+    ],
+    lines: "M11 2.5V6h3.5M5.5 8h4M5.5 11h2",
+    ink: "M7.5 16 8 14.3 9.2 15.5Z",
+    strokeWidth: 1.5,
+    tilt: -4,
+  },
+  // A closed padlock: the Store is waiting to be unlocked.
+  lock: {
+    parts: [
+      ["M5 9V6a5 5 0 0 1 10 0v3h-3V6a2 2 0 0 0-4 0v3Z", "var(--color-chrome)"],
+      ["M5 8.5h10a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 16v-6A1.5 1.5 0 0 1 5 8.5Z", MAGNET.yellow],
+    ],
+    ink: "M10 10.8a1.3 1.3 0 0 1 .65 2.43l.47 1.85q.08.32-.25.32H9.13q-.33 0-.25-.32l.47-1.85A1.3 1.3 0 0 1 10 10.8Z",
+    strokeWidth: 1.5,
+    tilt: -6,
+  },
   // A bell, mid-ring: notifications.
   bell: {
     parts: [["M10 3c-3 0-5 2.3-5 5.2v3.3L3.5 14.5h13L15 11.5V8.2C15 5.3 13 3 10 3Z", MAGNET.yellow]],
-    lines: "M10 1.5V3M8 16.5a2 2 0 0 0 4 0",
+    lines: "M10 1.5V3",
+    clapper: "M8 16.5a2 2 0 0 0 4 0",
     tilt: -10,
   },
   // A pencil, point down to the left: edit this.
@@ -135,6 +195,29 @@ const STICKERS: Record<NavIconName, Sticker> = {
       ["M11.2 4.2l3-3 4.5 4.5-3 3Z", MAGNET.red],
     ],
     tilt: 4,
+  },
+  // A laser head and a red beam meeting a piece of wood.
+  laser: {
+    parts: [
+      ["M2 15h16v3H2Z", MAGNET.orange],
+      ["M7 2h6v5l-2 3H9L7 7Z", MAGNET.teal],
+      ["M9.1 9.5h1.8V14H9.1Z", MAGNET.red],
+      ["M10 12.2l.7 1.6 1.8.7-1.8.7-.7 1.6-.7-1.6-1.8-.7 1.8-.7Z", MAGNET.yellow],
+    ],
+    lines: "M4.5 16.5h2M13.5 16.5h2M4.5 10l1.7 1.5M15.5 10l-1.7 1.5",
+    strokeWidth: 1.5,
+    tilt: -6,
+  },
+  // A craft knife with a metal blade: paper, vinyl and sticker cutting.
+  blade: {
+    parts: [
+      ["M8 9l5.5-5.5a2.1 2.1 0 0 1 3 3L11 12Z", MAGNET.purple],
+      ["M8 9l3 3-5.5 5.5H2.5V14Z", MAGNET.paper],
+      ["M8 8l4 4-1.5 1.5-4-4Z", MAGNET.teal],
+    ],
+    lines: "M11.5 8.5l3-3M2.5 17.5l4-4",
+    strokeWidth: 1.5,
+    tilt: 5,
   },
   // A sky-blue "i": more about this.
   info: {
@@ -189,10 +272,11 @@ export function NavIcon({
   /** Show the white die-cut edge. The bell keeps it for when it is open. */
   edge?: boolean;
 }) {
-  const { parts, lines, tilt } = STICKERS[name];
+  const { parts, lines, clapper, ink, tilt, strokeWidth = 2 } = STICKERS[name];
   return (
     <svg
       aria-hidden
+      data-flipped={flip || undefined}
       viewBox="-3.5 -3.5 27 27"
       // Bigger than the line it sits on; the negative margin keeps the chip
       // the height the text alone would give it, so the sticker overhangs
@@ -206,14 +290,14 @@ export function NavIcon({
       }}
       fill="none"
       stroke="currentColor"
-      strokeWidth={2}
+      strokeWidth={strokeWidth}
       strokeLinecap="round"
       strokeLinejoin="round"
     >
       {/* The die-cut edge: everything again in white, fatter, underneath. */}
       <g
         stroke="var(--color-porcelain)"
-        strokeWidth={2 + EDGE * 2}
+        strokeWidth={strokeWidth + EDGE * 2}
         fill="var(--color-porcelain)"
         style={{ opacity: edge ? 1 : 0, transition: "opacity 160ms ease-out" }}
       >
@@ -221,11 +305,14 @@ export function NavIcon({
           <path key={i} d={d} />
         ))}
         {lines && <path d={lines} fill="none" />}
+        {clapper && <path className="bell-clapper" d={clapper} fill="none" />}
       </g>
       {parts.map(([d, own], i) => (
         <path key={i} d={d} fill={fill ?? own} />
       ))}
       {lines && <path d={lines} />}
+      {clapper && <path className="bell-clapper" d={clapper} />}
+      {ink && <path d={ink} fill="currentColor" stroke="none" />}
     </svg>
   );
 }

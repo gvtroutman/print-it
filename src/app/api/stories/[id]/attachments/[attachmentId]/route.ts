@@ -3,6 +3,7 @@ import { Readable } from "node:stream";
 
 import { db } from "@/lib/db";
 import { currentUser, storyRef } from "@/lib/authz";
+import { maintenanceResponse } from "@/lib/maintenance";
 import { storyScope } from "@/lib/scope";
 import { record } from "@/lib/audit";
 import { openStoredRange, storedSize } from "@/lib/storage";
@@ -44,6 +45,8 @@ export async function GET(
 
   const user = await currentUser();
   if (!user) return new NextResponse(null, { status: 401 });
+  const paused = await maintenanceResponse(user);
+  if (paused) return paused;
 
   const attachment = await db.storyAttachment.findFirst({
     where: { id: attachmentId, story: { AND: [{ id: storyId }, storyScope(user)] } },

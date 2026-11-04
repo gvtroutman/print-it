@@ -1,6 +1,15 @@
 import "server-only";
 
 import { builtInTraits, ownKind } from "@/lib/filament-traits";
+import { matchingFilamentBrand, type FilamentSettings } from "@/lib/filament-brands";
+import { filamentSettings } from "@/lib/filament-settings";
+import { ADMIN_SWATCH_BASE, isAdminSwatch, configuredLibrarySwatches, managedLibrarySwatches } from "@/lib/filament-settings-data";
+import { amazonListingUrl } from "@/lib/amazon-listing";
+import { isBundledSwatch, printedSwatchId } from "@/lib/filament-ids";
+import { bundledLibrarySwatches } from "@/lib/filament-settings-data";
+import { filamentColorType, type FilamentColorType } from "@/lib/filament-color-types";
+import { recordedAmazonListingFor, recordedAmazonPackagesFor } from "@/lib/amazon-product-links";
+import { filamentPurchaseOptions } from "@/lib/filament-purchases";
 import {
   NEAR_ENOUGH,
   SWATCH_SHADES,
@@ -14,6 +23,7 @@ import { sourceUrl as appSourceUrl } from "@/lib/runtime";
 import { SpoolmanUnavailable, spoolmanSwatches } from "@/lib/spoolman-library";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { swatchCutout } from "@/lib/swatch-cutout";
 
 /**
  * Filament the owner does not have but can buy: the swatch library at
@@ -30,10 +40,8 @@ import { dirname, join, resolve } from "node:path";
  * failed refresh keeps the old copy; with no copy at all, callers get
  * `LibraryUnavailable` and say the library cannot be reached right now.
  *
- * SpoolmanDB (src/lib/spoolman-library.ts) is the fallback: a search that
- * finds too few here, or cannot reach this library at all, is filled from
- * there. Its spools have negative ids, and `librarySwatch` reads them back
- * from that copy the same way.
+ * SpoolmanDB remains available to `librarySwatch` for older requests. New
+ * market searches offer only filaments with a photographed printed sample.
  */
 
 const API = "https://filamentcolors.xyz/api/swatch/";
@@ -100,7 +108,7 @@ function toSwatch(raw: unknown): LibrarySwatch | null {
   const name = str(r.color_name);
   const maker = str(r.manufacturer?.name);
   const type = str(r.filament_type?.name);
-  if (!Number.isInteger(id) || id <= 0 || !/^[0-9a-f]{6}$/i.test(hex) || !name || !maker || !type) return null;
+  if (!Number.isInteger(id) || id <= 0 || id >= ADMIN_SWATCH_BASE || !/^[0-9a-f]{6}$/i.test(hex) || !name || !maker || !type) return null;
   if (r.published === false || r.is_available === false) return null;
   const shade = SWATCH_SHADES.some((s) => s.key === r.color_parent) ? (r.color_parent as SwatchShade) : null;
   return {
@@ -111,7 +119,8 @@ function toSwatch(raw: unknown): LibrarySwatch | null {
     hex: `#${hex.toLowerCase()}`,
     family: familyOf(type, str(r.filament_type?.parent_type?.name) || null),
     shade,
-    buyUrl: httpUrl(r.mfr_purchase_link) ?? httpUrl(r.amazon_purchase_link),
+    buyUrl: amazonListingUrl(r.amazon_purchase_link) ?? amazonListingUrl(r.mfr_purchase_link)
+      ?? recordedAmazonListingFor({ id, maker, type, name }),
     pageUrl: swatchPageUrl(id),
     imageUrl: libraryMedia(r.card_img),
     photoUrl: libraryMedia(r.image_front),
@@ -214,8 +223,21 @@ export function warmLibrary() {
  * One swatch, by the id the form sent — a SpoolmanDB spool when negative;
  * null when its library has no such swatch.
  */
-export async function librarySwatch(id: number): Promise<LibrarySwatch | null> {
-  if (id > 0) return (await load()).byId.get(id) ?? null;
+export async function librarySwatch(id: number, settings?: FilamentSettings): Promise<LibrarySwatch | null> {
+  const config = settings ?? await filamentSettings();
+  if (isBundledSwatch(id)) return bundledLibrarySwatches(config).find(swatch => swatch.id === id) ?? null;
+  if (isAdminSwatch(id)) return managedLibrarySwatches(config).find(swatch => swatch.id === id) ?? null;
+  if (id > 0) {
+    const swatch = (await load()).byId.get(id);
+    if (!swatch) return null;
+    const override = config.listings.find(link => link.sourceId === `fcx:${id}`);
+    const brand = matchingFilamentBrand(swatch.maker, config.brands);
+    if (override) {
+      const buyUrl = override.active && override.brandId === brand?.id ? amazonListingUrl(override.amazonUrl) : null;
+      return { ...swatch, buyUrl, purchaseOptions: filamentPurchaseOptions(buyUrl, override.purchaseOptions) };
+    }
+    return { ...swatch, purchaseOptions: filamentPurchaseOptions(swatch.buyUrl, recordedAmazonPackagesFor(swatch)) };
+  }
   try {
     return (await spoolmanSwatches()).get(id) ?? null;
   } catch (error) {
@@ -239,7 +261,7 @@ export function swatchFits(material: string, swatch: LibrarySwatch): boolean {
 }
 
 /**
- * A swatch photo ready to serve: around 10 KB of JPEG. `full` says whether it
+ * A swatch photo ready to serve as transparent WebP. `full` says whether it
  * is the full photo cut down, or the library's small thumbnail standing in.
  */
 type Photo = { bytes: Uint8Array<ArrayBuffer>; type: string; full: boolean };
@@ -256,7 +278,6 @@ const MAX_THUMB_BYTES = 256 * 1024;
  * the picker draws it.
  */
 const PHOTO_WIDTH = 480;
-const PHOTO_HEIGHT = Math.round((PHOTO_WIDTH * 89) / 288);
 /**
  * Full photos decoded at once. A 2740 x 2056 JPEG is ~17 MB once decoded,
  * even shrunk on load, and a page of results asks for 60 together; the
@@ -305,11 +326,6 @@ async function fetchImage(url: string, max: number): Promise<{ bytes: Uint8Array
 }
 
 /**
- * The library's full photo of the swatch card, cut down to `PHOTO_WIDTH`:
- * the white table it was shot on trimmed off, then cropped to the card's
- * shape. Null when there is no full photo or sharp cannot read it.
- */
-/**
  * sharp, loaded once. Null when it cannot load — its native libvips missing
  * from the bundle, say — and then no full photo is fetched for nothing.
  */
@@ -322,22 +338,25 @@ const loadSharp = () =>
       return null;
     }));
 
-async function sharpened(url: string): Promise<Photo | null> {
+async function sharpened(url: string, full = true): Promise<Photo | null> {
   const sharp = await loadSharp();
   if (!sharp) return null;
-  const source = await fetchImage(url, MAX_SOURCE_BYTES);
+  const source = await fetchImage(url, full ? MAX_SOURCE_BYTES : MAX_THUMB_BYTES);
   if (!source) return null;
   try {
-    // Two passes: sharp trims before it resizes, whatever the call order, and
-    // trimming the full-size image would decode all of it. The first pass
-    // shrinks on load.
-    const smaller = await sharp(source.bytes).rotate().resize({ width: 1200, withoutEnlargement: true }).toBuffer();
-    const out = await sharp(smaller)
-      .trim({ threshold: 40 })
-      .resize({ width: PHOTO_WIDTH, height: PHOTO_HEIGHT, fit: "cover" })
-      .jpeg({ quality: 80, mozjpeg: true })
+    const { data, info } = await sharp(source.bytes).rotate()
+      .resize({ width: 1200, withoutEnlargement: true }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const cutout = swatchCutout({ data, width: info.width, height: info.height });
+    if (!cutout) return null;
+    // Change only alpha: highlights, white filament and translucent surfaces
+    // keep their photographed RGB values. WebP preserves the transparent table.
+    for (let p = 0; p < cutout.alpha.length; p++) data[p * 4 + 3] = Math.min(data[p * 4 + 3], cutout.alpha[p]);
+    const out = await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } })
+      .extract({ left: cutout.left, top: cutout.top, width: cutout.width, height: cutout.height })
+      .resize({ width: PHOTO_WIDTH, withoutEnlargement: true })
+      .webp({ quality: 90 })
       .toBuffer();
-    return { bytes: new Uint8Array(out), type: "image/jpeg", full: true };
+    return { bytes: new Uint8Array(out), type: "image/webp", full };
   } catch (error) {
     console.error(`[filament-library] could not resize ${url}`, error);
     return null;
@@ -345,11 +364,11 @@ async function sharpened(url: string): Promise<Photo | null> {
 }
 
 /**
- * A swatch's photo, made on first ask and kept: the library's full photo cut
- * down to size, or its small thumbnail when that fails. Only a swatch in the
- * library has one, and only from the library's media path, so this cannot be
- * steered at another address. Null when there is nothing to show; the picker
- * then draws the colour instead.
+ * A swatch's cutout, made on first ask and kept: the library's full photo cut
+ * down to size, or its small thumbnail processed the same way when that fails.
+ * Only a swatch in the library has one, and only from the library's media path, so this cannot be
+ * steered at another address. Null when there is no usable sample; the picker
+ * tries the linked product photo next.
  */
 export async function swatchPhoto(id: number): Promise<Photo | null> {
   const held = photos.get(id);
@@ -361,11 +380,8 @@ export async function swatchPhoto(id: number): Promise<Photo | null> {
   let pending = making.get(id);
   if (!pending) {
     pending = inTurn(async () => {
-      const thumb = async () => {
-        const got = swatch.imageUrl ? await fetchImage(swatch.imageUrl, MAX_THUMB_BYTES) : null;
-        return got && { ...got, full: false };
-      };
-      const photo = (swatch.photoUrl ? await sharpened(swatch.photoUrl) : null) ?? (await thumb());
+      const photo = (swatch.photoUrl ? await sharpened(swatch.photoUrl) : null)
+        ?? (swatch.imageUrl ? await sharpened(swatch.imageUrl, false) : null);
       // A thumbnail is not kept: once the full photo can be made, it should be.
       if (photo?.full) {
         photos.set(id, photo);
@@ -519,75 +535,59 @@ const labFor = (swatch: LibrarySwatch) => {
  * as see-through, since a translucent red is filed under red.
  */
 const seeThrough = (swatch: LibrarySwatch) =>
-  swatch.shade === "TRN" || /translu|transparent|clear|glass|crystal|see.?through/i.test(`${swatch.name} ${swatch.type}`);
+  swatch.translucent || swatch.shade === "TRN" || /translu|transparent|clear|glass|crystal|see.?through/i.test(`${swatch.name} ${swatch.type}`);
 
-type SearchOptions = { query?: string; shade?: SwatchShade | null; near?: string | null; clear?: boolean };
+type SearchOptions = { query?: string; shade?: SwatchShade | null; near?: string | null; clear?: boolean; colorType?: FilamentColorType };
 
 /**
- * Swatches that fit a material, narrowed by search words (every word has to
- * appear in the name, maker or type) and an optional shade.
+ * Swatches from brands the owner buys that fit a material, narrowed by search
+ * words (every word has to appear in the name, maker or type) and an optional shade.
  *
  * With `near`, a colour picked from the rainbow, they come closest first, and
  * only those that look near it — or, where the material has few spools that
  * colour, the closest dozen, so a pick never comes back empty. Otherwise
- * swatches whose type is the material's own name come first, then
- * filamentcolors.xyz's ahead of SpoolmanDB's, then by maker and name. With
+ * swatches whose type is the material's own name come first, then by maker and name. With
  * `clear`, see-through spools go ahead of the rest, each group kept in that
  * order.
  *
- * filamentcolors.xyz is searched first. Only when it finds fewer than a
- * dozen, or cannot be reached, are SpoolmanDB's spools searched alongside —
- * less a spool the first library already has under the same maker, kind and
- * name.
+ * Unswatched catalog and owner listings never fill out sparse results.
  */
 export async function searchLibrary(
   material: string,
   options: SearchOptions = {},
+  settings?: FilamentSettings,
 ): Promise<{ total: number; swatches: LibrarySwatch[] }> {
-  let primary: LibrarySwatch[] = [];
+  const config = settings ?? await filamentSettings();
+  const managed = managedLibrarySwatches(config);
+  const primary: LibrarySwatch[] = [...managed];
   let reached = true;
   try {
-    primary = [...(await load()).byId.values()];
+    const replaced = new Set(config.listings.filter(link => link.sourceId?.startsWith("fcx:")).map(link => Number(link.sourceId!.slice(4))));
+    primary.push(...configuredLibrarySwatches([...(await load()).byId.values()].filter(swatch => !replaced.has(swatch.id)), config));
   } catch (error) {
     if (!(error instanceof LibraryUnavailable)) throw error;
     reached = false;
   }
 
-  let matches = searchIn(primary, material, options);
-  if (reached && matches.length >= AT_LEAST) return { total: matches.length, swatches: matches.slice(0, SEARCH_LIMIT) };
-
-  let fallback: Map<number, LibrarySwatch>;
-  try {
-    fallback = await spoolmanSwatches();
-  } catch (error) {
-    if (!(error instanceof SpoolmanUnavailable)) throw error;
-    if (!reached) throw new LibraryUnavailable();
-    return { total: matches.length, swatches: matches.slice(0, SEARCH_LIMIT) };
-  }
-  const held = new Set(primary.map(sameSpool));
-  const extra = [...fallback.values()].filter((swatch) => !held.has(sameSpool(swatch)));
-  matches = searchIn([...primary, ...extra], material, options);
+  const matches = searchIn(primary, material, options);
+  if (!reached && matches.length === 0) throw new LibraryUnavailable();
   return { total: matches.length, swatches: matches.slice(0, SEARCH_LIMIT) };
 }
-
-/**
- * Maker, kind of filament and colour name, squashed, to tell the same spool
- * in both libraries. The kind, because a maker's "Black" PLA is not its
- * "Black" PA-CF, nor its "Black" CPE its "Black" PETG.
- */
-const sameSpool = (swatch: LibrarySwatch) =>
-  `${words(swatch.maker).replace(/ /g, "")}|${swatch.family ?? words(swatch.type)}|${ownKind(swatch.type) ?? ""}|${words(swatch.name)}`;
 
 /** `searchLibrary`'s filtering and ordering, over one list of swatches. */
 function searchIn(
   swatches: LibrarySwatch[],
   material: string,
-  { query = "", shade = null, near = null, clear = false }: SearchOptions,
+  { query = "", shade = null, near = null, clear = false, colorType }: SearchOptions,
 ): LibrarySwatch[] {
   const terms = words(query).split(" ").filter(Boolean);
   const exact = words(material);
   let matches = swatches.filter((swatch) => {
+    if (!swatch.photoUrl && !swatch.imageUrl && !swatch.sampleImage
+      && !(isAdminSwatch(swatch.id) && printedSwatchId(swatch.pageUrl) !== null)) return false;
+    if (!amazonListingUrl(swatch.buyUrl)) return false;
     if (!swatchFits(material, swatch)) return false;
+    if (colorType && filamentColorType(swatch) !== colorType) return false;
     if (shade && swatch.shade !== shade) return false;
     if (terms.length === 0) return true;
     const haystack = words(`${swatch.name} ${swatch.maker} ${swatch.type}`);

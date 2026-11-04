@@ -27,7 +27,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  REGISTRY: 192.168.40.13:3002
+  REGISTRY: ${{ vars.REGISTRY }}
   OWNER: ${{ github.repository_owner }}
   RUN: ${{ github.run_id }}
   # full = what the ZimaOS dashboard does; incremental = deploy/nas-deploy.sh's

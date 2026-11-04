@@ -18,6 +18,7 @@ import { clientIpFrom, ipSource } from "@/lib/client-ip";
  *     something that did not happen.
  */
 export type AuditAction =
+  | "site.maintenance_changed"
   // access
   | "invite.sent"
   | "invite.resent"
@@ -38,6 +39,14 @@ export type AuditAction =
   | "story.created"
   | "upload.rejected"
   | "story.status_changed"
+  | "story.filament_recorded"
+  | "story.print_time_recorded"
+  | "story.prepared"
+  | "story.model_updated"
+  | "story.preparation_reset"
+  | "story.bambu_job_linked"
+  | "story.bambu_job_unlinked"
+  | "story.bambu_runtime_imported"
   | "story.declined"
   | "story.withdrawn"
   | "story.requeued"
@@ -48,6 +57,11 @@ export type AuditAction =
   | "file.downloaded"
   | "file.refused"
   // catalog
+  | "catalog.brand_added"
+  | "catalog.brand_updated"
+  | "catalog.brand_availability_changed"
+  | "catalog.listing_saved"
+  | "catalog.listing_availability_changed"
   | "catalog.material_added"
   | "catalog.material_updated"
   | "catalog.material_removed"
@@ -73,6 +87,7 @@ export type AuditAction =
   | "donation.claimed"
   | "donation.removed"
   | "donation.kofi_received"
+  | "donation.member_status_changed"
   // printers
   | "printer.hours_logged"
   | "printer.reading_removed"

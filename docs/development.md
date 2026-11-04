@@ -35,16 +35,39 @@ invitation and reset links are clickable there.
 npm run verify:models         # upload validator vs. hostile fixtures (no server needed)
 npm run verify:auth           # registration, sign-in and password reset, end to end
 npm run verify:upload         # upload -> board -> story, end to end
+npm run verify:anniversary    # personal anniversary dates and leap-day members (no database)
+npm run verify:holidays       # seasonal windows, collection visibility and Eastern-time boundaries (no database)
+npm run verify:badges         # sticker milestones and lifetime progress (database only)
 npm run verify:import         # a model from a link, against a stand-in for Printables
 npm run verify:queue          # the admin queue, status flow and conversation
+npm run verify:bambu          # print runtime and sync freshness (no server or database needed)
 npm run verify:frr            # the feature-request track (file, triage, the flow)
 npm run verify:catalog        # the owner-managed material/colour catalogue
+npm run verify:store-access   # donation gate, API paths and repeat orders (no server/database)
 npm run verify:api            # the JSON API, the OpenAPI document and the console
 npm run verify:passkey        # WebAuthn ceremonies in a real browser
 npm run probe:security        # 122 OWASP-mapped security probes
 ```
 
 ## Verifying it
+
+`npm run typecheck` checks the whole project, including verification and
+maintenance scripts. Production builds use `tsconfig.build.json`, which inherits
+the same strict settings and checks the app plus every helper it imports.
+The Docker context keeps those helpers and the Swagger/storage build scripts;
+unrelated tests and maintenance scripts are excluded so editing them does not
+recompile the app. The dependency install uses the unchanged lockfile and a
+manifest without command-only scripts, so adding a verification command also
+reuses the install layer. Install lifecycle hooks, when present, retain all
+scripts they might call.
+
+Gitea builds normally use the `pc` runner. If it is offline, automatic builds
+wait for it; dispatch **Build images** with `build_runner=ubuntu-latest` to use
+the slower NAS. Both the fallback build cleanup and deployment preflight retain
+4 GB of NAS build cache. The previous 1 GB limit deleted the dependency install
+layer and Next's compiler/type cache after each build, forcing small page edits
+to reinstall packages and repeat cold checks. Keep those two limits in step;
+the workstation retains 20 GB on its separate Docker daemon.
 
 `npm run verify:auth` drives the real HTTP surface — including submitting the
 server-action forms the way a browser with JavaScript disabled does — and reads
@@ -68,6 +91,31 @@ The WebAuthn ceremonies are `verify:passkey`'s: a headless Chrome with a
 virtual authenticator attached over the DevTools protocol registers a passkey
 and signs in with it, so the browser half is real. **Not covered** is a
 physical authenticator — a phone, a security key, a platform's own prompt.
+
+## Device and screen-size report
+
+The owner's Notifications menu links to **Device & screen sizes** at
+`/admin/screens`. Filter by page or the last 7/30 UTC calendar days; select a
+viewport to see the pages, browsers and operating systems using that size.
+Dimensions are layout viewport CSS pixels, measured once per visible page
+navigation. Resizing alone adds no page views. Counts include repeat views,
+not unique visitors or physical devices, and device types are coarse estimates.
+
+`POST /api/screen-sizes` accepts same-origin browser reports, including the
+sign-in/install pages. It has no public read endpoint, rejects oversized or
+invalid bodies, and caps collection at 600 requests per worker per minute.
+Only allowlisted page groups are sent; private IDs/tokens and query strings
+never leave the browser. The server aggregates each UTC day's page, width,
+height, device type, browser and OS in `screen_size_daily`, with no visitor ID,
+account, IP address, full user agent, referrer, cookie or local-storage entry.
+Known bots, Do Not Track and Global Privacy Control are excluded. Old aggregate
+rows are pruned on collection at most hourly; reports always exclude dates
+outside the selected window. The schema migration runs through the normal
+migrator deployment before collection starts; historical dimensions cannot
+be backfilled.
+
+Run `npm run verify:screens` for collection validation, private-path grouping,
+browser classification and UTC-window checks (no server/database required).
 
 ## Continuous integration
 

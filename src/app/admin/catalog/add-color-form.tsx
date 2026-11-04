@@ -13,8 +13,8 @@ export function AddColorForm({ materialId }: { materialId: string }) {
   return (
     <form action={addColorAction} className="mt-[17.6px] flex flex-wrap items-end gap-[8.8px]">
       <input type="hidden" name="materialId" value={materialId} />
-      <div className="min-w-[190px] flex-1">
-        <Label htmlFor={`color-${materialId}`}>Add a color</Label>
+      <div className="min-w-0 flex-1 basis-[190px]">
+        <Label htmlFor={`color-${materialId}`}>Create a custom swatch</Label>
         <Input
           id={`color-${materialId}`}
           name="name"
@@ -66,6 +66,13 @@ export function AddColorForm({ materialId }: { materialId: string }) {
         <p className="m-0 self-center rounded-chip border-2 border-ink bg-aqua-wash px-[11px] py-[7px] font-mono text-[10.5px] font-bold uppercase text-ink">
           Rainbow chosen automatically
         </p>
+      )}
+      {mode !== "whatever" && (
+        <div className="w-full min-w-0">
+          <Label htmlFor={`photo-${materialId}`}>Filament product link (optional)</Label>
+          <Input id={`photo-${materialId}`} name="amazonUrl" type="url" maxLength={2048} placeholder="Amazon product/color link" />
+          <p className="m-0 mt-[5px] text-[12px] leading-[1.4] text-ink-2">Save the exact Amazon product/color link as a reference for this shelf filament.</p>
+        </div>
       )}
       <Button type="submit" variant="ghost" className="px-[14px] py-[10px]">Add</Button>
     </form>

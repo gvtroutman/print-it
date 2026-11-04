@@ -369,6 +369,38 @@ export async function setMemberPermissionAction(formData: FormData): Promise<voi
   revalidatePath("/admin/invites");
 }
 
+export type MemberDonationState = { error?: string; hasDonated?: boolean };
+
+/** Donation confirmation is an admin setting, independent of ledger amounts. */
+export async function setMemberDonationAction(formData: FormData): Promise<MemberDonationState> {
+  const admin = await requireAdmin();
+  const parsed = z.object({
+    userId: z.string().min(1),
+    hasDonated: z.enum(["true", "false"]),
+  }).safeParse({ userId: formData.get("userId"), hasDonated: formData.get("hasDonated") });
+  if (!parsed.success) return { error: "Check the donation setting and try again." };
+
+  const target = await db.user.findUnique({
+    where: { id: parsed.data.userId },
+    select: { id: true, email: true, name: true, role: true },
+  });
+  if (!target || target.role !== "client") return { error: "No such member." };
+
+  const hasDonated = parsed.data.hasDonated === "true";
+  await db.user.update({ where: { id: target.id }, data: { hasDonated } });
+  await record({
+    action: "donation.member_status_changed",
+    actor: admin,
+    subject: contactEmail(target.email) ?? target.name,
+    detail: { userId: target.id, forName: target.name, hasDonated },
+  });
+  revalidatePath("/admin/invites");
+  revalidatePath("/bin");
+  revalidatePath("/upload");
+  revalidatePath("/story", "layout");
+  return { hasDonated };
+}
+
 /**
  * Revoke, or restore, a member's access.
  *

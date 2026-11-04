@@ -1,0 +1,279 @@
+.profile {
+  --card-padding: clamp(12px, 4.6cqi, 24px);
+  --flair-size: clamp(96px, 44cqi, 230px);
+  position: relative;
+  isolation: isolate;
+  container-type: inline-size;
+  width: 100%;
+  max-width: 520px;
+  margin-inline: auto;
+  color: var(--color-ink);
+}
+
+.stage {
+  --card-sheen-band: linear-gradient(115deg, transparent 30%, rgb(255 255 255 / 4%) 37.5%, rgb(255 255 255 / 34%) 45.3%, rgb(255 255 255 / 88%) 48.2%, rgb(255 255 255 / 46%) 50%, rgb(255 255 255 / 10%) 53.1%, transparent 63.5%);
+  position: relative;
+  display: block;
+  border-radius: clamp(13px, 3.85cqi, 20px);
+}
+
+.profile .cardFace {
+  --card-bevel-width: clamp(3px, 1cqi, 5px);
+  /* Light catches the raised top/left edge; the lower edge rolls into shade. */
+  --card-bevel:
+    inset 1px 1px 0 rgb(255 255 255 / 85%),
+    inset -1px -1px 0 rgb(var(--card-shade, 0 50 48) / 42%),
+    inset var(--card-bevel-width) var(--card-bevel-width) 3px -1px rgb(255 255 255 / 60%),
+    inset calc(-1 * var(--card-bevel-width)) calc(-1 * var(--card-bevel-width)) 3px -1px rgb(var(--card-shade, 0 50 48) / 32%);
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: clamp(7px, 3cqi, 16px);
+  width: 100%;
+  /* Match an 85.6 × 53.98 mm credit card, including its border. */
+  aspect-ratio: 85.6 / 53.98;
+  height: calc(100cqi * 53.98 / 85.6);
+  min-height: 0;
+  box-sizing: border-box;
+  padding: var(--card-padding);
+  border-radius: clamp(13px, 3.85cqi, 20px);
+  background-image:
+    linear-gradient(150deg, rgb(255 255 255 / 34%), transparent 45%, rgb(var(--card-shade, 0 50 48) / 12%)),
+    url("../app/textures/member-card-squircles.svg");
+  background-size: 100% 100%, 8px 8px;
+  background-position: 0 0;
+  background-repeat: no-repeat, repeat;
+  box-shadow: var(--card-bevel), 3px 5px 0 var(--color-ink);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.stage .cardFace {
+  box-shadow: var(--card-bevel), 0 8px 22px -5px rgb(var(--card-shade, 0 50 48) / 22%), 0 3px 8px rgb(var(--card-shade, 0 50 48) / 10%);
+}
+
+/* Preserve the pixel texture and finish; owner cards use a gold palette. */
+.profile[data-tone="owner"] .cardFace {
+  --pixel-face: #dfb64e;
+  --card-shade: 98 62 12;
+}
+
+.profile[data-tone="owner"] .edition {
+  background-color: #fff0ba;
+}
+
+/* Static mask and gradient textures; movement stays in the compositor. */
+.inkOverlay,
+.gloss {
+  position: absolute;
+  inset: -3px;
+  z-index: 2;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.gloss {
+  opacity: 0.55;
+}
+
+.inkOverlay {
+  mask-image: linear-gradient(transparent, transparent);
+  mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+}
+
+.foil,
+.light {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 220%;
+  height: 220%;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  transform: translate3d(-80%, -27.2727%, 0);
+  opacity: 0;
+}
+
+.light {
+  background-image: var(--card-sheen-band);
+}
+
+.foil,
+.light,
+.stage .stickerShine {
+  animation: cardShine 10s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+/* A one-second left-to-right sweep starts at 2s, then repeats every 10s. */
+@keyframes cardShine {
+  0%, 20% {
+    transform: translate3d(-80%, -27.2727%, 0);
+    opacity: 0;
+  }
+  21.25%, 28.75% {
+    opacity: var(--shine-opacity, 1);
+  }
+  30%, 100% {
+    transform: translate3d(35%, -27.2727%, 0);
+    opacity: 0;
+  }
+}
+
+.stage .header,
+.stage .cardFooter {
+  position: relative;
+  z-index: 1;
+}
+
+.header,
+.cardFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.wordmark {
+  position: relative;
+  display: block;
+  width: clamp(64px, 21.15cqi, 110px);
+  height: auto;
+  flex-shrink: 0;
+}
+
+.wordmarkImage {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: brightness(0);
+}
+
+.edition,
+.eyebrow {
+  font: 700 clamp(8px, 1.93cqi, 10px) / 1.3 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.edition {
+  padding: 3px 6px;
+  border: 1.5px solid currentColor;
+  border-radius: 5px;
+  background: var(--color-aqua-wash);
+}
+
+.details {
+  flex: 1;
+  min-width: 0;
+}
+
+.flair {
+  position: absolute;
+  --avatar-initial-size: clamp(22px, 8cqi, 42px);
+  left: 50%;
+  top: 50%;
+  width: var(--flair-size);
+  height: var(--flair-size);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.stickerGloss {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+  mask-mode: alpha;
+  background: linear-gradient(145deg, rgb(255 255 255 / 16%), transparent 42%, rgb(255 255 255 / 3%) 64%, rgb(255 255 255 / 10%));
+  pointer-events: none;
+}
+
+.stickerShine {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 220%;
+  height: 220%;
+  background: linear-gradient(115deg, transparent 30%, rgb(255 255 255 / 6%) 40%, rgb(255 255 255 / 38%) 46%, rgb(255 255 255 / 85%) 48%, rgb(255 255 255 / 22%) 51%, transparent 59%);
+  transform: translate3d(-27.2727%, -27.2727%, 0);
+  opacity: 0.32;
+}
+
+.stage .stickerShine {
+  --shine-opacity: 0.72;
+  opacity: 0;
+}
+
+.eyebrow {
+  font-size: clamp(8px, 1.73cqi, 9px);
+}
+
+.name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 400 clamp(16px, 5cqi, 26px) / 1.08 var(--font-display);
+  text-shadow: 0 1px 0 rgb(255 255 255 / 40%);
+}
+
+.cardFooter {
+  margin-bottom: -8px;
+  min-height: 0;
+  align-items: baseline;
+  align-self: end;
+}
+
+.memberSince {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.joinedDate {
+  display: block;
+  white-space: nowrap;
+  font: 700 clamp(11px, 2.5cqi, 13px) / 1.3 var(--font-mono);
+}
+
+.link {
+  display: block;
+  border-radius: clamp(13px, 3.85cqi, 20px);
+  color: inherit;
+  text-decoration: none;
+}
+
+.link:hover .cardFace {
+  transform: translateY(-2px);
+  box-shadow: var(--card-bevel), 3px 7px 0 var(--color-ink);
+}
+
+.profile[data-compact] {
+  --flair-size: clamp(80px, 36cqi, 116px);
+  max-width: 320px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile .cardFace {
+    transition: none;
+  }
+
+  .stage .inkOverlay,
+  .stage .gloss {
+    opacity: 0;
+  }
+
+  .foil,
+  .light,
+  .stage .stickerShine {
+    animation: none;
+    will-change: auto;
+  }
+}

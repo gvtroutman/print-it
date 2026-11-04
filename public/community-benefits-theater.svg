@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400" fill="none" preserveAspectRatio="none">
+  <defs>
+    <g id="curl" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M56 17 C44 1 17 9 16 29 C15 48 41 57 51 75 C65 98 53 122 32 121 C13 120 9 102 17 95 C25 88 36 94 30 103 M16 29 C18 15 33 16 32 26 C31 34 22 33 23 28 M46 65 C57 49 71 52 67 63" stroke="#221a14" stroke-width="10"/>
+      <path d="M56 17 C44 1 17 9 16 29 C15 48 41 57 51 75 C65 98 53 122 32 121 C13 120 9 102 17 95 C25 88 36 94 30 103 M16 29 C18 15 33 16 32 26 C31 34 22 33 23 28 M46 65 C57 49 71 52 67 63" stroke="#fff6e9" stroke-width="5"/>
+      <path d="M16 54 C1 49 2 64 6 70 C8 62 19 65 16 54 Z M58 40 C56 27 69 26 76 29 C66 32 70 43 58 40 Z" fill="#fff6e9" stroke="#221a14" stroke-width="2.5"/>
+    </g>
+    <g id="curtain" stroke="#221a14" stroke-linejoin="round" stroke-linecap="round">
+      <path d="M21 257 C43 274 76 282 99 268 C100 304 85 336 61 350 C69 368 91 382 107 392 C74 405 42 400 21 387 Z" fill="#e4322f" stroke-width="3" vector-effect="non-scaling-stroke"/>
+      <path d="M34 276 Q47 315 43 344 M57 282 Q71 314 55 343 M83 282 Q87 313 62 342 M42 363 Q52 383 76 393 M56 361 Q70 383 94 391" stroke-width="2" vector-effect="non-scaling-stroke"/>
+      <path d="M28 278 Q36 312 32 336 M29 365 Q32 382 42 388" stroke="#fff6e9" stroke-width="2" vector-effect="non-scaling-stroke"/>
+      <path d="M21 340 Q43 349 62 339 L69 350 Q46 363 21 353 Z" fill="#fff6e9" stroke-width="2" vector-effect="non-scaling-stroke"/>
+      <path d="M64 347 C76 332 90 338 83 347 C78 353 71 352 64 347 Z M64 347 C70 362 83 364 83 356 C83 350 73 346 64 347 Z" fill="#fff6e9" stroke-width="2" vector-effect="non-scaling-stroke"/>
+      <path d="M66 350 L73 373 L80 367 L82 352" fill="#fff6e9" stroke-width="2" vector-effect="non-scaling-stroke"/>
+    </g>
+  </defs>
+  <!-- The proscenium stays open at the foot and joins the red stage below. -->
+  <path d="M0 400 V235 C0 105 132 0 300 0 C468 0 600 105 600 235 V400 H580 V235 C580 117 456 23 300 23 C144 23 20 117 20 235 V400 Z" fill="#cdd4d9"/>
+  <path d="M0 400 V235 C0 105 132 0 300 0 C468 0 600 105 600 235 V400" stroke="#221a14" stroke-width="6" vector-effect="non-scaling-stroke"/>
+  <path d="M20 260 V235 C20 117 144 23 300 23 C456 23 580 117 580 235 V260 Z" fill="#b7231f"/>
+  <path d="M20 400 V235 C20 117 144 23 300 23 C456 23 580 117 580 235 V400" stroke="#221a14" stroke-width="3" vector-effect="non-scaling-stroke"/>
+  <path d="M11 221 C20 102 145 13 300 13 C455 13 580 102 589 221" stroke="#fff6e9" stroke-width="2.5" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+  <path d="M36 241 V235 C36 126 152 40 300 40 C448 40 564 126 564 235 V241" stroke="#fff6e9" stroke-width="1.8" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+  <use href="#curl" transform="translate(56 119)"/>
+  <use href="#curl" transform="translate(544 119) scale(-1 1)"/>
+  <path d="M300 57 Q302 73 314 77 Q302 81 300 97 Q298 81 286 77 Q298 73 300 57 Z" fill="#fff6e9" stroke="#221a14" stroke-width="2" vector-effect="non-scaling-stroke"/>
+  <g fill="#fff6e9">
+    <circle cx="274" cy="85" r="3"/>
+    <circle cx="326" cy="85" r="3"/>
+  </g>
+  <use href="#curtain"/>
+  <use href="#curtain" transform="translate(600 0) scale(-1 1)"/>
+  <!-- A scalloped fabric valance hangs above the open stage. -->
+  <path d="M21 249 Q160 258 300 250 Q440 258 579 249 V269 C558 293 531 298 507 272 C481 303 450 302 422 272 C386 304 346 303 300 273 C254 303 214 304 178 272 C150 302 119 303 93 272 C69 298 42 293 21 269 Z" fill="#e4322f" stroke="#221a14" stroke-width="3" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+  <path d="M27 270 Q61 299 93 277 Q135 307 178 277 Q239 307 300 278 Q361 307 422 277 Q465 307 507 277 Q539 299 573 270" stroke="#fff6e9" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+</svg>

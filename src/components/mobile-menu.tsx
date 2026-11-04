@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
-import { AccountPanel } from "@/components/user-menu";
+import { MemberCard, type MemberCardProps } from "@/components/member-card";
 import { NavIcon, type NavIconName } from "@/components/nav-icons";
 
 export type NavGroup = {
@@ -25,24 +25,23 @@ export function MobileMenu({
   name,
   initials,
   email,
+  joinedAt,
+  flair,
   role,
-  passkeyCount,
   previewing,
-  canAddDevice,
-  canAddMember,
 }: {
   nav: NavGroup[];
   active: string;
   name: string;
   initials: string;
   email: string | null;
+  joinedAt?: string;
+  flair?: MemberCardProps["flair"];
   role: "client" | "admin";
-  passkeyCount: number;
   previewing?: boolean;
-  canAddDevice?: boolean;
-  canAddMember?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [pressing, setPressing] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -63,21 +62,32 @@ export function MobileMenu({
     <div ref={wrap} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          setOpen((v) => !v);
+          navigator.vibrate?.(12);
+        }}
+        onPointerDown={(event) => {
+          if (event.isPrimary && event.button === 0) setPressing(true);
+        }}
+        onPointerUp={() => setPressing(false)}
+        onPointerCancel={() => setPressing(false)}
+        onPointerLeave={() => setPressing(false)}
+        onBlur={() => setPressing(false)}
+        data-pressing={pressing || undefined}
         aria-expanded={open}
         aria-haspopup="true"
         aria-label={`Menu for ${name}`}
-        className="stamp flex h-[36px] w-[104px] cursor-pointer items-center justify-center rounded-chip border-[3px] border-ink bg-sun text-ink"
+        className="pixel-surface mobile-menu-trigger flex h-[42px] w-[120px] cursor-pointer items-center justify-center rounded-chip border-[3px] border-ink text-ink"
       >
-        <span aria-hidden className="flex w-[18px] flex-col gap-[3.5px]">
-          <span className="h-[2.5px] rounded-full bg-ink" />
-          <span className="h-[2.5px] rounded-full bg-ink" />
-          <span className="h-[2.5px] rounded-full bg-ink" />
+        <span aria-hidden className="flex w-[21px] flex-col gap-[4.5px]">
+          <span className="mobile-menu-line h-[2.5px] rounded-full bg-ink" />
+          <span className="mobile-menu-line h-[2.5px] rounded-full bg-ink" />
+          <span className="mobile-menu-line h-[2.5px] rounded-full bg-ink" />
         </span>
       </button>
 
       {open && (
-        <div className="ppp-in absolute left-1/2 top-[50px] -translate-x-1/2 z-50 max-h-[70dvh] w-[300px] max-w-[calc(100vw-32px)] overflow-y-auto rounded-panel border-[3px] border-ink bg-porcelain p-[17.6px] shadow-stamp-lg">
+        <div className="ppp-in absolute left-1/2 top-full mt-[14px] -translate-x-1/2 z-50 max-h-[70dvh] w-[300px] max-w-[calc(100vw-32px)] overflow-y-auto rounded-panel border-[3px] border-ink bg-porcelain p-[17.6px] shadow-stamp-lg">
           <nav className="flex flex-col gap-[13.2px]">
             {nav.map((group, i) => (
               <div
@@ -108,8 +118,10 @@ export function MobileMenu({
                           : "border-transparent text-ink hover:border-ink hover:bg-cream-2"
                       }`}
                     >
-                      <NavIcon name={item.icon} size={36} />
-                      {item.label}
+                      <span className="flex translate-x-[30px] items-center gap-[12px]">
+                        <NavIcon name={item.icon} size={36} />
+                        {item.label}
+                      </span>
                     </Link>
                   );
                 })}
@@ -118,15 +130,15 @@ export function MobileMenu({
           </nav>
 
           <div className="mt-[17.6px] border-t-2 border-ink pt-[17.6px]">
-            <AccountPanel
+            <MemberCard
               name={name}
               initials={initials}
               email={email}
+              joinedAt={joinedAt}
+              flair={flair}
               role={role}
-              passkeyCount={passkeyCount}
               previewing={previewing}
-              canAddDevice={canAddDevice}
-              canAddMember={canAddMember}
+              onNavigate={() => setOpen(false)}
             />
           </div>
         </div>

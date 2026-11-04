@@ -1,5 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
+import { Suspense } from "react";
+import { PhoneAppProvider } from "@/components/phone-app";
+import { ScreenSizeTracker } from "@/components/screen-size-tracker";
 import "./globals.css";
 
 /*
@@ -68,7 +71,12 @@ export const metadata: Metadata = {
   title: "Print It!",
   description: "Invite-only 3D print requests for the office.",
   robots: { index: false, follow: false },
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "Print It!", statusBarStyle: "default" },
+  icons: { apple: "/pwa/icon-192.png" },
 };
+
+export const viewport: Viewport = { themeColor: "#fff6e9" };
 
 export default function RootLayout({
   children,
@@ -76,10 +84,11 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${script.variable} ${rounded.variable} ${archivo.variable} ${rubik.variable}`}
+      className={`scrollbar-none ${script.variable} ${rounded.variable} ${archivo.variable} ${rubik.variable}`}
     >
-      <body className="plate flex min-h-screen flex-col bg-cream text-ink antialiased">
-        <div className="flex-1">{children}</div>
+      <body className="scrollbar-none plate flex min-h-screen flex-col bg-cream text-ink antialiased">
+        <Suspense fallback={null}><ScreenSizeTracker /></Suspense>
+        <PhoneAppProvider><div className="flex-1">{children}</div></PhoneAppProvider>
         {/* This deployment shows no "Source · AGPL-3.0" footer. That was the
             app's AGPL-3.0 section 13 source offer; the operator removed it
             knowing it is a licence term for a modified instance. */}

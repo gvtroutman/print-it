@@ -49,6 +49,15 @@ model User {
   /// a safety net only — `databaseHooks.user.create.before` always sets it.
   initials String @default("??")
 
+  /// The account icon in the member card and menus.
+  cardFlair String?
+
+  /// The owner's member-preview icon, saved independently of the admin icon.
+  previewCardFlair String?
+
+  /// Hide sticker artwork and announcements without losing earned progress.
+  stickersEnabled Boolean @default(true)
+
   /// Exactly one `admin` exists; enforced by the partial unique index
   /// `user_single_admin`, added in the enforce_single_admin migration.
   role Role @default(client)
@@ -65,6 +74,18 @@ model User {
   canAddDevice Boolean @default(false)
   canAddMember Boolean @default(false)
 
+  /// The owner confirms a donation from the guest list. This unlocks Store
+  /// independently of the donation ledger and the email used on Ko-fi.
+  hasDonated Boolean @default(false)
+
+  /// Successful print submissions, including reprints. Incremented with the
+  /// request in one transaction; withdrawing a request keeps sticker progress.
+  printSubmissionCount Int @default(0)
+  /// Fiber submissions and catalog identities tried. Kept after withdrawal;
+  /// identities retain credit through renames, and are never reused on deletion.
+  fiberSubmissionCount Int @default(0)
+  requestedMaterialIds String[] @default([])
+
   // --- admin plugin ---
   banned     Boolean?  @default(false)
   banReason  String?
@@ -79,12 +100,14 @@ model User {
   stories       Story[]
   comments      Comment[]
   notifications Notification[]
+  badges        MemberBadge[]
+  savedColors   SavedColor[]
 
   /// The 'frr' feature-request track — a parallel backlog to the print one.
   featureRequests FeatureRequest[]
   featureComments FeatureComment[]
 
-  /// What they have put in the donation bin.
+  /// Received gifts and legacy pledges in the admin's donation ledger.
   donations Donation[]
 
   @@index([role])
@@ -193,6 +216,32 @@ model RateLimit {
 // ===========================================================================
 // Domain
 // ===========================================================================
+
+/// One shared switch for planned printer downtime. A missing row means online.
+model SiteMaintenance {
+  id        String   @id @default("site")
+  enabled   Boolean  @default(false)
+  message   String   @default("")
+  updatedAt DateTime @updatedAt
+
+  @@map("siteMaintenance")
+}
+
+/// Anonymous page-view counts, combined by UTC day and display environment.
+/// No visitor/session identifier, IP address, raw user agent, or private URL.
+model ScreenSizeDaily {
+  day     DateTime @db.Date
+  page    String
+  width   Int
+  height  Int
+  device  String
+  browser String
+  os      String
+  views   Int      @default(1)
+
+  @@id([day, page, width, height, device, browser, os], name: "dimensions")
+  @@map("screen_size_daily")
+}
 
 /// An invitation to join. There is no public sign-up: a `User` row can only
 /// come into existence when a matching pending invite exists (enforced in
@@ -304,14 +353,10 @@ model Story {
   uploader   User   @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
 
   quantity  Int      @default(1)
-  /// 1 (the turtle: whenever) to 100 (the rabbit: now). Set by the requester
-  /// when filing and changeable while the ticket is still on the rail, by them
-  /// or by the owner. It orders the owner's queue; it promises nothing about
-  /// when the printer is free. Its own column — see the story_priority_score
-  /// migration.
+  /// Retired ticket priority. Retained for existing installations and rollbacks;
+  /// current ticket forms, services, API resources and queue ordering ignore it.
   priority  Int      @default(50) @map("priority_score")
-  /// Retired: the three-step priority this replaced, kept in step with
-  /// `priority` (by thirds) so a rolled-back image still reads it.
+  /// Retired three-step priority, retained for existing installations and rollbacks.
   legacyPriority StoryPriority @default(medium) @map("priority")
   /// Snapshots the catalog label at submission time. Catalog entries may be
   /// renamed or disabled later without rewriting an old order.
@@ -343,6 +388,18 @@ model Story {
   /// do not become a back-and-forth. FRR-103, option A — a plain string, not a
   /// structured/gated "advanced mode".
   printSettings String @default("")
+
+  /// Actual total extruded length for this request, including all copies.
+  /// Recorded by the owner in meters; null means unknown, never an estimate.
+  filamentMeters Decimal? @db.Decimal(12, 3)
+
+  /// Actual total printer runtime for this request, including all copies.
+  /// Recorded by the owner in hours; null means unknown, never an estimate.
+  printHours Decimal? @db.Decimal(12, 3)
+
+  /// Owner confirmed the model, material, copies and slice are ready.
+  preparedAt DateTime?
+  printJobs PrinterPrint[]
 
   flagged    Boolean @default(false)
   flagReason String?
@@ -379,6 +436,7 @@ model Story {
   comments      Comment[]
   notifications Notification[]
   attachments   StoryAttachment[]
+  badges        MemberBadge[]
 
   @@index([uploaderId])
   @@index([status])
@@ -455,6 +513,8 @@ model CatalogColor {
   style      String
   /// `solid`, `gradient`, `whatever` or `funfetti`; never inferred from the display name.
   mode       CatalogColorMode @default(solid)
+  /// Optional exact product/color link for the On Hand filament photo.
+  amazonUrl  String?
   active     Boolean         @default(true)
   sortOrder  Int             @default(0)
   createdAt  DateTime        @default(now())
@@ -463,6 +523,58 @@ model CatalogColor {
   @@unique([materialId, name])
   @@index([materialId, active, sortOrder])
   @@map("catalogColor")
+}
+
+/// Filament brands the owner is willing to buy. Seeded once, then admin-managed.
+model FilamentBrand {
+  id        String   @id @default(cuid())
+  name      String
+  key       String   @unique
+  aliases   String[] @default([])
+  active    Boolean  @default(true)
+  /// Admin-uploaded, normalized WebP. Served through an authenticated image route.
+  logoData  String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  listings  FilamentListing[]
+
+  @@map("filamentBrand")
+}
+
+/// An owner's exact Amazon listing for one product and color.
+model FilamentListing {
+  id        Int      @id @default(autoincrement())
+  brandId   String
+  brand     FilamentBrand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  /// Optional identity from the bundled color catalog; overrides that source's link.
+  sourceId  String?  @unique
+  name      String
+  type      String
+  product   String
+  hex       String
+  amazonUrl String
+  /// Additional exact packages of the same product/color, with human-readable sizes.
+  purchaseOptions Json @default("[]")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([brandId, active])
+  @@map("filamentListing")
+}
+
+/// Personal color preferences, separate from the printer owner's shelf.
+model SavedColor {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  hex       String
+  alpha     Float    @default(1)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, hex, alpha])
+  @@map("savedColor")
 }
 
 model Comment {
@@ -478,17 +590,36 @@ model Comment {
   @@map("comment")
 }
 
+/// A sticker earned once per member. Withdrawing the qualifying request
+/// clears the reference, but keeps the achievement and its original date.
+model MemberBadge {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badgeKey  String
+  earnedAt  DateTime @default(now())
+  storyId   Int?
+  story     Story?   @relation(fields: [storyId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, badgeKey])
+  @@index([storyId])
+  @@map("memberBadge")
+}
+
 model Notification {
   id          String   @id @default(cuid())
   recipientId String
   recipient   User     @relation(fields: [recipientId], references: [id], onDelete: Cascade)
   storyId     Int?
   story       Story?   @relation(fields: [storyId], references: [id], onDelete: Cascade)
-  /// A notification points at a print story OR a feature request (or neither,
-  /// for a withdrawal). The two id columns are mutually exclusive in practice;
-  /// the Activity feed routes to /story or /frr on whichever is set.
+  /// A notification points at a print story, a feature request, or a badge
+  /// (or none, for a withdrawal). The Activity feed routes to the matching
+  /// story, feature, or sticker collection.
   featureId   Int?
   feature     FeatureRequest? @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  /// Badge notifications lead to the member's sticker collection, even after
+  /// the qualifying print request is withdrawn.
+  badgeKey    String?
   text        String
   read        Boolean  @default(false)
   createdAt   DateTime @default(now())
@@ -613,7 +744,7 @@ model DonationBin {
 }
 
 enum DonationStatus {
-  /// Logged by the donor; the owner has not matched it on Ko-fi yet.
+  /// A legacy donor entry the owner has not matched on Ko-fi yet.
   Pledged
   /// The owner has it. Counts toward the goal.
   Received
@@ -625,7 +756,7 @@ model Donation {
   id                String         @id @default(cuid())
   binId             String
   bin               DonationBin    @relation(fields: [binId], references: [id], onDelete: Cascade)
-  /// Null for a Ko-fi gift nobody here has claimed yet — somebody who gave
+  /// Null for a Ko-fi gift not linked to a member — somebody who gave
   /// under an email and a name the app does not know.
   donorId           String?
   donor             User?          @relation(fields: [donorId], references: [id], onDelete: Cascade)
@@ -706,6 +837,11 @@ model PrinterPrint {
   grams     Float?
   syncedAt  DateTime  @updatedAt
 
+  /// Explicitly assigned by the owner; retries/copies may share a ticket.
+  storyId Int?
+  story Story? @relation(fields: [storyId], references: [id], onDelete: SetNull)
+
+  @@index([storyId])
   @@index([printerId, startedAt])
   @@map("printerPrint")
 }

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { parseKofiDelivery } from "@/lib/kofi";
+import { kofiConnected, parseKofiDelivery } from "@/lib/kofi";
 import { receiveKofiGift } from "@/lib/donations";
+import { limitedBody, RequestBodyTooLarge } from "@/lib/request-body";
 
 /**
  * Ko-fi's webhook: each payment, as it happens, into the donation bin.
@@ -23,13 +24,17 @@ export const dynamic = "force-dynamic";
 const MAX_BODY_BYTES = 64 * 1024;
 
 export async function POST(request: Request) {
-  const length = Number(request.headers.get("content-length") ?? "0");
-  if (length > MAX_BODY_BYTES) return new NextResponse(null, { status: 413 });
+  if (!kofiConnected()) return new NextResponse(null, { status: 404 });
+  if (request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/x-www-form-urlencoded") {
+    return new NextResponse(null, { status: 415 });
+  }
 
   let data: FormDataEntryValue | null;
   try {
-    data = (await request.formData()).get("data");
-  } catch {
+    const body = await limitedBody(request, MAX_BODY_BYTES);
+    data = new URLSearchParams(new TextDecoder().decode(body)).get("data");
+  } catch (error) {
+    if (error instanceof RequestBodyTooLarge) return new NextResponse(null, { status: 413 });
     data = null;
   }
 

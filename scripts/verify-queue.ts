@@ -168,9 +168,9 @@ async function main() {
   section("accepting a ticket");
   const story = await makeStory(ayla.id, "Hook for the monitor arm");
   let page = await (await ruben.go(`${APP}/queue`)).text();
-  check("it shows up under Waiting on you",
-        page.includes("Waiting on you") && page.includes("Hook for the monitor arm"));
-  check("with the wish spelled out", rendered(page).includes("1 print · PETG · Slate"),
+  check("it shows up under Review",
+        page.includes("stage-review") && page.includes("Hook for the monitor arm"));
+  check("with the wish spelled out", rendered(page).includes("1 print") && page.includes("PETG") && page.includes("Slate"),
         "the wish line did not render as expected");
 
   const acceptIdx = formIndexContaining(page, "Accept it");
@@ -204,7 +204,7 @@ async function main() {
 
   const previewHome = rendered(await (await ruben.go(`${APP}/upload`)).text());
   check("the page says it is a preview", previewHome.includes("Member view"));
-  check("and calls the owner Member rather than by name", previewHome.includes(">Member<"));
+  check("and calls the member preview Member", previewHome.includes(">Member<"));
   check("with the member's navigation", previewHome.includes("My orders") &&
         !previewHome.includes("Audit log"));
   const previewMine = rendered(await (await ruben.go(`${APP}/me`)).text());
@@ -243,34 +243,22 @@ async function main() {
         (await ruben.raw(`${APP}/queue`)).status === 200 && !ruben.jar.has("ppp.preview"));
 
   // ------------------------------------------------------------------
-  section("priority orders the queue, and is changed on the ticket");
+  section("tickets have no priority; the queue is oldest first");
   const routine = await makeStory(ayla.id, "Routine drawer organiser");
   const rush = await makeStory(ayla.id, "Rush job for Friday");
-  await db.story.update({ where: { id: rush.id }, data: { priority: 90 } });
-  const someday = await makeStory(ayla.id, "Someday desk toy");
-  await db.story.update({ where: { id: someday.id }, data: { priority: 10 } });
-
-  const ordered = rendered(await (await ruben.go(`${APP}/queue`)).text());
-  const at = (title: string) => ordered.indexOf(title);
-  check("the urgent one is first in Waiting on you, though it was filed later",
-        at("Rush job for Friday") > 0 && at("Rush job for Friday") < at("Routine drawer organiser") &&
-        at("Routine drawer organiser") < at("Someday desk toy"),
-        `${at("Rush job for Friday")} / ${at("Routine drawer organiser")} / ${at("Someday desk toy")}`);
-
-  const ticket = await (await client.go(`${APP}/story/${routine.id}`)).text();
-  const prioForm = (ticket.match(/<form\b[\s\S]*?<\/form>/g) ?? [])
-    .findIndex((f) => f.includes('name="priority"'));
-  check("the requester's ticket offers a priority control", prioForm >= 0);
-  check("and it is the slider, turtle to rabbit",
-        /<input[^>]*name="priority"[^>]*type="range"[^>]*min="1"[^>]*max="100"/.test(ticket));
-  const set = await client.submit(`${APP}/story/${routine.id}`, ticket, prioForm, { priority: "72" });
-  check("submitting it is accepted", set.status >= 300 && set.status < 400, `status ${set.status}`);
-  check("and the ticket's priority changed",
-        (await db.story.findUnique({ where: { id: routine.id } }))?.priority === 72);
-  await db.story.update({ where: { id: routine.id }, data: { status: "Done" } });
-  const done = await (await client.go(`${APP}/story/${routine.id}`)).text();
-  check("a finished ticket no longer offers the control", !done.includes('name="priority"'));
-  await db.story.deleteMany({ where: { id: { in: [routine.id, rush.id, someday.id] } } });
+  await db.story.update({ where: { id: routine.id }, data: { createdAt: new Date("2026-10-01"), priority: 10 } });
+  await db.story.update({ where: { id: rush.id }, data: { createdAt: new Date("2026-10-02"), priority: 90 } });
+  const ordered = rendered(await (await ruben.go(APP + "/queue")).text());
+  check("old saved priorities cannot move newer tickets ahead of older ones",
+        ordered.indexOf("Routine drawer organiser") > 0 &&
+        ordered.indexOf("Routine drawer organiser") < ordered.indexOf("Rush job for Friday"));
+  check("the queue has no priority labels", !ordered.includes("Priority") && !ordered.includes("Highest priority"));
+  for (const browser of [client, ruben]) {
+    const ticket = await (await browser.go(APP + "/story/" + routine.id)).text();
+    check("member and admin tickets have no priority facts or controls",
+          !ticket.includes('name="priority"') && !ticket.includes("Change priority") && !ticket.includes(">Priority<"));
+  }
+  await db.story.deleteMany({ where: { id: { in: [routine.id, rush.id] } } });
 
   // ------------------------------------------------------------------
   section("prints by person — the owner picks people and sees what they sent");
@@ -321,6 +309,10 @@ async function main() {
 
   // ------------------------------------------------------------------
   section("the flow only moves forward, one step at a time");
+  page = await (await ruben.go(`${APP}/queue`)).text();
+  const prepareIdx = formIndexContaining(page, "Confirm preparation");
+  check("the owner is offered the preparation checklist", prepareIdx >= 0);
+  if (prepareIdx >= 0) await ruben.submit(`${APP}/queue`, page, prepareIdx, { modelChecked: "on", materialChecked: "on", sliceChecked: "on" });
   for (const expected of ["Printing", "Delivery", "Done"]) {
     page = await (await ruben.go(`${APP}/queue`)).text();
     const idx = formIndexContaining(page, `Move to ${expected}`);
@@ -421,10 +413,7 @@ async function main() {
     check(`posting the ${label} action as a client changes nothing`,
           after?.status === before, `status became ${after?.status}`);
   }
-  // The verbs those owner actions write, named — not every `story.*`. A client
-  // is a legitimate actor on some of them now (changing the priority of their
-  // own ticket, above), and "no story verb at all" would have this check fail
-  // for a reason that has nothing to do with what it is guarding.
+  // Members can comment and withdraw; only the owner drives the print flow.
   check("the client never appears as the actor of an owner's action",
         (await db.auditEvent.count({
           where: {
@@ -799,6 +788,26 @@ async function main() {
   section("the uploader sees what happened");
   const feed = await (await client.go(`${APP}/me`)).text();
   check("their Activity count is not zero", /Activity[\s\S]{0,200}[1-9]/.test(feed));
+
+  section("record completed extrusion through the owner forms");
+  const noodlePrint = await makeStory(ayla.id, "Filament form verification", "Printing");
+  const noodleUrl = `${APP}/story/${noodlePrint.id}`;
+  const printingPage = await (await ruben.go(noodleUrl)).text();
+  const finishForm = formIndexContaining(printingPage, "Move to Delivery");
+  check("completion offers an optional meter field", finishForm >= 0 && printingPage.includes('name="filamentMeters"') && printingPage.includes("Actual total extruded, including all copies."));
+  const finishedWithUsage = await ruben.submit(noodleUrl, printingPage, finishForm, { filamentMeters: "9999.999" });
+  const recordedPrint = await db.story.findUniqueOrThrow({ where: { id: noodlePrint.id } });
+  check("the completion form saves actual usage with Delivery", finishedWithUsage.status === 303 && recordedPrint.status === "Delivery" && recordedPrint.filamentMeters?.eq(9999.999) === true);
+  const monsterKey = "flying-spaghetti-monster";
+  check("the legend remains hidden below ten kilometers", (await db.memberBadge.count({ where: { userId: ayla.id, badgeKey: monsterKey } })) === 0 && !(await (await client.go(`${APP}/stickers`)).text()).includes(monsterKey));
+  const oldUsage = await makeStory(ayla.id, "Historical filament form verification", "Done");
+  const oldUsageUrl = `${APP}/story/${oldUsage.id}`;
+  const pastPage = await (await ruben.go(oldUsageUrl)).text();
+  const recordForm = formIndexContaining(pastPage, "Save usage");
+  check("past completed requests offer a usage form", recordForm >= 0 && pastPage.includes("Record filament used"));
+  await ruben.submit(oldUsageUrl, pastPage, recordForm, { filamentMeters: "0.001" });
+  check("logging past usage through the form discovers the legend at exactly 10km", (await db.story.findUniqueOrThrow({ where: { id: oldUsage.id } })).filamentMeters?.eq(0.001) === true && (await db.memberBadge.count({ where: { userId: ayla.id, badgeKey: monsterKey } })) === 1);
+  check("the recipient's gallery reveals the legendary sticker", (await (await client.go(`${APP}/stickers`)).text()).includes(`data-badge="${monsterKey}" data-earned="true"`));
 
   console.info(
     `\n${passed} checks passed, ${failures.length} failed` +

@@ -4,9 +4,6 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import {
   COLOR_MODES,
-  LEGACY_STORY_PRIORITY,
-  MAX_STORY_PRIORITY,
-  MIN_STORY_PRIORITY,
   SWATCH_SHADES,
   WishSchema,
 } from "@/lib/catalog";
@@ -16,6 +13,7 @@ import { FLOW } from "@/lib/scope";
 import { IMPORT_SOURCES } from "@/lib/import-source";
 import { BodySchema, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX, ReasonSchema } from "@/lib/stories";
 import { NOTIFICATION_LIMIT_MAX } from "@/lib/notifications";
+import { PaletteColorSchema } from "@/lib/palette-types";
 
 /**
  * The OpenAPI document, assembled at request time.
@@ -102,14 +100,15 @@ const STORY_SCHEMA = {
     flagged: { type: "boolean" },
     flagReason: { type: ["string", "null"] },
     quantity: { type: "integer", minimum: 1 },
-    priority: {
-      type: "integer",
-      minimum: MIN_STORY_PRIORITY,
-      maximum: MAX_STORY_PRIORITY,
-      description:
-        "How much it matters to the requester, 1 (whenever) to 100 (right now). " +
-        "Orders the owner's queue, highest first; promises nothing else.",
+    filamentMeters: {
+      type: ["number", "null"], minimum: 0, maximum: 1000000, multipleOf: 0.001,
+      description: "Actual total extruded length for the request in meters, including all copies. Null means unknown; recorded by the printer owner.",
     },
+    printHours: {
+      type: ["number", "null"], minimum: 0, maximum: 1000000, multipleOf: 0.001,
+      description: "Actual total printer runtime for the request in hours, including all copies. Null means unknown; recorded by the printer owner.",
+    },
+    preparedAt: { type: ["string", "null"], format: "date-time", description: "When the owner confirmed preparation; null until checked or after flagging." },
     material: {
       type: "string",
       description: "The owner-managed material label, snapshotted when the request was made.",
@@ -141,7 +140,7 @@ const STORY_SCHEMA = {
             swatchId: { type: "integer" },
             maker: { type: "string", examples: ["Polymaker"] },
             type: { type: "string", examples: ["Silk PLA"] },
-            buyUrl: { type: ["string", "null"], format: "uri" },
+            buyUrl: { type: ["string", "null"], format: "uri", description: "A direct Amazon product listing; null for older snapshots without one." },
             swatchUrl: { type: "string", format: "uri" },
           },
         },
@@ -219,9 +218,14 @@ const NOTIFICATION_SCHEMA = {
   properties: {
     id: { type: "string" },
     storyId: { type: ["integer", "null"] },
+    featureId: { type: ["integer", "null"], description: "Feature request target; open /frr/{featureId}." },
+    badgeKey: {
+      type: ["string", "null"],
+      description: "An earned member sticker. Badge notifications link to /member#badges.",
+    },
     ref: {
       type: ["string", "null"],
-      description: "Null once the ticket it referred to has been withdrawn.",
+      description: "PI-{storyId} or FRR-{100 + featureId}. Null for a withdrawn target or a badge-only notice.",
     },
     text: { type: "string" },
     read: { type: "boolean" },
@@ -347,6 +351,7 @@ export async function buildOpenApiDocument() {
       { name: "queue", description: "The printer owner's actions on a ticket." },
       { name: "conversation", description: "The thread that lives on a ticket." },
       { name: "activity", description: "Your notifications." },
+      { name: "palette", description: "Colors saved to your own account." },
       { name: "files", description: "Uploading or importing a model, and fetching its bytes." },
       { name: "service", description: "Liveness, and this document." },
       ...authHalf.tags,
@@ -374,6 +379,17 @@ export async function buildOpenApiDocument() {
         Story: STORY_SCHEMA,
         Comment: COMMENT_SCHEMA,
         Notification: NOTIFICATION_SCHEMA,
+        SavedPaletteColor: {
+          type: "object",
+          required: ["id", "name", "hex", "alpha"],
+          properties: {
+            id: { type: "string" },
+            name: { type: "string", minLength: 1, maxLength: 80 },
+            hex: { type: "string", pattern: "^#[0-9a-f]{6}$" },
+            alpha: { type: "number", minimum: 0, maximum: 1 },
+          },
+        },
+        PaletteColor: jsonSchema(PaletteColorSchema),
         // Derived from the Zod schemas the handlers actually validate with.
         Wish: jsonSchema(WishSchema),
         FlagReason: jsonSchema(z.object({ reason: ReasonSchema })),
@@ -537,12 +553,13 @@ export async function buildOpenApiDocument() {
           tags: ["stories"],
           summary: "Withdraw your own request",
           description:
-            "Only the person who asked for it, and only while nobody has " +
-            "acted on it — `Requested` or `Declined`. Past that the printer " +
+            "Only the person who asked for it, and only before printing " +
+            "starts — `Requested`, `Accepted` or `Declined`. Past that the printer " +
             "owner has committed time, filament and bed space, and a ticket " +
             "vanishing from under them is not the requester's call to make.\n\n" +
             "The stored model goes with it, along with the conversation and " +
-            "the notifications. The audit row stays.",
+            "the notifications. The audit row stays. A concurrent status " +
+            "change returns `409`; refresh before retrying.",
           parameters: [storyIdParam],
           responses: {
             "200": {
@@ -569,17 +586,62 @@ export async function buildOpenApiDocument() {
         },
       },
 
+      "/api/stories/{id}/model": {
+        post: {
+          tags: ["queue"], summary: "Add or replace the model before printing", parameters: [storyIdParam],
+          description: "Owner only, on Requested or Accepted tickets. Validates model bytes with the intake rules; replacing the file resets preparation. Upload slot and size limits apply.",
+          requestBody: { required: true, content: { "multipart/form-data": { schema: { type: "object", required: ["file"], properties: { file: { type: "string", format: "binary" } } } } } },
+          responses: { "200": { description: "Model saved." }, "400": errorResponse("No file or malformed multipart upload."), "403": errorResponse("Owner only."), "404": errorResponse("No such ticket."), "409": errorResponse("Ticket changed or printing already started."), "413": errorResponse("Model too large."), "422": errorResponse("Invalid model bytes."), "503": errorResponse("Upload slots busy."), ...COMMON_ERRORS },
+        },
+      },
+      "/api/stories/{id}/prepare": {
+        // The status enum stays stable; preparation is tracked separately.
+        post: {
+          tags: ["queue"], summary: "Confirm or reset ticket preparation", parameters: [storyIdParam],
+          description: "Owner only, on Accepted tickets. ready=true requires confirmed=true after checking model, filament, copies and slice. Flags and missing models block preparation. ready=false returns the ticket to Prepare.",
+          requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["ready"], properties: { ready: { type: "boolean" }, confirmed: { type: "boolean" } } } } } },
+          responses: { "200": { description: "Preparation updated.", content: { "application/json": { schema: { type: "object", properties: { preparedAt: { type: ["string", "null"], format: "date-time" } } } } } }, "400": errorResponse("Missing checklist confirmation or invalid body."), "403": errorResponse("Owner only."), "404": errorResponse("No such ticket."), "409": errorResponse("Ticket changed or preparation blocked."), ...COMMON_ERRORS },
+        },
+      },
+      "/api/stories/{id}/bambu-jobs": {
+        get: {
+          tags: ["queue"], summary: "List linked Bambu jobs", parameters: [storyIdParam],
+          responses: { "200": { description: "Linked jobs with outcome, actual seconds, estimates and printer name." }, "403": errorResponse("Owner only."), "404": errorResponse("No such ticket."), ...COMMON_ERRORS },
+        },
+        ...Object.fromEntries(["post", "delete"].map(method => [method, {
+          tags: ["queue"], summary: method === "post" ? "Link a synced Bambu job" : "Unlink a Bambu job", parameters: [storyIdParam],
+          description: "Owner only. One job belongs to one ticket; each ticket can have multiple plates or retries. Accept the ticket first. A job linked elsewhere must be unlinked there before reassigning.",
+          requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["jobId"], properties: { jobId: { type: "string", minLength: 1, maxLength: 200 } } } } } },
+          responses: { "200": { description: "Job assignment updated." }, "400": errorResponse("Invalid job id or JSON."), "403": errorResponse("Owner only."), "404": errorResponse("Ticket or synced job missing."), "409": errorResponse("Ticket not accepted, or job belongs to another ticket."), ...COMMON_ERRORS },
+        }])),
+      },
+      "/api/stories/{id}/bambu-runtime": {
+        post: {
+          tags: ["queue"], summary: "Import actual Bambu runtime", parameters: [storyIdParam],
+          description: "Owner only, on Delivery or Done tickets. Replaces printHours with summed actual runtime from successful linked jobs. Active or unknown jobs block import. Failed jobs and estimates are excluded. Filament meters are independent. Repeated imports replace rather than accumulate.",
+          responses: { "200": { description: "Actual hours recorded.", content: { "application/json": { schema: { type: "object", properties: { hours: { type: "number" } } } } } }, "403": errorResponse("Owner only."), "404": errorResponse("No such ticket."), "409": errorResponse("Not completed, or jobs lack final actual runtime."), ...COMMON_ERRORS },
+        },
+      },
       "/api/stories/{id}/advance": {
+        // Preparation adds a check within Accepted; the public status flow stays stable.
         post: {
           tags: ["queue"],
           summary: "Move a ticket one step along",
           description:
             "Requested → Accepted → Printing → Delivery → Done, forwards, one " +
-            "step at a time.\n\n" +
+            "step at a time. Accepted tickets require a model, no unresolved flag, and confirmed preparation before Printing.\n\n" +
             "There is deliberately no endpoint that sets the status to a value " +
             "you choose: the next state is derived from the current one, so a " +
-            "caller cannot skip a step. The body is ignored.",
+            "caller cannot skip a step. Optional filamentMeters and printHours record actual total " +
+            "extruded length and printer runtime when moving to Delivery or Done. Other body fields cannot change the next state.",
           parameters: [storyIdParam],
+          requestBody: {
+            required: false,
+            content: { "application/json": { schema: { type: "object", properties: {
+              filamentMeters: { type: ["number", "null"], minimum: 0, maximum: 1000000, multipleOf: 0.001 },
+              printHours: { type: ["number", "null"], minimum: 0, maximum: 1000000, multipleOf: 0.001 },
+            } } } },
+          },
           responses: {
             "200": storyResponse("Moved, and the uploader was told.", {
               moved: {
@@ -589,8 +651,55 @@ export async function buildOpenApiDocument() {
               notified: { type: "string", description: "Who was told." },
             }),
             "403": errorResponse("Only the printer owner moves a story along."),
+            "400": errorResponse("Invalid print time, filament usage or JSON body."),
             "404": errorResponse("No such ticket."),
-            "409": errorResponse("Already at the end of the line."),
+            "409": errorResponse("Preparation incomplete, ticket changed, or already at the end of the line."),
+            ...COMMON_ERRORS,
+          },
+        },
+      },
+
+      "/api/stories/{id}/filament": {
+        patch: {
+          tags: ["queue"],
+          summary: "Record actual filament usage on a completed print",
+          description: "Printer owner only. Updates the total extruded meters for a request in Delivery or Done, including all copies. Supply null if usage is unknown. Corrections replace the measurement; repeating it never counts the same print twice.",
+          parameters: [storyIdParam],
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object", required: ["filamentMeters"], properties: {
+              filamentMeters: { type: ["number", "null"], minimum: 0, maximum: 1000000, multipleOf: 0.001 },
+            } } } },
+          },
+          responses: {
+            "200": storyResponse("Usage recorded."),
+            "400": errorResponse("Invalid or missing filament usage."),
+            "403": errorResponse("Only the printer owner records filament usage."),
+            "404": errorResponse("No such ticket."),
+            "409": errorResponse("The print is not completed."),
+            ...COMMON_ERRORS,
+          },
+        },
+      },
+
+      "/api/stories/{id}/time": {
+        patch: {
+          tags: ["queue"],
+          summary: "Record actual print time on a completed print",
+          description: "Printer owner only. Updates total printer runtime in hours for a request in Delivery or Done, including all copies. Supply null if runtime is unknown. Corrections replace the measurement; repeating it never counts the same print twice.",
+          parameters: [storyIdParam],
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object", required: ["printHours"], properties: {
+              printHours: { type: ["number", "null"], minimum: 0, maximum: 1000000, multipleOf: 0.001 },
+            } } } },
+          },
+          responses: {
+            "200": storyResponse("Print time recorded."),
+            "400": errorResponse("Invalid or missing print time."),
+            "403": errorResponse("Only the printer owner records print time."),
+            "404": errorResponse("No such ticket."),
+            "409": errorResponse("The print is not completed."),
             ...COMMON_ERRORS,
           },
         },
@@ -664,58 +773,6 @@ export async function buildOpenApiDocument() {
             "403": errorResponse("Only the printer owner clears a flag."),
             "404": errorResponse("No such ticket."),
             "409": errorResponse("That ticket is not flagged."),
-            ...COMMON_ERRORS,
-          },
-        },
-      },
-
-      "/api/stories/{id}/priority": {
-        post: {
-          tags: ["stories"],
-          summary: "Set a ticket's priority",
-          description:
-            "The requester on their own ticket, or the printer owner on any. " +
-            "Unlike the status, priority is set rather than derived: there is no " +
-            "order to skip a step of. Refused once the ticket is Done or Declined.",
-          parameters: [storyIdParam],
-          requestBody: {
-            required: true,
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  required: ["priority"],
-                  properties: {
-                    priority: {
-                      type: "integer",
-                      minimum: MIN_STORY_PRIORITY,
-                      maximum: MAX_STORY_PRIORITY,
-                      description: `1 (whenever) to 100 (right now). The old words still work: ${Object.entries(
-                        LEGACY_STORY_PRIORITY,
-                      )
-                        .map(([word, n]) => `"${word}" is ${n}`)
-                        .join(", ")}.`,
-                    },
-                  },
-                },
-                example: { priority: 80 },
-              },
-            },
-          },
-          responses: {
-            "200": storyResponse("The ticket, with its priority as it now stands.", {
-              changed: {
-                type: "object",
-                properties: {
-                  from: { type: "integer" },
-                  to: { type: "integer" },
-                  unchanged: { type: "boolean" },
-                },
-              },
-            }),
-            "400": errorResponse("Not a whole number from 1 to 100 (or one of the old words)."),
-            "404": errorResponse("No such ticket, or not one you may see."),
-            "409": errorResponse("The ticket is Done or Declined."),
             ...COMMON_ERRORS,
           },
         },
@@ -812,6 +869,55 @@ export async function buildOpenApiDocument() {
         },
       },
 
+      "/api/palette": {
+        get: {
+          tags: ["palette"],
+          summary: "Your saved colors",
+          description: "Lists only the signed-in user's palette, including for the printer owner.",
+          responses: {
+            "200": {
+              description: "Saved colors, oldest first.",
+              content: { "application/json": { schema: {
+                type: "object",
+                properties: { colors: { type: "array", items: { $ref: "#/components/schemas/SavedPaletteColor" } } },
+              } } },
+            },
+            ...COMMON_ERRORS,
+          },
+        },
+        post: {
+          tags: ["palette"],
+          summary: "Save a color to your palette",
+          description: "Saves an exact color and opacity on your account. Repeating a save returns the existing entry. Hex values are normalized to lower case.",
+          requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/PaletteColor" } } } },
+          responses: {
+            "200": {
+              description: "The saved color, including an existing identical entry.",
+              content: { "application/json": { schema: { type: "object", properties: { color: { $ref: "#/components/schemas/SavedPaletteColor" } } } } },
+            },
+            "400": errorResponse("An invalid name, hex value, opacity or body."),
+            "403": errorResponse("Cross-origin writes are refused."),
+            ...COMMON_ERRORS,
+          },
+        },
+      },
+      "/api/palette/{id}": {
+        delete: {
+          tags: ["palette"],
+          summary: "Remove a saved color",
+          description: "Removes only an entry belonging to you. A missing entry or somebody else's id removes zero entries.",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": {
+              description: "How many entries were removed (zero or one).",
+              content: { "application/json": { schema: { type: "object", properties: { removed: { type: "integer", minimum: 0, maximum: 1 } } } } },
+            },
+            "403": errorResponse("Cross-origin writes are refused."),
+            ...COMMON_ERRORS,
+          },
+        },
+      },
+
       "/api/catalog": {
         get: {
           tags: ["stories"],
@@ -890,14 +996,14 @@ export async function buildOpenApiDocument() {
           tags: ["stories"],
           summary: "Spools the owner can buy",
           description:
+            "Requires a confirmed donation of at least $1 for members; the printer owner always has access. " +
             "Searches the filamentcolors.xyz swatch library for spools of one " +
-            "material that the owner does not have but can get. Send a swatch's " +
+            "material that the owner does not have but can get. Only the owner's approved brands " +
+            "(configured by the admin, including catalog aliases) with photographed printed swatches are offered. Admin listings linked to a printed swatch also appear, with ids above 1000000000. Send a swatch's " +
             "`id` as `swatchId` on a request instead of `colorName`; the server " +
             "reads the swatch back from its own copy of the library and refuses " +
-            "one that is not the material's kind of filament. At most 60 come back. " +
-            "When filamentcolors.xyz finds fewer than 12, or cannot be reached, SpoolmanDB's " +
-            "listings fill in: those have a negative `id`, the maker's listed color as `hex`, " +
-            "no photo, and a web search as `pageUrl`.",
+            "one from an unapproved brand, without a direct Amazon product listing, or that is not the material's kind of filament. At most 60 come back. " +
+            "Unswatched catalog listings do not fill sparse results. Only spools with an exact Amazon listing in `buyUrl` are offered.",
           parameters: [
             { name: "material", in: "query", required: true, schema: { type: "string" }, description: "A material from `GET /api/catalog`." },
             { name: "q", in: "query", schema: { type: "string" }, description: "Words that must all appear in the color name, maker or type." },
@@ -937,7 +1043,7 @@ export async function buildOpenApiDocument() {
                             type: { type: "string", examples: ["PLA"] },
                             hex: { type: "string", examples: ["#2b2b33"] },
                             shade: { type: ["string", "null"], enum: [...SWATCH_SHADES.map((s) => s.key), null] },
-                            buyUrl: { type: ["string", "null"], format: "uri" },
+                            buyUrl: { type: "string", format: "uri", description: "A direct Amazon product listing for this spool." },
                             pageUrl: { type: "string", format: "uri" },
                             image: {
                               type: ["string", "null"],

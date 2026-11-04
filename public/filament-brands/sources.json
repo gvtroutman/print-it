@@ -1,0 +1,136 @@
+{
+  "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/",
+  "retrieved": "2026-10-13",
+  "logos": {
+    "elegoo": {
+      "name": "ELEGOO",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/ELEGOO_logo_png_b1ae954a.png",
+      "sha256": "96f07f1576f079d2c8c8e2700b5562330cf4dfac5712130209f9e83d9c6dac3f"
+    },
+    "iemai": {
+      "name": "IEMAI",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/IEMAI_logo_png_6e0dc866.png",
+      "sha256": "c3543e857f48253d66bb9aac50701cfc7110466b650fcbbb972a74d7ac883208"
+    },
+    "overture": {
+      "name": "Overture",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/Overture_logo_png_4e72d792.png",
+      "sha256": "292517e4c02565641c1418b6b308ffec9991f34e32ce205712aa672c44bd2d72"
+    },
+    "polymaker": {
+      "name": "Polymaker",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/Polymaker_logo_svg_44d55221.svg",
+      "sha256": "a292aec2f3e10af50ad802e004112f5b58fa35aa4f137d56ce9b68661079b31e"
+    },
+    "sunlu": {
+      "name": "SUNLU",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/SUNLU_logo_png_f64189e0.png",
+      "sha256": "6c0ebc21c6d0db1884b8f4f6f2d6d95a86da8e05afc11facb56a7eaa7b255cbb"
+    },
+    "esun": {
+      "name": "eSUN",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/eSUN%203D_logo_png_faf5ad3a.png",
+      "sha256": "83906717edabc1d846b3f263d7946fd5e4a7e80a32d5e9094ed21ea3d9c494e6"
+    },
+    "jayo": {
+      "name": "JAYO",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/JAYO_logo_jpg_0aafc174.jpg",
+      "sha256": "6155f3b91b684a40e050ddc5198365085e6d2ab2811b35f4cbc086af6bd53c08"
+    },
+    "cookiecad": {
+      "name": "Cookiecad",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/Cookiecad_logo_svg_3b2043a2.svg",
+      "sha256": "9381b79842897e8bb94e3267708c2a3a5ee015a76bb802ed66baea1a86f7e204"
+    },
+    "3dhojor": {
+      "name": "3DHoJor",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/3DHoJor_logo_svg_41202f94.svg",
+      "sha256": "a845fd3e1170f66da01a7ac26c4862dba3ebb9fe722d670829759eee16b804fa"
+    },
+    "tinmorry": {
+      "name": "TINMORRY",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/TINMORRY_logo_jpg_66e141ba.jpg",
+      "sha256": "fdc8569e1ddcdf7510dd73010c11d3d05db37eae227d29d20dbc0481a1730cae"
+    },
+    "amolen": {
+      "name": "AMOLEN",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/Amolen_logo_png_23df38e4.png",
+      "sha256": "1218837c07151eae9e742c9c3380183a94ea12d5aa90c2abe625012ee1b7e821"
+    },
+    "bambulab": {
+      "name": "Bambu Lab",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/Bambu%20Lab_logo_png_778076ec.png",
+      "sha256": "ce072bf89edde9b856f5ea5c4a93c88eaf20abeb79a8a71a31a5084da8c96315"
+    },
+    "voxelab": {
+      "name": "Voxelab",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/Voxelab_logo_png_83833749.png",
+      "sha256": "2c3d1433914369cd585fea74e82f75d650d54f2535cfe2cc2d678ab4a3e6bb29"
+    },
+    "creality": {
+      "name": "Creality",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/Creality_logo_png_ac94db3b.png",
+      "sha256": "298c147835180708617e6db17420d2f53343996d6b925c1f7dff2e7cb33dd824"
+    },
+    "giantarm": {
+      "name": "GIANTARM",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/GIANTARM_logo_png_41491efe.png",
+      "sha256": "f9b668a8e22bbb84cfe562b8a5a927b56582ad90ab3964bd84b4f6f8a2a81574"
+    },
+    "anycubic": {
+      "name": "Anycubic",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/Anycubic_logo_png_03c65393.png",
+      "sha256": "f446948f50cc5e94d21205b0ccd9ed50467f9ac8d336f1422f8000fec4782603"
+    },
+    "flashforge": {
+      "name": "Flashforge",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/FLASHFORGE_logo_png_6ae53361.png",
+      "sha256": "5288fb4f3f6d4076cbe37ad76113310b5bdcf20502b0841c2f535c6f846d465f"
+    },
+    "yoopai": {
+      "name": "YOOPAI",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/YooPai_logo_png_2ff44b03.png",
+      "sha256": "ecb017b9f8645719439bb92f76dcd54a44c05492f74200ce6af1077556d5012d"
+    },
+    "eryone": {
+      "name": "Eryone",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/Eryone_logo_png_14bcd43b.png",
+      "sha256": "4c7fddb47d0cf5a0f2de479d0d871adfe410aebc234212313870cc369b0a871c"
+    },
+    "geeetech": {
+      "name": "Geeetech",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/Geeetech_logo_png_9c09c834.png",
+      "sha256": "31ed04d60b5d8b5e50b4a3d54f99846ff71c9f4dae3b1ae8b4395c10362ae037"
+    },
+    "pinball": {
+      "name": "Pinball",
+      "source": "owner-supplied:9346.jpg",
+      "sha256": "eeeee0eddc36f9814d7ef68b8ce3ce4ff39c9db79e6247eda9ffdb46376a25db"
+    },
+    "hatchbox": {
+      "name": "HATCHBOX",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/Hatchbox_logo_png_004a53a2.png",
+      "sha256": "3d06d5748fd1c926afafda30e1620b3626975e03aebd8f8b56d0b8a016154781"
+    },
+    "protopasta": {
+      "name": "Protopasta",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/Protopasta_logo_png_424f685a.png",
+      "sha256": "bafb95951963aa24f96626f74ad7fa1b39cce8fd7a7fdd27663a096c827f954c"
+    },
+    "prusament": {
+      "name": "Prusament",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/Prusament_logo_png_f187f1bf.png",
+      "sha256": "22fd851d947dc9d480049a9169d71fd53c12c81de970bedf0fc46661b650d950"
+    },
+    "colorfabb": {
+      "name": "colorFabb",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/colorFabb_logo_svg_ac506ad2.svg",
+      "sha256": "2a92c986b120cccbc57a53a4ee3de1abcda53d6a1d3865b3bd33a6720cff42a5"
+    },
+    "matterhackers": {
+      "name": "MatterHackers",
+      "source": "https://api.openfilamentdatabase.org/api/v1/brands/logo/MatterHackers_logo_svg_c39a44a2.svg",
+      "sha256": "c8bf1020bc7bc481d070897de03fa9c6b49362b3bc035a365b5029b45025eb8b"
+    }
+  }
+}

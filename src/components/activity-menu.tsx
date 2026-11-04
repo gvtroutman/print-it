@@ -12,6 +12,7 @@ export type FeedItem = {
   read: boolean;
   storyId: number | null;
   featureId: number | null;
+  badgeKey: string | null;
 };
 
 /**
@@ -57,23 +58,27 @@ export function ActivityMenu({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
+        data-unread={unread > 0}
         aria-haspopup="true"
         aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"}
         title="Notifications"
-        className="group relative flex h-[40px] w-[40px] cursor-pointer items-center justify-center rounded-full text-ink"
+        className="notification-trigger group relative flex h-[40px] w-[40px] cursor-pointer items-center justify-center rounded-full text-ink"
       >
         {/* Just the sticker, no button around it, so it is drawn a size up
             and grows a touch on hover. Its white die-cut edge only shows
             while the panel is open. A quiet bell is plain paper; with
             something new it goes yellow and swings the other way, clapper
-            out on the left. */}
-        <span className="flex scale-[1.3] transition-transform duration-[160ms] ease-out group-hover:scale-[1.45]">
-          <NavIcon
-            name="bell"
-            fill={unread > 0 ? undefined : "var(--color-cream-2)"}
-            flip={unread > 0}
-            edge={open}
-          />
+            out on the left. Separate wrappers let it ring without changing
+            the hover scale, the icon's tilt, or the count badge. */}
+        <span className="flex scale-[1.43] duration-[160ms] ease-out motion-safe:transition-transform motion-safe:group-hover:scale-[1.595]">
+          <span className="notification-bell">
+            <NavIcon
+              name="bell"
+              fill={unread > 0 ? undefined : "var(--color-cream-2)"}
+              flip={unread > 0}
+              edge={open}
+            />
+          </span>
         </span>
         {/* The count sits on the bell's shoulder, and only when there is
             something to read: a bell with a 0 on it is just noise. */}
@@ -125,14 +130,16 @@ export function ActivityMenu({
                   onClick={() => {
                     if (!item.read) startTransition(() => void markRead(item.id));
                     // Take them to whatever the notification is about. A feature
-                    // request goes to /frr, a print to /story; a reference-less
-                    // one (a withdrawal) just marks read.
+                    // request goes to /frr, a print to /story, an earned
+                    // sticker to the collection. Withdrawals just mark read.
                     const href =
-                      item.featureId !== null
-                        ? `/frr/${item.featureId}`
-                        : item.storyId !== null
-                          ? `/story/${item.storyId}`
-                          : null;
+                      item.badgeKey !== null
+                        ? "/member#badges"
+                        : item.featureId !== null
+                          ? `/frr/${item.featureId}`
+                          : item.storyId !== null
+                            ? `/story/${item.storyId}`
+                            : null;
                     if (href) window.location.assign(href);
                   }}
                   className="flex min-w-0 flex-1 cursor-pointer gap-[13.2px] py-[11px] pl-[13.2px] pr-[6px] text-left"
@@ -178,6 +185,8 @@ export function ActivityMenu({
               ...(role === "admin"
                 ? [
                     { label: "Audit log", href: "/admin/audit" },
+                    { label: "Maintenance mode", href: "/admin/maintenance" },
+                    { label: "Device & screen sizes", href: "/admin/screens" },
                     { label: "API & docs", href: "/docs" },
                   ]
                 : []),

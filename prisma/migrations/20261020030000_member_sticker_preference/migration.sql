@@ -1,0 +1,1 @@
+ALTER TABLE "user" ADD COLUMN "stickersEnabled" BOOLEAN NOT NULL DEFAULT true;

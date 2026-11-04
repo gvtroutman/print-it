@@ -30,3 +30,13 @@ CHANGELOG.md
 CONTRIBUTING.md
 Dockerfile
 docker-compose*.yml
+# Check/maintenance scripts do not ship. Keep the Swagger build step, the
+# helpers imported by app routes, and the one-shot storage migration's files.
+# Editing a test should not invalidate COPY . . and recompile the whole app.
+scripts/*
+!scripts/vendor-swagger.ts
+!scripts/lib/
+!scripts/_env.ts
+!scripts/export-storage.ts
+AGENTS.md
+shots/

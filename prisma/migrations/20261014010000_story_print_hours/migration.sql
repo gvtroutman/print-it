@@ -1,0 +1,1 @@
+ALTER TABLE "story" ADD COLUMN "printHours" DECIMAL(12,3);

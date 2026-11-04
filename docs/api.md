@@ -53,6 +53,10 @@ before you paste one into a script:
 Nothing else is a way in. There is no `?token=` parameter, no basic auth, and
 no header that names a user.
 
+Passkey enrollment requires a sign-in less than five minutes old, at both
+registration steps. `/welcome` sends older sessions through `/reauth` before
+setup.
+
 ## What you can reach
 
 | | | |
@@ -66,13 +70,12 @@ no header that names a user.
 | `POST` | `/api/stories/{id}/flag` | Flag a model problem, with a reason. *Printer owner.* |
 | `DELETE` | `/api/stories/{id}/flag` | Clear the flag. *Printer owner.* |
 | `GET` `POST` | `/api/stories/{id}/comments` | The conversation on a ticket. |
-| `POST` | `/api/stories/{id}/priority` | Set how much it matters: low, medium or high. Yours, or any as the printer owner. |
 | `POST` | `/api/stories/{id}/requeue` | Print your own ticket again from the same file, changing what you like. |
 | `GET` | `/api/notifications` | Your Activity feed. |
 | `POST` | `/api/notifications/read` | Mark one read, or all of them. |
 | `DELETE` | `/api/notifications/{id}` | Dismiss one. |
 | `GET` | `/api/catalog` | The materials and colours on offer right now, and which sites — if any — this instance imports from. |
-| `GET` | `/api/filament-library` | Spools of one material the owner can buy, searched in the filamentcolors.xyz library, with SpoolmanDB filling in (negative ids) where it finds too few. Send one's `id` as `swatchId` instead of `colorName`. |
+| `GET` | `/api/filament-library` | Spools of one material from the admin's enabled brands with an exact Amazon listing. Includes admin-managed products (ids above 1,000,000,000), filamentcolors.xyz and SpoolmanDB (negative ids). Send one's `id` as `swatchId` instead of `colorName`; submission rechecks the live settings. |
 | `POST` | `/api/upload` | Upload a model and open a request. Multipart. |
 | `POST` | `/api/import/search` | Find models by name on the import site, 12 a page (`offset` for more). Each result's `url` goes to `/api/import/files`. `501` unless the instance imports. |
 | `POST` | `/api/import/files` | What a link to a model offers: the model and its printable files. `501` unless the instance imports. |
@@ -102,9 +105,9 @@ nobody and confuse an honest client whose ticket is fine.
 
 **3. Withdrawing is the requester's, and it is not the printer owner's.**
 Seeing every story is the widest scope in the app and it still does not include
-deleting somebody's request. And it only works while nobody has acted on it —
-`Requested` or `Declined`. Past that you get `409` and the name of the person
-to ask.
+deleting somebody's request. It works before printing starts: `Requested`,
+`Accepted` or `Declined`. Past that you get `409` and the name of the person
+to ask. A concurrent status change also returns `409`; refresh before retrying.
 
 **4. Writes refuse a foreign `Origin`.** CSRF here rests on `SameSite=Lax` plus
 an Origin check, which is Better Auth's model and the app keeps to it. A
@@ -136,6 +139,14 @@ curl -s https://print.example/api/upload \
   -F title='Cable clip' -F material=PETG -F colorName=Slate \
   -F quantity=2 -F note='Teal if you have it'
 ```
+
+## Activity targets
+
+`GET /api/notifications` includes nullable `storyId`, `featureId` and `badgeKey`
+fields. Open `/story/{storyId}` for a print, `/frr/{featureId}` for a feature
+request, or `/member#badges` for a sticker. `ref` is the corresponding `PI-…`
+or `FRR-…` display reference; it is null for a withdrawn target or a sticker
+without a ticket.
 
 ## Errors
 

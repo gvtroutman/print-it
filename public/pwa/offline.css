@@ -1,0 +1,8 @@
+body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #fff6e9; color: #221a14; font: 17px/1.6 system-ui, sans-serif; }
+main { box-sizing: border-box; width: min(520px, calc(100% - 40px)); margin: 32px 0; padding: 28px; border: 3px solid #221a14; border-radius: 20px; background: #d3f2f0; box-shadow: 5px 5px 0 #221a14; }
+.brand { display: block; width: min(280px, 100%); height: auto; margin-bottom: 20px; }
+h1 { margin: 12px 0; font-size: 32px; line-height: 1.2; }
+button { min-height: 48px; padding: 10px 20px; border: 3px solid #221a14; border-radius: 12px; background: white; color: #221a14; font: inherit; font-weight: 700; cursor: pointer; }
+.small { font-size: 14px; }
+#shared-link { padding: 12px; border-radius: 10px; background: #fff6e9; overflow-wrap: anywhere; }
+[hidden] { display: none; }

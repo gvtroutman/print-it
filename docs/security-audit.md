@@ -1,5 +1,9 @@
 # Security validation
 
+For the October 14, 2026 follow-up findings and fixes, see
+[Security fixes — October 14, 2026](security-fixes-2026-10-14.md). The historical
+assessment below records the earlier production-build checks.
+
 Scope: Pretty Please Print, assessed against the **OWASP Top 10 (2021)** with
 SAST, SCA and DAST. Everything below was run against the production build
 (`npm run build && npm start`) on 2026-08-23.
@@ -349,6 +353,19 @@ spent when a password is actually set, which is what "single use" is for.
 and a successful one kills it.
 
 ### The session window
+
+**Update, 12 October 2026:** the sign-in form now offers **Remember this
+device**, enabled by default for personal-device convenience. A successful
+password or passkey sign-in with that option lasts a fixed ninety days;
+unchecking it retains the twenty-minute idle window described below. A
+session-bound device marker prevents both middleware cookie shortening and
+Better Auth session refresh. The database remains authoritative, so logout,
+password resets and access revocation still take effect immediately. The
+five-minute sudo gate is unchanged, and re-authentication revokes the replaced
+session while preserving the remembered expiry. This intentionally gives a
+remembered browser a longer period of access; use the short option on shared
+computers. `verify:remembered-device` covers the cookie/row lifetimes,
+revocation, expiry, account switching, browser persistence and WebAuthn.
 
 The window used to be `expiresIn: 30 days` with `updateAge: 1 day`, and the
 second number is what made the first one wrong. `expiresIn` is an **idle**

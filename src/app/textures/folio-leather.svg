@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="150" height="150" viewBox="0 0 150 150">
+  <filter id="grain" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency=".32" numOctaves="3" stitchTiles="stitch" result="noise"/>
+    <feDiffuseLighting in="noise" surfaceScale="3" diffuseConstant=".8" lighting-color="#dfae79">
+      <feDistantLight azimuth="225" elevation="45"/>
+    </feDiffuseLighting>
+  </filter>
+  <path fill="#b48860" opacity=".14" filter="url(#grain)" d="M0 0h150v150H0z"/>
+</svg>

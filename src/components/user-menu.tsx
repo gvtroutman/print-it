@@ -1,37 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { authClient } from "@/lib/auth-client";
-import { endPreviewAction, startPreviewAction } from "@/app/actions/preview";
+import { MemberCard, type MemberCardProps } from "@/components/member-card";
+import { MemberAvatar } from "@/components/member-avatar";
 
-/**
- * Replaces the prototype's role switcher, which the handoff marks as
- * "prototype only, drop it in production". Roles come from the session now,
- * so there is nothing to switch — this is the signed-in user and a way out.
- */
-export function UserMenu({
-  name,
-  initials,
-  email,
-  role,
-  passkeyCount,
-  previewing,
-  canAddDevice,
-  canAddMember,
-}: {
-  name: string;
-  initials: string;
-  /** Null for a member who was invited with no address. */
-  email: string | null;
-  role: "client" | "admin";
-  passkeyCount: number;
-  /** The printer owner, looking at the member view. */
-  previewing?: boolean;
-  /** The owner's per-member switches; see `Actor` in scope.ts. */
-  canAddDevice?: boolean;
-  canAddMember?: boolean;
-}) {
+/** The desktop account menu keeps only the card that opens the member page. */
+export function UserMenu(props: MemberCardProps) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
 
@@ -56,187 +30,18 @@ export function UserMenu({
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="true"
-        aria-label={`Account menu for ${name}`}
-        className="flex h-[36px] w-[36px] cursor-pointer items-center justify-center rounded-full border-[3px] border-ink bg-aqua font-mono text-[12px] font-bold text-ink transition-colors duration-[160ms] hover:bg-sun"
+        aria-label={`Account menu for ${props.name}`}
+        className="flex h-[44px] w-[44px] cursor-pointer items-center justify-center rounded-full p-[3px] text-ink transition-transform duration-[160ms] hover:scale-110 motion-reduce:transform-none lg:h-[60px] lg:w-[60px] lg:[--avatar-initial-size:18px]"
       >
-        {initials}
+        <MemberAvatar initials={props.initials} flair={props.flair} />
       </button>
 
-      {/* Hidden rather than unmounted, so the view switch is in the
-          server-rendered page: `verify:queue` drives it from there. */}
       <div
         hidden={!open}
-        className="ppp-in absolute right-0 top-[50px] z-50 w-[264px] rounded-panel border-[3px] border-ink bg-porcelain p-[17.6px] shadow-stamp-lg"
+        className="ppp-in absolute right-0 top-[50px] z-50 w-[300px] max-w-[calc(100vw-32px)] lg:top-[66px]"
       >
-        <AccountPanel
-          name={name}
-          email={email}
-          role={role}
-          passkeyCount={passkeyCount}
-          previewing={previewing}
-          canAddDevice={canAddDevice}
-          canAddMember={canAddMember}
-        />
+        <MemberCard {...props} onNavigate={() => setOpen(false)} />
       </div>
     </div>
-  );
-}
-
-/**
- * Who is signed in and the way out. Shared by the account menu and, on a
- * phone, the hamburger menu that stands in for it.
- *
- * For the printer owner the card with their name is also the switch between
- * the owner view and the member view: a stamp that sits raised in the owner
- * view and pressed in while the member view is on. There is no banner and no
- * labelled link — the card says which view this is, and one click on it is
- * the way across in either direction.
- *
- * A member's email is not shown here. It is not how they sign in and not how
- * anybody reaches them in the app, so on their own card it was only clutter.
- *
- * Under the card, a member may get "Add device" and "Add member": the two
- * things the printer owner can hand them from the guest list. Each shows only
- * when its switch is on, so a member with neither sees the menu as it was.
- */
-export function AccountPanel({
-  name,
-  initials,
-  email,
-  role,
-  passkeyCount,
-  previewing,
-  canAddDevice,
-  canAddMember,
-}: {
-  name: string;
-  /** Shown as an avatar beside the name. The phone menu passes it; the
-      desktop menu doesn't, because there the avatar is the button. */
-  initials?: string;
-  email: string | null;
-  role: "client" | "admin";
-  passkeyCount: number;
-  previewing?: boolean;
-  canAddDevice?: boolean;
-  canAddMember?: boolean;
-}) {
-  // The owner has their own pages for both; these are the member's way in.
-  const extras = role === "client"
-    ? [
-        canAddDevice && { label: "Add device", href: "/add-device" },
-        canAddMember && { label: "Add member", href: "/add-member" },
-      ].filter((x): x is { label: string; href: string } => Boolean(x))
-    : [];
-
-  // Spans, not paragraphs: on the owner's card this sits inside a button.
-  const card = (
-    <span className="flex items-center gap-[12px]">
-      {initials && (
-        <span
-          aria-hidden
-          className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border-[3px] border-ink bg-aqua font-mono text-[17px] font-bold text-ink"
-        >
-          {initials}
-        </span>
-      )}
-      <span className="block min-w-0">
-        <span className="block font-display text-[17px] text-ink">{name}</span>
-        {email && role === "admin" && !previewing && (
-          <span className="mt-[2px] block break-all font-mono text-[11.5px] text-ink-3">{email}</span>
-        )}
-        <span className="mt-[8.8px] inline-block rounded-chip border-2 border-ink bg-cream-2 px-[8px] font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink">
-          {previewing ? "Member view" : role === "admin" ? "Printer owner" : "Invited member"}
-        </span>
-      </span>
-    </span>
-  );
-
-  return (
-    <>
-      {role === "admin" || previewing ? (
-        // A plain server-action form, so it works before hydration. The
-        // button is a toggle: raised when the owner view is on, pressed in
-        // while the member view is. `aria-pressed` says so to a screen
-        // reader, and the label is the only wording there is.
-        <form action={previewing ? endPreviewAction : startPreviewAction}>
-          <button
-            type="submit"
-            aria-pressed={previewing ? true : false}
-            aria-label={previewing ? "Back to the owner view" : "Switch to the member view"}
-            title={previewing ? "Back to the owner view" : "Switch to the member view"}
-            className={`stamp block w-full cursor-pointer rounded-panel border-[3px] border-ink p-[11px] text-left ${
-              previewing ? "stamp-pressed bg-sun" : "bg-cream-2 hover:bg-sun"
-            }`}
-          >
-            {card}
-          </button>
-        </form>
-      ) : (
-        card
-      )}
-      {extras.length > 0 && (
-        <ul className="m-0 mt-[13.2px] flex list-none flex-col gap-[6px] p-0">
-          {extras.map((item) => (
-            <li key={item.href}>
-              <Link
-                href={item.href}
-                className="stamp flex w-full items-center rounded-chip border-[3px] border-ink bg-porcelain px-[13.2px] py-[8px] font-mono text-[12.5px] font-bold uppercase tracking-[0.08em] text-ink hover:bg-sun"
-              >
-                {item.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-      {/* How you sign in. The printer owner gets a way to change it;
-          a member's device is their sign-in, and there is nothing to
-          change. */}
-      <div className="mt-[13.2px] border-t-2 border-dashed border-rule pt-[13.2px]">
-        {role === "admin" ? (
-          <>
-            <p className="m-0 font-mono text-[11.5px] uppercase text-ink-3">
-              {passkeyCount === 0
-                ? "Signing in with a password"
-                : `${passkeyCount} passkey${passkeyCount === 1 ? "" : "s"} on this account`}
-            </p>
-            <a
-              href="/welcome"
-              className="mt-[6px] inline-block font-bold text-[14px] text-cherry-dk underline underline-offset-2 hover:text-cherry"
-            >
-              {passkeyCount === 0 ? "Add a passkey →" : "Add another →"}
-            </a>
-          </>
-        ) : (
-          <p className="m-0 font-mono text-[11.5px] uppercase text-ink-3">
-            {canAddDevice
-              ? "This device keeps you signed in. Add device signs in another."
-              : "This device keeps you signed in. For another one, ask the printer owner for a link."}
-          </p>
-        )}
-      </div>
-
-      <button
-        type="button"
-        onClick={async () => {
-          // A member has no password to come back with, so signing out
-          // is "until the printer owner sends a new link". Worth one
-          // question before it happens rather than a surprise after.
-          if (
-            role === "client" &&
-            !previewing &&
-            !window.confirm(
-              "Sign this device out? You will need a new link from the printer owner to get back in.",
-            )
-          ) {
-            return;
-          }
-          await authClient.signOut();
-          window.location.assign("/signin");
-        }}
-        className="stamp mt-[13.2px] w-full cursor-pointer rounded-chip border-[3px] border-ink bg-cream-2 px-[17.6px] py-[9px] text-[14px] font-bold text-ink hover:bg-cherry-wash"
-      >
-        Sign out
-      </button>
-    </>
   );
 }

@@ -7,12 +7,18 @@
  * re-implemented (and drifting) wherever they need checking.
  */
 import type { FeatureStatus, Prisma, StoryStatus } from "@prisma/client";
+import type { CardFlairKey } from "@/lib/card-flair";
 
 export type Actor = {
   id: string;
   name: string;
   email: string;
   initials: string;
+  /** ISO account creation date, displayed on the membership card. */
+  joinedAt?: string;
+  cardFlair?: CardFlairKey | null;
+  /** Account-wide sticker visibility and announcements; enabled by default. */
+  stickersEnabled?: boolean;
   role: "client" | "admin";
   /**
    * Set when this is the printer owner previewing the member view. `role` is
@@ -22,7 +28,7 @@ export type Actor = {
   /**
    * May sign another device in for themselves. Switched on per member by the
    * printer owner; always on for the owner, so the preview shows the member
-   * menu with everything in it.
+   * page with every member action on it.
    */
   canAddDevice: boolean;
   /** May invite somebody. Same rules as `canAddDevice`. */

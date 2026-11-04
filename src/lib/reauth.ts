@@ -8,8 +8,8 @@ import { FRESH_AUTH_SECONDS } from "@/lib/auth-rules";
 /**
  * Re-authentication for the actions that move access around.
  *
- * The session window is twenty idle minutes, which limits how long a captured
- * cookie is worth anything but does not stop it being worth something *now*.
+ * Ordinary sessions last twenty idle minutes, and remembered devices last
+ * ninety days. Neither lifetime proves who is at the keyboard right now.
  * The things worth protecting from a stolen twenty minutes are the ones that
  * outlive it: an invitation mints a whole new account, a reset link is the
  * ability to become somebody else, and revoking access locks a colleague out.
@@ -26,11 +26,8 @@ import { FRESH_AUTH_SECONDS } from "@/lib/auth-rules";
  * means a normal sign-in is fresh for its first five minutes, which is right:
  * somebody who just typed their password should not be asked for it twice.
  *
- * The cost of doing it this way is one superseded session row per re-auth.
- * That was the deciding trade when the window was thirty days; at twenty idle
- * minutes the orphan is gone before anyone would notice it, which is what
- * makes this the cheap option rather than hand-rolling WebAuthn verification
- * against the `passkey` table.
+ * rememberedSessions() revokes the superseded session after successful
+ * re-authentication and preserves a remembered browser's original expiry.
  */
 
 /** Seconds since this session was created, or null if there is no session. */
@@ -49,7 +46,7 @@ export async function authAgeSeconds(): Promise<number | null> {
 export async function isFreshAuth(): Promise<boolean> {
   const age = await authAgeSeconds();
   // Fails closed: no session, or an age we cannot read, is not fresh.
-  return age !== null && age <= FRESH_AUTH_SECONDS;
+  return age !== null && age < FRESH_AUTH_SECONDS;
 }
 
 /**

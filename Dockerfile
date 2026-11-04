@@ -11,6 +11,20 @@
 # devDependencies just to apply a migration at boot.
 
 # ---------------------------------------------------------------------------
+# npm's install layer should not change when a verification/build command is
+# added to package.json. If install lifecycle hooks exist, preserve all scripts
+# (a hook can call another command). Restore the full manifest below.
+FROM node:22-alpine AS install-manifest
+WORKDIR /out
+COPY package.json package-lock.json ./
+RUN node -e "\
+      const fs = require('fs'); \
+      const p = JSON.parse(fs.readFileSync('package.json', 'utf8')); \
+      const hooks = ['preinstall', 'install', 'postinstall', 'prepublish', 'preprepare', 'prepare', 'postprepare']; \
+      if (!hooks.some(name => p.scripts?.[name])) delete p.scripts; \
+      fs.writeFileSync('package.json', JSON.stringify(p, null, 2)); \
+    "
+
 FROM node:22-alpine AS builder
 WORKDIR /app
 
@@ -23,8 +37,8 @@ RUN apk add --no-cache openssl libc6-compat
 # build steps. The layer still only rebuilds when the lockfile changes. The
 # cache mount keeps npm's download cache between builds without putting it in
 # the image, so a lockfile change only fetches what is new.
-COPY package.json package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
+COPY --from=install-manifest /out/package.json /out/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --prefer-offline --no-audit --no-fund
 
 COPY . .
 
@@ -90,7 +104,7 @@ RUN apk add --no-cache openssl libc6-compat
 
 # The cache mount is the same npm download cache the builder uses.
 COPY --from=migrator-manifest /out/package.json ./package.json
-RUN --mount=type=cache,target=/root/.npm npm install --ignore-scripts --no-audit --no-fund
+RUN --mount=type=cache,target=/root/.npm npm install --prefer-offline --ignore-scripts --no-audit --no-fund
 
 # The client is generated from the schema alone, so only the schema comes in
 # before it: a new migration or a seed change is a small layer on top rather

@@ -19,12 +19,19 @@ import type { Actor } from "@/lib/scope";
 export const NOTIFICATION_FIELDS = {
   id: true,
   storyId: true,
+  featureId: true,
+  badgeKey: true,
   text: true,
   read: true,
   createdAt: true,
 } as const;
 
 export const NOTIFICATION_LIMIT_MAX = 100;
+
+/** Apply the same sticker preference to feeds and their unread counts. */
+export function notificationScope(actor: Actor) {
+  return { recipientId: actor.id, ...(actor.stickersEnabled === false ? { badgeKey: null } : {}) };
+}
 
 export async function listNotifications(
   actor: Actor,
@@ -33,12 +40,12 @@ export async function listNotifications(
   const limit = Math.min(Math.max(opts.limit ?? 25, 1), NOTIFICATION_LIMIT_MAX);
   const [items, unread] = await Promise.all([
     db.notification.findMany({
-      where: { recipientId: actor.id, ...(opts.unreadOnly ? { read: false } : {}) },
+      where: { ...notificationScope(actor), ...(opts.unreadOnly ? { read: false } : {}) },
       select: NOTIFICATION_FIELDS,
       orderBy: { createdAt: "desc" },
       take: limit,
     }),
-    db.notification.count({ where: { recipientId: actor.id, read: false } }),
+    db.notification.count({ where: { ...notificationScope(actor), read: false } }),
   ]);
   return { items, unread };
 }

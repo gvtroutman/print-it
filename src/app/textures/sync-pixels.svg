@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="48" viewBox="0 0 16 48" shape-rendering="crispEdges" fill="#fff">
+  <!-- Extra highlight rows cover taller panels without stretching the two-unit cells. -->
+  <defs>
+    <pattern id="highlights" width="4" height="4" patternUnits="userSpaceOnUse">
+      <path opacity="0.94" d="M0 0h2v2H0zM2 2h2v2H2z"/>
+      <path opacity="0.98" d="M2 0h2v2H2zM0 2h2v2H0z"/>
+    </pattern>
+  </defs>
+  <path fill="url(#highlights)" d="M0 0h16v16H0z"/>
+  <g transform="translate(0 16)">
+  <!-- Keep the same white highlight shades, alternating cells on every row. -->
+  <!-- Preserve the original bright fade and two-unit cell grid. -->
+  <g transform="translate(0 -6)">
+  <path opacity="0.94" d="M0 6h2v2h-2zM4 6h2v2h-2zM8 6h2v2h-2zM12 6h2v2h-2z"/>
+  <path opacity="0.98" d="M2 6h2v2h-2zM6 6h2v2h-2zM10 6h2v2h-2zM14 6h2v2h-2z"/>
+  <path opacity="0.98" d="M0 8h2v2h-2zM4 8h2v2h-2zM8 8h2v2h-2zM12 8h2v2h-2z"/>
+  <path opacity="0.94" d="M2 8h2v2h-2zM6 8h2v2h-2zM10 8h2v2h-2zM14 8h2v2h-2z"/>
+  <path opacity="0.95" d="M2 10h2v2h-2zM6 10h2v2h-2zM10 10h2v2h-2zM14 10h2v2h-2z"/>
+  <path opacity="0.89" d="M0 10h2v2h-2zM4 10h2v2h-2zM8 10h2v2h-2zM12 10h2v2h-2z"/>
+  <path opacity="0.91" d="M0 12h2v2h-2zM4 12h2v2h-2zM8 12h2v2h-2zM12 12h2v2h-2z"/>
+  <path opacity="0.85" d="M2 12h2v2h-2zM6 12h2v2h-2zM10 12h2v2h-2zM14 12h2v2h-2z"/>
+  <path opacity="0.87" d="M2 14h2v2h-2zM6 14h2v2h-2zM10 14h2v2h-2zM14 14h2v2h-2z"/>
+  <path opacity="0.79" d="M0 14h2v2h-2zM4 14h2v2h-2zM8 14h2v2h-2zM12 14h2v2h-2z"/>
+  <path opacity="0.82" d="M0 16h2v2h-2zM4 16h2v2h-2zM8 16h2v2h-2zM12 16h2v2h-2z"/>
+  <path opacity="0.74" d="M2 16h2v2h-2zM6 16h2v2h-2zM10 16h2v2h-2zM14 16h2v2h-2z"/>
+  <path opacity="0.76" d="M2 18h2v2h-2zM6 18h2v2h-2zM10 18h2v2h-2zM14 18h2v2h-2z"/>
+  <path opacity="0.66" d="M0 18h2v2h-2zM4 18h2v2h-2zM8 18h2v2h-2zM12 18h2v2h-2z"/>
+  <path opacity="0.67" d="M0 20h2v2h-2zM4 20h2v2h-2zM8 20h2v2h-2zM12 20h2v2h-2z"/>
+  <path opacity="0.55" d="M2 20h2v2h-2zM6 20h2v2h-2zM10 20h2v2h-2zM14 20h2v2h-2z"/>
+  <path opacity="0.57" d="M2 22h2v2h-2zM6 22h2v2h-2zM10 22h2v2h-2zM14 22h2v2h-2z"/>
+  <path opacity="0.43" d="M0 22h2v2h-2zM4 22h2v2h-2zM8 22h2v2h-2zM12 22h2v2h-2z"/>
+  <path opacity="0.45" d="M0 24h2v2h-2zM4 24h2v2h-2zM8 24h2v2h-2zM12 24h2v2h-2z"/>
+  <path opacity="0.31" d="M2 24h2v2h-2zM6 24h2v2h-2zM10 24h2v2h-2zM14 24h2v2h-2z"/>
+  <path opacity="0.32" d="M2 26h2v2h-2zM6 26h2v2h-2zM10 26h2v2h-2zM14 26h2v2h-2z"/>
+  <path opacity="0.18" d="M0 26h2v2h-2zM4 26h2v2h-2zM8 26h2v2h-2zM12 26h2v2h-2z"/>
+  <path opacity="0.18" d="M0 28h2v2h-2zM4 28h2v2h-2zM8 28h2v2h-2zM12 28h2v2h-2z"/>
+  <path opacity="0.06" d="M2 28h2v2h-2zM6 28h2v2h-2zM10 28h2v2h-2zM14 28h2v2h-2z"/>
+  </g>
+  <!-- Bridge white and shadow cells, then darken evenly without a horizontal band. -->
+  <g fill="#000">
+  <path opacity="0.06" d="M0 24h2v2h-2zM4 24h2v2h-2zM8 24h2v2h-2zM12 24h2v2h-2z"/>
+  <path fill="#fff" opacity="0.06" d="M2 24h2v2h-2zM6 24h2v2h-2zM10 24h2v2h-2zM14 24h2v2h-2z"/>
+  <path opacity="0.04" d="M0 26h2v2h-2zM4 26h2v2h-2zM8 26h2v2h-2zM12 26h2v2h-2z"/>
+  <path opacity="0.12" d="M2 26h2v2h-2zM6 26h2v2h-2zM10 26h2v2h-2zM14 26h2v2h-2z"/>
+  <path opacity="0.19" d="M0 28h2v2h-2zM4 28h2v2h-2zM8 28h2v2h-2zM12 28h2v2h-2z"/>
+  <path opacity="0.11" d="M2 28h2v2h-2zM6 28h2v2h-2zM10 28h2v2h-2zM14 28h2v2h-2z"/>
+  <path opacity="0.18" d="M0 30h2v2h-2zM4 30h2v2h-2zM8 30h2v2h-2zM12 30h2v2h-2z"/>
+  <path opacity="0.26" d="M2 30h2v2h-2zM6 30h2v2h-2zM10 30h2v2h-2zM14 30h2v2h-2z"/>
+  </g>
+  </g>
+</svg>

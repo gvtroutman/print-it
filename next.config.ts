@@ -49,6 +49,9 @@ const nextConfig: NextConfig = {
   // Traced, self-contained server bundle — the container copies this instead
   // of a full node_modules tree.
   output: "standalone",
+  // Check the application and its imports here; npm run typecheck still
+  // checks the verification/maintenance scripts as well.
+  typescript: { tsconfigPath: "tsconfig.build.json" },
   poweredByHeader: false,
   serverExternalPackages: ["@prisma/client", "nodemailer"],
   /**
@@ -66,7 +69,7 @@ const nextConfig: NextConfig = {
      * Let an upload actually be as large as the app says it is.
      *
      * Next caps a request body at 10 MB whenever middleware is in play, and
-     * this app runs middleware on everything (it mints the CSP nonce). So the
+     * upload route uses middleware to mint the CSP nonce. So the
      * advertised 50 MB limit was never real: anything past 10 MB was truncated
      * before the route handler saw it, `request.formData()` threw on the short
      * body, and the uploader was told "That upload did not arrive intact" —
@@ -80,7 +83,17 @@ const nextConfig: NextConfig = {
     middlewareClientMaxBodySize: MAX_REQUEST_BYTES,
   },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      { source: "/sw.js", headers: [
+        { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        { key: "Service-Worker-Allowed", value: "/" },
+      ] },
+      { source: "/manifest.webmanifest", headers: [
+        { key: "Cache-Control", value: "no-cache" },
+        { key: "Content-Type", value: "application/manifest+json" },
+      ] },
+    ];
   },
   // The board ("the rail") is gone; old bookmarks and links in past emails
   // land on home, which sends each role to its own start page.

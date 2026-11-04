@@ -9,9 +9,11 @@
  * can supply a virtual one, which is how this runs unattended — the browser
  * does the real ceremony, only the hardware is simulated.
  *
- * DESTRUCTIVE: wipes the test client's passkeys and sessions.
+ * Isolated development database only: changes the test owner's password and
+ * sessions. Set PASSKEY_TEST=true. Removes only the credentials this run adds.
  */
 import "./_env";
+import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import puppeteer, { type Browser, type Page } from "puppeteer-core";
 import { db } from "../src/lib/db";
@@ -55,18 +57,19 @@ async function signInWithPassword(page: Page, username: string): Promise<void> {
 }
 
 async function main() {
+  assert.equal(process.env.PASSKEY_TEST, "true", "An isolated test app/database is required; set PASSKEY_TEST=true.");
+  assert.ok(["localhost", "127.0.0.1"].includes(new URL(APP).hostname));
+  assert.ok(["localhost", "127.0.0.1"].includes(new URL(process.env.DATABASE_URL!).hostname));
   if (!CHROME) throw new Error("No Chrome or Chromium found. Set CHROME_PATH.");
   console.info(`\n── browser ──\n  using ${CHROME}`);
 
   const admin = await db.user.findFirst({ where: { role: "admin" } });
   if (!admin) throw new Error("No admin — run npm run db:seed");
 
-  const email = "passkey@office.example";
-  await db.user.deleteMany({ where: { email } });
-  const user = await db.user.create({
-    data: { email, name: "Petra Keys", initials: "PE", role: "client",
-            emailVerified: true, invitedById: admin.id },
-  });
+  // Enrollment is owner-only at both the page and the direct API boundary.
+  const user = admin;
+  const existing = await db.passkey.findMany({ where: { userId: user.id }, select: { id: true } });
+  const existingIds = existing.map(p => p.id);
 
   let browser: Browser | undefined;
   try {
@@ -95,21 +98,16 @@ async function main() {
     check("a virtual authenticator is attached", !!authenticatorId);
 
     // --- sign in with a password so there is a session to enrol against ---
-    await ensureCredentials(APP, user.id, "petra");
-    await signInWithPassword(page, "petra");
+    await ensureCredentials(APP, user.id, "passkey-owner");
+    await signInWithPassword(page, "passkey-owner");
     check("signed in with a username and a password",
           (await db.session.count({ where: { userId: user.id } })) === 1);
 
-    // --- the nudge: the only thing that reaches someone who skipped ---
-    await page.goto(`${APP}/me`, { waitUntil: "networkidle2" });
-    await page.waitForFunction(
-      () => document.body.innerText.includes("Tired of typing"),
-      { timeout: 8_000 },
-    ).catch(() => {});
+    // --- owner credential controls on the current Member page ---
+    await page.goto(`${APP}/member`, { waitUntil: "networkidle2" });
     const beforeEnrol = await page.evaluate(() => document.body.innerText);
-    check("someone with no passkey is prompted to get one",
-          beforeEnrol.includes("Tired of typing"),
-          "no nudge — a skipper would type a password forever");
+    check("the owner is offered passkey enrollment",
+          beforeEnrol.includes("Add a passkey") || beforeEnrol.includes("Add another passkey"));
 
     // --- register a passkey ---
     await page.goto(`${APP}/welcome`, { waitUntil: "networkidle2" });
@@ -126,7 +124,7 @@ async function main() {
     check("the registration ceremony completed", enrolText.includes("Passkey saved"),
           enrolText.slice(0, 200));
 
-    const stored = await db.passkey.findMany({ where: { userId: user.id } });
+    const stored = await db.passkey.findMany({ where: { userId: user.id, id: { notIn: existingIds } } });
     check("a credential was persisted", stored.length === 1, `${stored.length} rows`);
     check("the public key was stored, and nothing private",
           !!stored[0]?.publicKey && !JSON.stringify(stored[0]).toLowerCase().includes("private"));
@@ -134,11 +132,10 @@ async function main() {
           typeof stored[0]?.counter === "number" && !!stored[0]?.deviceType,
           JSON.stringify({ counter: stored[0]?.counter, deviceType: stored[0]?.deviceType }));
 
-    // The nudge has to stop once it is answered, or it becomes wallpaper.
-    await page.goto(`${APP}/me`, { waitUntil: "networkidle2" });
+    await page.goto(`${APP}/member`, { waitUntil: "networkidle2" });
     const afterEnrol = await page.evaluate(() => document.body.innerText);
-    check("the prompt disappears once a passkey exists",
-          !afterEnrol.includes("Tired of typing"), "still nagging after enrolment");
+    check("the Member page reflects the saved passkey",
+          afterEnrol.includes(`${existingIds.length + 1} passkey`) && afterEnrol.includes("Add another passkey"));
 
     // --- sign out, then sign back in with the passkey alone ---
     await page.evaluate(async () => {
@@ -223,11 +220,11 @@ async function main() {
 
     await page.goto(`${APP}/me`, { waitUntil: "networkidle2" });
     const body = await page.evaluate(() => document.body.innerText);
-    check("the app rendered for the signed-in user", body.includes("Your orders"),
+    check("the app rendered for the signed-in owner", body.includes("Everything the group has sent you"),
           body.slice(0, 160));
   } finally {
     await browser?.close();
-    await db.user.deleteMany({ where: { email } });
+    await db.passkey.deleteMany({ where: { userId: user.id, id: { notIn: existingIds } } });
   }
 
   console.info(

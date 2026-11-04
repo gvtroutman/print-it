@@ -1,0 +1,173 @@
+{
+  "checkedOn": "2026-10-13",
+  "photos": [
+    {
+      "sampleId": 1109,
+      "maker": "Amolen",
+      "name": "Glow in the Dark Blue",
+      "type": "PLA",
+      "amazonUrl": "https://www.amazon.com/dp/B08W252XLF",
+      "file": "1109.webp",
+      "sourcePage": "https://www.amolen.com/products/pla-glow",
+      "imageUrl": "https://cdn.shopify.com/s/files/1/0019/2924/8803/files/1_864d5538-f2c2-4bd5-8940-6a0b968b798e.png?v=1776412818",
+      "sourceSha256": "8fe7bb1f0f466c5163a5b32547cdec5ffb7d640107a591d7d038161521bdd7b4",
+      "sha256": "823f5f7aa8a4f9cda9553d110d89bd043abcc2f13b10a2d5aed958a0cdfb2950"
+    },
+    {
+      "sampleId": 1248,
+      "maker": "Hatchbox",
+      "name": "Glow",
+      "type": "PLA",
+      "amazonUrl": "https://www.amazon.com/dp/B00M0CS73S",
+      "file": "1248.webp",
+      "sourcePage": "https://www.hatchbox3d.com/products/3d-pla-1kg1-75-glow",
+      "imageUrl": "https://cdn.shopify.com/s/files/1/0008/2457/4018/products/3DPLA-1KG1.75-GLOW-Picture-2_d152882a-ff3e-4b80-af62-44ef26db6f0b.jpg?v=1661367727",
+      "sourceSha256": "e3e1ef909637b2af5101fdb1cbd18c5973642cb21aa03e04eba653beb0cf9430",
+      "sha256": "1b3bf05fde098331a5fbdd8e9113b598108b54013a162bcdb1ab12703efc9902"
+    },
+    {
+      "sampleId": 1293,
+      "maker": "Geeetech",
+      "name": "Luminous Green",
+      "type": "PLA",
+      "amazonUrl": "https://www.amazon.com/dp/B07NKR42LP",
+      "file": "1293.webp",
+      "sourcePage": "https://support.geeetech.com/geeetech-luminous-green-pla-175mm-glow-in-the-dark-p-1143.html",
+      "imageUrl": "https://support.geeetech.com/images/l/Geeetech_2023072814235102744_1.jpg",
+      "sourceSha256": "516b22d6d7e8da0549738ea436609e1d04410e9fd70c2806e868306a48561330",
+      "sha256": "a1e68349b0f03d9022a0f5ddcdb9998cbb3d313cad664aff4e164f364162f051"
+    },
+    {
+      "sampleId": 2309,
+      "maker": "Amolen",
+      "name": "Glow in the Dark Green",
+      "type": "PLA",
+      "amazonUrl": "https://www.amazon.com/dp/B07GQTFLSY",
+      "file": "2309.webp",
+      "sourcePage": "https://www.amolen.com/products/pla-glow",
+      "imageUrl": "https://cdn.shopify.com/s/files/1/0019/2924/8803/files/71SoV6tF50L._AC_SL1500.jpg?v=1776412818",
+      "sourceSha256": "7f35d5795f2a200435203127b8553d68578166c2f3a08ecf1a7e2f2cbe953393",
+      "sha256": "bd0830742fe282d13f5d5be05b4333b6ee43af234ae7ffef0e7b276f9f0ad2a5"
+    },
+    {
+      "sampleId": 2754,
+      "maker": "Sunlu",
+      "name": "Glow in the Dark",
+      "type": "PLA",
+      "amazonUrl": "https://www.amazon.com/dp/B0C4LVVZ9Q",
+      "file": "2754.webp",
+      "sourcePage": "https://store.sunlu.com/products/over-3kg-bundle-sale-1-75mm-sunlu-glow-in-the-darkluminous-3d-printer-filament-1kg-roll",
+      "imageUrl": "https://cdn.shopify.com/s/files/1/0152/6507/1190/files/white_to_green_GlowinTheDark_Luminous.jpg?v=1774838876",
+      "sourceSha256": "615b6306498be052cea0525ab07f3b5870b7db71f7679f8c5293fca16b66153c",
+      "sha256": "81081f71656fb9a307d2862fd5a71c2e87dfa3f208ffa60b456b3abf493a577c"
+    },
+    {
+      "sampleId": 2843,
+      "maker": "eSUN",
+      "name": "eStars Luminous Shiny Galaxy Black",
+      "type": "PLA",
+      "amazonUrl": "https://www.amazon.com/dp/B0969M2RZL",
+      "file": "2843.webp",
+      "sourcePage": "https://esun3dstoreeu.com/products/estars-pla",
+      "imageUrl": "https://ueeshop.ly200-cdn.com/u_file/UPBC/UPBC810/2409/13/products/16d05c7799.jpg",
+      "sourceSha256": "b17484b501d6618ff70cf7b68981d2387752d3b15296315c9b22241c83431ceb",
+      "sha256": "d470e8baf6327067f9d61707b28d4565728a04d5628d4fd71f9ed4a8205034b4"
+    },
+    {
+      "sampleId": 3101,
+      "maker": "Overture",
+      "name": "Glow Red",
+      "type": "Glow PLA",
+      "amazonUrl": "https://www.amazon.com/dp/B0CB43T75G",
+      "file": "3101.webp",
+      "sourcePage": "https://overture3d.com/products/overture-glow-pla",
+      "imageUrl": "https://cdn.shopify.com/s/files/1/0207/3624/5824/files/overture-glow-pla-3d-printer-filament-175mm-660686.jpg?v=1757324499",
+      "sourceSha256": "f1351e55474ed87b1ba9a116911def10994ea033d6fd4c54129dbf1a5e09f194",
+      "sha256": "7c84fdbde41998aca178ffca40a179c0829369106b64fb863def1e7db755d776"
+    },
+    {
+      "sampleId": 3102,
+      "maker": "Overture",
+      "name": "Glow Blue",
+      "type": "Glow PLA",
+      "amazonUrl": "https://www.amazon.com/dp/B0CB491VXF",
+      "file": "3102.webp",
+      "sourcePage": "https://overture3d.com/products/overture-glow-pla",
+      "imageUrl": "https://cdn.shopify.com/s/files/1/0207/3624/5824/files/overture-glow-pla-3d-printer-filament-175mm-116988.jpg?v=1757324499",
+      "sourceSha256": "00fdbcb2494c05a611ed3e4ad5aeeab75428c1be7a1fe8936ecb52180535d560",
+      "sha256": "5ea70525d1013d0060be2e93938a2edc885808aca94cbeecf1d661bd77b0a10d"
+    },
+    {
+      "sampleId": 3103,
+      "maker": "Overture",
+      "name": "Glow Orange",
+      "type": "Glow PLA",
+      "amazonUrl": "https://www.amazon.com/dp/B08T6Q3FZ5",
+      "file": "3103.webp",
+      "sourcePage": "https://overture3d.com/products/overture-glow-pla",
+      "imageUrl": "https://cdn.shopify.com/s/files/1/0207/3624/5824/files/overture-glow-pla-3d-printer-filament-175mm-985064.jpg?v=1757324499",
+      "sourceSha256": "c7602bb56d3264916e232ce77cdecaba6c913d18fd5c4452af3614b21510e931",
+      "sha256": "2fccf9111cd2c7adb7c4fc253af78d4f92785e9f4375c0e5e844a8552fc4d76b"
+    },
+    {
+      "sampleId": 3115,
+      "maker": "Overture",
+      "name": "Glow Yellow",
+      "type": "Glow PLA",
+      "amazonUrl": "https://www.amazon.com/dp/B0CB48BVNW",
+      "file": "3115.webp",
+      "sourcePage": "https://overture3d.com/products/overture-glow-pla",
+      "imageUrl": "https://cdn.shopify.com/s/files/1/0207/3624/5824/files/overture-glow-pla-3d-printer-filament-175mm-845812.jpg?v=1757324499",
+      "sourceSha256": "e964df22e1672e89cb13e7ce7ed89cd39ade644c9d7698e439be80a77d5810af",
+      "sha256": "c62a996c55be21333d52028aa86f844e165f18d429c9dc17c0f6e6ae8a25e8d7"
+    },
+    {
+      "sampleId": 3503,
+      "maker": "Sunlu",
+      "name": "Red",
+      "type": "Glow PLA",
+      "amazonUrl": "https://www.amazon.com/dp/B0C4LT6SFH",
+      "file": "3503.webp",
+      "sourcePage": "https://store.sunlu.com/products/over-3kg-bundle-sale-1-75mm-sunlu-glow-in-the-darkluminous-3d-printer-filament-1kg-roll",
+      "imageUrl": "https://cdn.shopify.com/s/files/1/0152/6507/1190/files/red_GlowinTheDark_Luminous.jpg?v=1774838876",
+      "sourceSha256": "94e1f8cf99afc7142d3470aaeeaa45fc7964e27f5e4c0c6921a05086bdcff132",
+      "sha256": "3c4780854db39ca63adeabcc678a63fb91cdbb309e55e72b8a98e8a87448ed94"
+    },
+    {
+      "sampleId": 3927,
+      "maker": "Eryone",
+      "name": "Glow in the Dark (Green)",
+      "type": "PLA",
+      "amazonUrl": "https://www.amazon.com/dp/B0BPC6QWQW",
+      "file": "3927.webp",
+      "sourcePage": "https://eryone3d.com/products/glow-in-the-dark-pla",
+      "imageUrl": "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/PLA-Luminous-Filament-1kg-2.jpg?v=1773193348",
+      "sourceSha256": "31dbafae1634e168595bdc4ed73a459b9c7159267dd4f7dd849bd68f486f9a0f",
+      "sha256": "85185d84f2e13dfaf7540a5db253f2752474a918d356f56cb9ec43d9c46e91c6"
+    },
+    {
+      "sampleId": 4324,
+      "maker": "Polymaker",
+      "name": "Pink",
+      "type": "Panchroma Luminous",
+      "amazonUrl": "https://www.amazon.com/dp/B0D7Z88566",
+      "file": "4324.webp",
+      "sourcePage": "https://shop.polymaker.com/products/luminous-pla",
+      "imageUrl": "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/pink_luminous_02.jpg?v=1743508286",
+      "sourceSha256": "f8ec9ac8f963dd41d0997d0dd3a9bb97bbc09c12f84b700a81da06c56e49fbdb",
+      "sha256": "cb44b0433e300c2e9108bbb826dace7b3099a3b7196898815243490d7799242d"
+    },
+    {
+      "sampleId": 4408,
+      "maker": "Polymaker",
+      "name": "Orange",
+      "type": "Panchroma Luminous",
+      "amazonUrl": "https://www.amazon.com/dp/B0D7ZWHG6C",
+      "file": "4408.webp",
+      "sourcePage": "https://shop.polymaker.com/products/luminous-pla",
+      "imageUrl": "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/orange_luminous_01.jpg?v=1743508286",
+      "sourceSha256": "b146eeebcdb4e8ade42df970a462f6c509cf1cabd2eb1bb5eb8e966900f55b70",
+      "sha256": "01725d8d0f57ebadb710882b4158ed1bfc6df099834d89525d997c1141aad5b7"
+    }
+  ]
+}

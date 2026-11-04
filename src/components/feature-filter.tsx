@@ -9,6 +9,7 @@ import {
 import { FEATURE_FLOW, featureLabel } from "@/lib/scope";
 import type { FeatureFilter } from "@/lib/features";
 import type { FeatureStatus } from "@prisma/client";
+import { MEMBER_FEATURE_STATUS } from "@/lib/feature-presentation";
 
 const STATUSES = [...FEATURE_FLOW, "Declined"] as readonly FeatureStatus[];
 
@@ -24,10 +25,12 @@ const STATUSES = [...FEATURE_FLOW, "Declined"] as readonly FeatureStatus[];
 export function FeatureFilterBar({
   action,
   filter,
+  memberView = false,
 }: {
   /** The page path the form submits back to (also the "Clear" target). */
   action: string;
   filter: FeatureFilter;
+  memberView?: boolean;
 }) {
   const active = Boolean(filter.priority || filter.status || filter.category);
   const selectCls =
@@ -56,7 +59,7 @@ export function FeatureFilterBar({
         <select id="f-status" name="status" defaultValue={filter.status ?? ""} className={selectCls}>
           <option value="">Any</option>
           {STATUSES.map((s) => (
-            <option key={s} value={s}>{featureLabel(s)}</option>
+            <option key={s} value={s}>{memberView ? MEMBER_FEATURE_STATUS[s].label : featureLabel(s)}</option>
           ))}
         </select>
       </div>

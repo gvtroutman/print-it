@@ -51,6 +51,39 @@ jobs:
         run: npx prisma generate
       - name: Typecheck
         run: npx tsc --noEmit
+      - name: Bambu print completion and sync freshness
+        run: npm run verify:bambu
+      - name: Ticket preparation and Bambu job pipeline
+        run: npm run verify:pipeline
+      - name: Member order usage totals and actual runtime
+        run: npm run verify:order-usage
+      - name: Member anniversary dates
+        run: npm run verify:anniversary
+      - name: Holiday calendar and sticker dates
+        run: npm run verify:holidays
+      - name: Member profile icon ownership and view isolation
+        run: npm run verify:card-flair
+      - name: Order races and notification targets
+        run: npm run verify:order-safety
+      - name: Passkey enrollment freshness
+        run: npm run verify:passkey-freshness
+      - name: Feature request state races
+        run: npm run verify:feature-safety
+      - name: Upload Origin and webhook body limits
+        run: npm run verify:request-security
+      - name: Screen-size collection and private URL checks
+        run: npm run verify:screens
+      - name: glTF declaration and viewer allocation limits
+        run: npm run verify:gltf
+      - name: Store donation access
+        run: npm run verify:store-access
+      - name: Filament colors and approved brands
+        run: |
+          npm run verify:colors
+          npm run verify:filament-filters
+          npm run verify:brands
+          npm run verify:amazon-products
+          npm run verify:filament-packages
       # Cross-checks every tracked file against known credential shapes. In CI
       # there are no local .env files, so the value-matching pass has nothing
       # to compare against and only the pattern pass runs — which is exactly
@@ -141,6 +174,8 @@ jobs:
         run: npm run verify:auth
       - name: Upload, board and story
         run: npm run verify:upload
+      - name: Sticker milestones and lifetime progress
+        run: npm run verify:badges
       # The other way a model arrives. The test overlay switches importing on
       # and points it at a stand-in for Printables, so this run calls nobody —
       # and so the far end can be made to redirect, lie about a size, or hand
@@ -157,6 +192,10 @@ jobs:
       # upload choices, authoritative validation, and historical snapshots.
       - name: Materials and colours, owner-managed
         run: npm run verify:catalog
+      - name: Personal color palettes
+        run: npm run verify:palette
+      - name: Admin filament brands and Amazon listings
+        run: npm run verify:admin-filaments
       # The second front door onto the same operations. Runs against the built
       # image, which is the only place the production CSP is in force — the
       # console's inline-script nonce and its stylesheet-in-a-file are both
@@ -171,6 +210,7 @@ jobs:
       - name: WebAuthn ceremonies (real browser)
         env:
           CHROME_PATH: /usr/bin/google-chrome
+          PASSKEY_TEST: "true"
         run: npm run verify:passkey
 
       - name: OWASP-mapped security probes

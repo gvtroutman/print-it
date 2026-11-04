@@ -9,6 +9,7 @@ import {
   extensionOf,
   formatBytes,
 } from "@/lib/upload-limits";
+import { gltfPreview } from "@/lib/gltf-preview";
 
 /**
  * The real geometry, rotatable. Handoff §4.
@@ -93,6 +94,7 @@ export function ModelViewer({
         }
         const buffer = await response.arrayBuffer();
         if (disposed) return;
+        if (buffer.byteLength > VIEWER_MAX_BYTES) throw new Error("That model is too large to preview.");
 
         // Every loader parses from the bytes in hand, so they never touch a
         // second URL and nothing is cached where it should not be. Only the
@@ -132,8 +134,9 @@ export function ModelViewer({
           }
           case ".glb":
           case ".gltf": {
-            const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
-            group = (await new GLTFLoader().parseAsync(buffer, "")).scene;
+            // Stored files may predate upload validation. Check declarations
+            // before GLTFLoader can materialize arrays from a tiny JSON file.
+            group = await gltfPreview(new Uint8Array(buffer), ext === ".glb" ? "glb" : "gltf");
             break;
           }
         }
@@ -363,7 +366,7 @@ export function ModelViewer({
       )}
 
       {phase.kind === "ready" && (
-        <p className="absolute bottom-[13.2px] left-[13.2px] m-0 rounded-chip border-2 border-ink bg-porcelain px-[11px] py-[3px] font-mono text-[11px] font-bold uppercase tracking-[0.05em] text-ink">
+        <p className="absolute bottom-[13.2px] left-[13.2px] m-0 max-w-[calc(100%-26.4px)] break-words rounded-chip border-2 border-ink bg-porcelain px-[11px] py-[3px] font-mono text-[11px] font-bold uppercase tracking-[0.05em] text-ink">
           drag to rotate · {filename}
         </p>
       )}

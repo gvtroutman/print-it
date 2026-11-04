@@ -1,0 +1,68 @@
+.cards {
+  --peek: 44px;
+  display: grid;
+  isolation: isolate;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  padding-top: var(--peek);
+}
+
+.option {
+  grid-area: 1 / 1;
+  position: relative;
+  z-index: 0;
+  min-width: 0;
+  transform: translateY(calc(-1 * var(--peek))) scale(0.92);
+  transform-origin: center top;
+  transition: transform 260ms ease;
+}
+
+.option > [data-tone] {
+  opacity: 0.24;
+  transition: opacity 220ms ease;
+}
+
+.option[data-active="true"] {
+  z-index: 1;
+  transform: none;
+}
+
+.option[data-active="true"] > [data-tone] {
+  opacity: 1;
+}
+
+.select {
+  position: absolute;
+  inset: -6px;
+  z-index: 3;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 24px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.select[aria-pressed="true"] {
+  cursor: default;
+}
+
+.select:hover:not(:disabled) {
+  border-color: var(--color-aqua-dk);
+}
+
+.select:focus-visible {
+  outline: 3px solid var(--color-cherry-dk);
+  outline-offset: 3px;
+}
+
+.cards:has(.select[aria-busy="true"]) .select {
+  cursor: wait;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .option,
+  .option > [data-tone] {
+    transition: none;
+  }
+}

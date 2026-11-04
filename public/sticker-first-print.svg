@@ -1,0 +1,132 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" version="1.1" width="160" height="160" viewBox="12.000000 12.000000 192.000000 192.000000">
+<defs>
+<clipPath id="clip_1">
+<path transform="matrix(1,0,0,-1,0,216)" d="M0 216H216V0H0Z" />
+</clipPath>
+<clipPath id="clip_2">
+<path transform="matrix(1,0,0,-1,0,216)" d="M17.5579 29.475H184.778V193.883H17.5579Z" />
+</clipPath>
+<clipPath id="clip_3">
+<path transform="matrix(1,0,0,-1,0,216)" d="M39.6679 50.1788H162.668V173.179H39.6679Z" />
+</clipPath>
+<clipPath id="clip_4">
+<path transform="matrix(1,0,0,-1,0,216)" d="M44.1679 125.479H88.5679V168.679H44.1679Z" />
+</clipPath>
+<clipPath id="clip_5">
+<path transform="matrix(1,0,0,-1,0,216)" d="M32.768 111.679C32.768 73.903 63.391 43.279 101.168 43.279 111.772 43.279 121.813 45.692 130.771 49.999H131.888C162.607 65.359 179.887 96.079 183.728 132.559L167.356 129C159.687 158.39 132.961 180.079 101.168 180.079 63.391 180.079 32.768 149.456 32.768 111.679" />
+</clipPath>
+<clipPath id="clip_6">
+<path transform="matrix(1,0,0,-1,0,216)" d="M5.168 200.479V98.479H34.652C40.793 67.352 68.239 43.88 101.168 43.88V2.48H216V98.479H101.168 216V200.479Z" />
+</clipPath>
+</defs>
+<g>
+<g inkscape:groupmode="layer" inkscape:label="01 - Idea in Motion">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="02 - First completed print">
+<g clip-path="url(#clip_1)">
+<path transform="matrix(1,0,0,-1,101.1679,25.1212)" d="M0 0C13.176 4.912 24.632 2.296 34.368-7.848 48.368-9.128 57.552-16.452 61.92-29.82 73.976-37.052 79.076-47.636 77.22-61.572 84.94-73.324 84.94-85.076 77.22-96.828 79.076-110.764 73.976-121.348 61.92-128.58 57.552-141.948 48.368-149.272 34.368-150.552 24.632-160.696 13.176-163.312 0-158.4-13.176-163.312-24.632-160.696-34.368-150.552-48.368-149.272-57.552-141.948-61.92-128.58-73.976-121.348-79.076-110.764-77.22-96.828-84.94-85.076-84.94-73.324-77.22-61.572-79.076-47.636-73.976-37.052-61.92-29.82-57.552-16.452-48.368-9.128-34.368-7.848-24.632 2.296-13.176 4.912 0 0" fill="#ffffff" />
+<g opacity=".199997">
+<g clip-path="url(#clip_2)">
+<path transform="matrix(1,0,0,-1,101.1679,25.1212)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#221a14" d="M0 0C13.176 4.912 24.632 2.296 34.368-7.848 48.368-9.128 57.552-16.452 61.92-29.82 73.976-37.052 79.076-47.636 77.22-61.572 84.94-73.324 84.94-85.076 77.22-96.828 79.076-110.764 73.976-121.348 61.92-128.58 57.552-141.948 48.368-149.272 34.368-150.552 24.632-160.696 13.176-163.312 0-158.4-13.176-163.312-24.632-160.696-34.368-150.552-48.368-149.272-57.552-141.948-61.92-128.58-73.976-121.348-79.076-110.764-77.22-96.828-84.94-85.076-84.94-73.324-77.22-61.572-79.076-47.636-73.976-37.052-61.92-29.82-57.552-16.452-48.368-9.128-34.368-7.848-24.632 2.296-13.176 4.912 0 0Z" />
+</g>
+</g>
+<path transform="matrix(1,0,0,-1,101.1679,34.721208)" d="M0 0C38.439 0 69.6-31.161 69.6-69.6 69.6-108.039 38.439-139.2 0-139.2-38.439-139.2-69.6-108.039-69.6-69.6-69.6-31.161-38.439 0 0 0" fill="#d3f2f0" />
+<path transform="matrix(1,0,0,-1,101.1679,34.721208)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#221a14" d="M0 0C38.439 0 69.6-31.161 69.6-69.6 69.6-108.039 38.439-139.2 0-139.2-38.439-139.2-69.6-108.039-69.6-69.6-69.6-31.161-38.439 0 0 0Z" />
+<g opacity=".160004">
+<g clip-path="url(#clip_3)">
+<path transform="matrix(1,0,0,-1,101.1679,43.721208)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#221a14" d="M0 0C33.468 0 60.6-27.132 60.6-60.6 60.6-94.068 33.468-121.2 0-121.2-33.468-121.2-60.6-94.068-60.6-60.6-60.6-27.132-33.468 0 0 0Z" />
+</g>
+</g>
+<g opacity=".649994">
+<g clip-path="url(#clip_4)">
+<path transform="matrix(1,0,0,-1,45.9679,88.7212)" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#ffffff" d="M0 0C5.683 19.46 21.179 34.5 40.8 39.6" />
+</g>
+</g>
+</g>
+<g clip-path="url(#clip_5)">
+<path transform="matrix(1,0,0,-1,-38.0321,181.5052)" d="M0 0C12-2.16 18-.24 30 9.6 42 19.44 48 21.36 60 19.2 72 17.04 78 18.96 90 28.8 102 38.64 108 40.56 120 38.4 132 36.24 138 38.16 150 48 162 57.84 168 59.76 180 57.6 192 55.44 198 57.36 210 67.2 222 77.04 228 78.96 240 76.8V2.4L0-74.4Z" fill="#69c9cd" />
+</g>
+<g clip-path="url(#clip_6)">
+<path transform="matrix(1,0,0,-1,30.1699,130.4041)" d="M0 0C32.64-1.92 71.04 5.76 97.92 13.44L120.96 34.56 165.12 44.16C161.28 7.68 144-23.04 113.28-38.4H23.04C13.44-28.8 5.76-15.36 0 0" fill="#ffffff" />
+<path transform="matrix(1,0,0,-1,30.1699,130.4041)" stroke-width="8.64" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#ffffff" d="M0 0C32.64-1.92 71.04 5.76 97.92 13.44L120.96 34.56 165.12 44.16C161.28 7.68 144-23.04 113.28-38.4H23.04C13.44-28.8 5.76-15.36 0 0Z" />
+<path transform="matrix(1,0,0,-1,126.1699,59.364107)" d="M0 0 19.2-7.68V-63.36L0-71.04Z" fill="#c85b50" />
+<path transform="matrix(1,0,0,-1,126.1699,59.364107)" stroke-width="3.264" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#221a14" d="M0 0 19.2-7.68V-63.36L0-71.04V0Z" />
+<path transform="matrix(1,0,0,-1,112.7299,120.8041)" d="M0 0-30.72-3.84V30.72C-30.72 39.203-23.843 46.08-15.36 46.08-6.877 46.08 0 39.203 0 30.72ZM-42.24 55.68V-9.6H13.44V61.44Z" fill="#e98167" />
+<path transform="matrix(1,0,0,-1,112.7299,120.8041)" stroke-width="3.264" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#221a14" d="M0 0-30.72-3.84V30.72C-30.72 39.203-23.843 46.08-15.36 46.08-6.877 46.08 0 39.203 0 30.72V0ZM-42.24 55.68V-9.6H13.44V61.44L-42.24 55.68Z" />
+<path transform="matrix(1,0,0,-1,131.9299,76.644107)" d="M0 0 7.68-1.92V-23.04L0-24.96Z" fill="#9fcac2" />
+<path transform="matrix(1,0,0,-1,131.9299,76.644107)" stroke-width="2.88" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#221a14" d="M0 0 7.68-1.92V-23.04L0-24.96V0Z" />
+<path transform="matrix(1,0,0,-1,0,216)" d="M83.93 187.356H105.05V152.796H83.93Z" fill="#e98167" />
+<path transform="matrix(1,0,0,-1,0,216)" stroke-width="3.072" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#221a14" d="M83.93 187.356H105.05V152.796H83.93Z" />
+<path transform="matrix(1,0,0,-1,0,216)" d="M97.37 185.436H105.05V152.796H97.37Z" fill="#c85b50" />
+<path transform="matrix(1,0,0,-1,80.0899,28.804093)" d="M0 0 28.8 3V-6.6L0-9.6Z" fill="#ef9b80" />
+<path transform="matrix(1,0,0,-1,80.0899,28.804093)" stroke-width="3.072" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#221a14" d="M0 0 28.8 3V-6.6L0-9.6V0Z" />
+<path transform="matrix(1,0,0,-1,62.8099,57.524095)" d="M0 0 65.28 7.68 90.24-1.92V-11.52L63.36-3.84 0-13.44Z" fill="#ef9b80" />
+<path transform="matrix(1,0,0,-1,62.8099,57.524095)" stroke-width="3.264" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#221a14" d="M0 0 65.28 7.68 90.24-1.92V-11.52L63.36-3.84 0-13.44V0Z" />
+<path transform="matrix(1,0,0,-1,64.7299,59.444108)" stroke-width="2.688" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#ffc7a6" d="M0 0 63.36 7.68 86.4 0" />
+<path transform="matrix(1,0,0,-1,30.1699,130.4041)" d="M0 0C32.64-1.92 71.04 5.76 97.92 13.44L120.96 34.56 165.12 44.16C161.28 7.68 144-23.04 113.28-38.4H23.04C13.44-28.8 5.76-15.36 0 0" fill="#e98167" />
+<path transform="matrix(1,0,0,-1,30.1699,130.4041)" stroke-width="3.264" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#221a14" d="M0 0C32.64-1.92 71.04 5.76 97.92 13.44L120.96 34.56 165.12 44.16C161.28 7.68 144-23.04 113.28-38.4H23.04C13.44-28.8 5.76-15.36 0 0Z" />
+<path transform="matrix(1,0,0,-1,177.0099,92.0041)" d="M0 0 17.28 4.76C13.44-31.72-3.227-59.783-33.947-75.143H-56.987C-30.107-54.023-9.6-28.8 0 0" fill="#c85b50" />
+<path transform="matrix(1,0,0,-1,57.0499,163.0441)" stroke-width="2.112" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#a94f46" d="M0 0C34.56-1.92 67.2 5.76 96 19.2M-9.6 9.6C32.64 5.76 74.88 17.28 107.52 36.48M-13.44 19.2C32.64 17.28 72.96 24.96 119.04 53.76" />
+<path transform="matrix(1,0,0,-1,34.0099,128.4841)" stroke-width="6.72" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#ffc7a6" d="M0 0C32.64-1.92 69.12 5.76 94.08 13.44L117.12 34.56 159.36 44.16" />
+<path transform="matrix(1,0,0,-1,30.1699,130.4041)" stroke-width="3.456" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#221a14" d="M0 0C32.64-1.92 71.04 5.76 97.92 13.44L120.96 34.56 165.12 44.16" />
+<path transform="matrix(1,0,0,-1,174.1699,100.6441)" d="M0 0C3.711 0 6.72-3.868 6.72-8.64 6.72-13.412 3.711-17.28 0-17.28-3.711-17.28-6.72-13.412-6.72-8.64-6.72-3.868-3.711 0 0 0" fill="#9fcac2" />
+<path transform="matrix(1,0,0,-1,174.1699,100.6441)" stroke-width="3.456" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#221a14" d="M0 0C3.711 0 6.72-3.868 6.72-8.64 6.72-13.412 3.711-17.28 0-17.28-3.711-17.28-6.72-13.412-6.72-8.64-6.72-3.868-3.711 0 0 0Z" />
+<g inkscape:groupmode="layer" inkscape:label="03 - Three’s a Charm">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="04 - High Five">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="05 - Leaning Tower of Prints">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="06 - Double Digits">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="07 - Making Tracks">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="08 - 2 Spools’ Worth">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="09 - 5 Spools’ Worth">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="10 - Around the World">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="11 - Peak Performance">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="12 - 100 Prints">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="13 - Material Explorer">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="14 - Daily Fiber">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="15 - Maker Anniversary">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="16 - New Year, New Print">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="17 - Made with Love">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="18 - Lucky Layers">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="19 - Stars &amp; Spools">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="20 - Happy Birthday, Print It!">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="21 - Spooky Spools">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="22 - Grateful Maker">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="23 - Happy 3D Day">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="24 - Merry Printmas">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="25 - Stop &amp; Smell the Filament">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="26 - Love of My Life">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="27 - Roy G Biv">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="28 - Flying Spaghetti Monster">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="29 - Mystery sticker">
+</g>
+</g>
+</g>
+</g>
+</svg>

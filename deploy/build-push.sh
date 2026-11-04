@@ -6,6 +6,8 @@
 # that bench.yml collects; in a normal build they are just a timing summary.
 #
 # Env: REGISTRY, OWNER, TAG, REGISTRY_TOKEN
+#      DOCKER_REGISTRY optional Docker address when the daemon uses a different
+#                      route to the registry than this job's HTTP requests
 #      EXTRA_TAG  optional second tag for both images (e.g. latest)
 #      PREV_TAG   optional: also report how much is new since that tag, which
 #                 is what a host holding that tag has to pull
@@ -13,7 +15,8 @@
 set -euo pipefail
 : "${REGISTRY:?}" "${OWNER:?}" "${TAG:?}" "${REGISTRY_TOKEN:?}"
 label="${LABEL:-build}"
-repo="$REGISTRY/$OWNER"
+registry="${DOCKER_REGISTRY:-$REGISTRY}"
+repo="$registry/$OWNER"
 
 now() { date +%s.%N; }
 since() { awk -v a="$1" -v b="$(now)" 'BEGIN { printf "%.1f", b - a }'; }
@@ -58,7 +61,7 @@ report build_app "$app_time"
 report build_migrate "$(cat migrate-build.time)"
 report build "$(since "$start")"
 
-echo "$REGISTRY_TOKEN" | docker login "$REGISTRY" -u "$OWNER" --password-stdin > /dev/null
+echo "$REGISTRY_TOKEN" | docker login "$registry" -u "$OWNER" --password-stdin > /dev/null
 s=$(now) pids=()
 for name in ppp-app ppp-migrate; do
   (
@@ -69,7 +72,7 @@ for name in ppp-app ppp-migrate; do
 done
 failed=0
 for pid in "${pids[@]}"; do wait "$pid" || failed=1; done
-docker logout "$REGISTRY" > /dev/null
+docker logout "$registry" > /dev/null
 [ "$failed" = 0 ]
 report push "$(since "$s")"
 

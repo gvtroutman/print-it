@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { FilamentSpool } from "@/components/color-swatch";
+import { ColorSwatch } from "@/components/color-swatch";
 import { Button, Input, Label } from "@/components/ui";
 import type { ColorMode } from "@/lib/catalog";
 import { editColorAction } from "./actions";
@@ -20,6 +20,7 @@ export function EditColorInline({
   colorStyle,
   colorMode,
   materialName,
+  amazonUrl,
 }: {
   id: string;
   name: string;
@@ -27,6 +28,7 @@ export function EditColorInline({
   colorStyle: string;
   colorMode: ColorMode;
   materialName: string;
+  amazonUrl?: string | null;
 }) {
   // A funfetti style starts with its sprinkle colours; its base is the hex.
   const matches = colorMode === "funfetti" ? [hex] : (colorStyle.match(/#[0-9a-f]{6}/gi) ?? []);
@@ -37,12 +39,12 @@ export function EditColorInline({
   const [mode, setMode] = useState<ColorMode>(colorMode);
 
   return (
-    <details className="group min-w-[220px] flex-1">
+    <details className="group min-w-0 flex-1 basis-[220px]">
       <summary
         className="flex cursor-pointer list-none items-center gap-[11px] rounded-card text-left hover:bg-aqua-wash focus-visible:bg-aqua-wash [&::-webkit-details-marker]:hidden"
         aria-label={`Edit ${name} for ${materialName}`}
       >
-        <FilamentSpool mode={colorMode} style={colorStyle} className="h-[34px] w-[24px] flex-none" />
+        <ColorSwatch mode={colorMode} style={colorStyle} className="h-[40px] w-[64px] flex-none rounded-[6px] border border-ink/10" />
         <span className="min-w-0 flex-1">
           <span className="block font-bold text-ink">{name}</span>
           <span className="block truncate font-mono text-[10.5px] text-ink-3" title={colorStyle}>{colorStyle}</span>
@@ -92,6 +94,14 @@ export function EditColorInline({
             </>
           )}
           {mode === "whatever" && <span className="rounded-chip border-2 border-ink bg-aqua-wash px-[9px] py-[6px] font-mono text-[9.5px] font-bold uppercase">Rainbow automatic</span>}
+          {mode !== "whatever" && (
+            <div className="w-full min-w-0">
+              <Label htmlFor={`edit-photo-${id}`}>Filament product link (optional)</Label>
+              <Input id={`edit-photo-${id}`} name="amazonUrl" type="url" defaultValue={amazonUrl ?? ""} maxLength={2048} placeholder="Amazon product/color link" />
+              <p className="m-0 mt-[5px] text-[12px] leading-[1.4] text-ink-2">Save the exact Amazon product/color link as a reference for this shelf filament.</p>
+            </div>
+          )}
+          {mode === "whatever" && <input type="hidden" name="amazonUrl" value="" />}
           <Button type="submit" variant="ghost" className="px-[10px] py-[7px]">Save</Button>
         </div>
       </form>

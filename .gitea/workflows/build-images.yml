@@ -17,7 +17,9 @@
 #
 # The registry stays on the NAS, so the stack never depends on the
 # workstation: only a new build does. A push made while the workstation is
-# off waits in the queue and builds when it comes back.
+# off waits in the queue and builds when it comes back. To deploy while it is
+# offline, run this workflow manually with build_runner set to ubuntu-latest;
+# the NAS then builds the images as well as deploying them.
 #
 # Rolling back by hand: .gitea/workflows/rollback.yml, with any earlier
 # commit's short SHA. Every build stays in the registry under its SHA.
@@ -25,7 +27,7 @@
 # One-time setup:
 #   - the NAS runner, on the same box as Gitea, with the Docker socket
 #   - the workstation runner, labelled `pc`, with the Docker socket; its
-#     Docker lists 192.168.40.13:3002 under insecure-registries, because the
+#     Docker lists your configured registry address under insecure-registries, because the
 #     registry is plain HTTP and Docker only lets that through to localhost
 #   - a repository secret REGISTRY_TOKEN: a Gitea access token with
 #     write:package scope
@@ -45,23 +47,36 @@ on:
       - "**.md"
       - ".github/**"
   workflow_dispatch:
+    inputs:
+      build_runner:
+        description: "Build on pc, or use ubuntu-latest when the PC is offline"
+        type: choice
+        options:
+          - pc
+          - ubuntu-latest
+        default: pc
+        required: true
 
 concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: false
 
 env:
-  REGISTRY: 192.168.40.13:3002
+  REGISTRY: ${{ vars.REGISTRY }}
   OWNER: ${{ github.repository_owner }}
 
 jobs:
   images:
-    runs-on: pc
+    runs-on: ${{ inputs.build_runner || 'pc' }}
     env:
+      # The NAS daemon reaches its own HTTP registry through loopback. Keep
+      # REGISTRY on the LAN address for size queries from the job container.
+      DOCKER_REGISTRY: ${{ inputs.build_runner == 'ubuntu-latest' && 'localhost:3002' || vars.REGISTRY }}
       # The build cache (npm downloads, Next's compiler cache, unchanged
-      # layers) is what makes a build fast. The workstation has room for a
-      # generous one; the cap only stops it growing without end.
-      CACHE_CAP: 20gb
+      # layers) is what makes a build fast. The NAS needs room for the latest
+      # dependency layer and compiler cache: 1 GB evicted both after each build.
+      # Keep this NAS limit in step with deploy/nas-deploy.sh.
+      CACHE_CAP: ${{ inputs.build_runner == 'ubuntu-latest' && '4gb' || '20gb' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -78,7 +93,8 @@ jobs:
         if: always()
         run: |
           short="${GITHUB_SHA::7}"
-          docker rmi "$REGISTRY/$OWNER/ppp-app:$short" "$REGISTRY/$OWNER/ppp-migrate:$short" || true
+          registry="${DOCKER_REGISTRY:-$REGISTRY}"
+          docker rmi "$registry/$OWNER/ppp-app:$short" "$registry/$OWNER/ppp-migrate:$short" || true
           docker image prune -f
           docker builder prune -af --keep-storage "$CACHE_CAP" || true
 
@@ -90,12 +106,12 @@ jobs:
       REPO: localhost:3002/${{ github.repository_owner }}
       # The record copy of the compose file, which this job keeps pinned
       # alongside the live one.
-      RECORD_DIR: /DATA/AppData/print-it
+      RECORD_DIR: ${{ vars.RECORD_DIR }}
       RECORD_FILE: docker-compose.zimaos.yml
       # ZimaOS's own copy, the one the stack actually runs from and the
       # dashboard shows. Editing it here keeps the dashboard truthful.
-      STACK_DIR: /var/lib/casaos/apps/compose-65c2260ca510a529
-      PROJECT: compose-65c2260ca510a529
+      STACK_DIR: ${{ vars.STACK_DIR }}
+      PROJECT: ${{ vars.PROJECT }}
     steps:
       - uses: actions/checkout@v4
 
@@ -108,12 +124,40 @@ jobs:
           echo "running: ${prev:-unknown}"
           echo "PREV=$prev" >> "$GITHUB_ENV"
 
+      - name: Link editable artwork
+        id: artwork
+        run: |
+          docker run --rm -i \
+            --mount "type=bind,source=$STACK_DIR,target=/stack" \
+            --mount "type=bind,source=$RECORD_DIR/1x,target=/artwork,readonly" \
+            node:22-alpine node - /stack/docker-compose.yml "$RECORD_DIR/1x" < deploy/link-artwork.cjs >> "$GITHUB_OUTPUT"
+
       - name: Deploy
         env:
           REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+          FORCE_RECREATE_APP: ${{ steps.artwork.outputs.changed }}
         run: |
           export TAG="${GITHUB_SHA::7}" STRATEGY=incremental
           deploy/nas.sh
+
+      - name: Verify linked artwork
+        run: |
+          docker exec ppp-app node -e '
+            const fs = require("node:fs");
+            if (process.env.ARTWORK_ROOT !== "/artwork") throw new Error("Artwork folder is not configured");
+            const files = { "print-it-wordmark-arched.png": "Asset 8.2.png", "print-it-wordmark-straight.png": "Asset 5.2.png", "print-it-star.png": "Asset 6.2.png" };
+            (async () => {
+              for (const [name, source] of Object.entries(files)) {
+                const path = "/artwork/" + source;
+                const expected = fs.readFileSync(fs.existsSync(path) ? path : "/app/public/" + name);
+                const response = await fetch("http://127.0.0.1:3000/artwork/" + name);
+                if (!response.ok || !response.headers.get("cache-control")?.includes("no-store") || !Buffer.from(await response.arrayBuffer()).equals(expected)) {
+                  throw new Error("Linked artwork check failed: " + source);
+                }
+              }
+              console.log("All three linked artwork files are readable and served without caching.");
+            })().catch(error => { console.error(error.message); process.exitCode = 1; });
+          '
 
       # The record copy follows only a deploy that succeeded, so it always
       # names what is running. --mount (not -v) refuses a missing source

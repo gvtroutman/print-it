@@ -23,6 +23,13 @@ that: there is no multi-tenancy, no billing, and no queue theory.
 
 ## What it does
 
+- **Run a ticket pipeline with Bambu Studio** — Review → Prepare → Ready →
+  Printing → Pickup, with search, blockers and oldest-first ordering. Open private
+  models in Studio through a Windows helper, link cloud print jobs to tickets,
+  and import actual runtime from successful plates and copies. Preparation is
+  checked before printing; completed work leaves the active queue.
+  See **[Ticket pipeline and Bambu Studio](docs/bambu-studio.md)**.
+
 - **Invite-only.** There is no public sign-up. A `User` row cannot come into
   existence without a pending invitation, enforced in a single hook that every
   authentication method goes through.
@@ -43,6 +50,54 @@ that: there is no multi-tenancy, no billing, and no queue theory.
   → Done, one step at a time, forwards only. Or Declined, with a reason.
   Members land on a new order when they open the app; their tickets are one
   tab away.
+  My orders also shows accrued **print time in hours** and **filament used in
+  meters**, summed once per completed order (Delivery or Done), including all
+  copies. The owner records actual runtime and filament length when finishing
+  a print, or adds/corrects them later on its ticket. Unknown usage stays unknown.
+- **Earn member stickers** — start with **Idea in Motion** for your first request
+  and **First completed print** when it is ready to collect (Delivery or Done).
+  Everyday milestones include **Three’s a Charm** (3 completed prints), **High
+  Five** (5), **Leaning Tower of Prints** (8), **Double Digits** (10), and
+  **Making Tracks** (50 recorded meters
+  across completed prints). Any material or color counts; quantity never
+  multiplies the print count. Existing progress is credited on installation,
+  without retroactive notifications. Leaning Tower of Prints shows Pisa built
+  from eight filament spools and becomes a profile icon once earned.
+  Your hundredth submitted request earns
+  **100 Prints**. Your collection lives directly on the **Member** page,
+  with an earned date and a notification when a sticker unlocks. Open the member
+  card at the bottom of the menu to see the full collection at `/member`, on
+  desktop and mobile. Existing `/stickers` links open the collection there too.
+  The gallery shows progress toward 100 submitted requests. Each request counts
+  once, regardless of quantity; reprints count too. Withdrawing a request keeps
+  your stickers and progress; existing submissions count when installed.
+  **Peak Performance** rewards 8,849 recorded meters of filament across completed
+  prints, matching Mount Everest's height above sea level rounded to the nearest
+  meter. Prints ready to collect count; each order's recorded usage includes all
+  copies once. Its mountain sticker has a progress meter and can be selected as
+  your member card icon once earned. Existing qualifying members receive it
+  without a retroactive notification.
+  **Material Explorer** rewards trying every currently available material
+  (active, with an active color), and **Daily Fiber** rewards five fiber filament
+  requests: your printer is getting its daily fiber! CF and GF labels, carbon,
+  glass and fiber names count. Material progress survives catalog renames;
+  new shelf additions never take away an earned sticker.
+  **Love of My Life** is a personal heart-and-rings gift sticker.
+  Gift assignments belong to each installation and are not included in the
+  public migrations. Once assigned, a gift stays with the recipient account
+  through name changes.
+  Choose any earned sticker as your **profile icon** on the Member page. The
+  owner's member preview saves its own icon separately from the admin view;
+  switching views restores the icon chosen for that view.
+  A hidden **legendary Flying Spaghetti Monster 🍝** shows only a plain sticker
+  silhouette, without a name, artwork details, rarity, hints or progress, until a
+  member's completed prints reach **10,000 meters** of recorded extrusion. Its colorful
+  filament creature has googly eyes, dangling arms and a hovering nozzle.
+  The owner can enter actual **Filament used (meters)** when moving a print to
+  Delivery, or record/correct usage later on its ticket. Delivery and Done count
+  once; requests, failed prints, unknown usage and Bambu's estimated weight do
+  not. The meter value covers all copies together. Existing prints can be logged
+  retrospectively; corrections never take away a discovered sticker.
 - **Withdraw your own request** any time before it reaches the bed — while it
   is Requested, Accepted or Declined, but not once it is Printing. The ticket,
   the conversation and the uploaded file go with it. Plans change; unwanted
@@ -56,10 +111,8 @@ that: there is no multi-tenancy, no billing, and no queue theory.
 - **See what each person has sent** — the printer owner picks one person or
   several at `/admin/prints` and gets everything they have uploaded, in any
   state. Each member on the guest list links straight to theirs.
-- **Say how much it matters** — a request carries a priority (low, medium,
-  high). The printer owner's queue lists the urgent ones first, and the
-  requester or the owner can change it on the ticket while it is still
-  moving. It orders the queue; it does not book the printer.
+- **Oldest requests first** — each print queue column lists tickets in the
+  order they were requested. Print tickets have no priority controls or labels.
 - **Note print settings** — an optional free-text field on a request for the
   slicer specifics that come with some files (layer height, infill, supports,
   temperatures). The printer owner sees them on the ticket, so they do not
@@ -155,6 +208,15 @@ docker compose --env-file .env.docker -f docker-compose.prod.yml logs migrate
 
 Then invite the office from `/admin/invites`. For a real deployment behind a
 reverse proxy, see **[docs/deployment.md](docs/deployment.md)**.
+
+For printer repairs, open **Notifications → Maintenance mode** (or
+`/admin/maintenance`), enable the switch, and save. Members see your repair
+message and cannot use the site or submit requests until you turn it off.
+Already-open member tabs check within 30 seconds; server-side guards refuse
+new requests immediately. Existing orders stay saved. Admin access, sign-in,
+and health checks remain available. Maintenance starts off and is stored in
+the database, so it survives restarts. Apply migrations before running the
+updated application.
 
 > There is deliberately no `ADMIN_PASSWORD`. A password in an env file is also
 > in `docker inspect`, in the shell history that wrote it, and in every backup
@@ -415,6 +477,7 @@ has no outbound internet, set `HIBP_DISABLED=true` — and only then.
 | **[Architecture](docs/architecture.md)** | the viewer, upload validation, decisions taken against the design handoff, and the file layout |
 | **[Deployment](docs/deployment.md)** | containers, reverse proxies, the deploy wizard, TLS, first run |
 | **[Materials and colours](docs/material-catalog.md)** | the owner-managed catalogue behind the request form |
+| **[Filament brands and Amazon listings](docs/filament-buying.md)** | brand logos, product/color listings, and automatic Amazon prices and images |
 | **[Feature requests](docs/feature-requests.md)** | the `/frr` track — file a request, triage it exactly like the print backlog |
 | **[The API](docs/api.md)** | the JSON surface, bearer tokens, the OpenAPI document and the console at `/docs` |
 | **[Open in PrusaSlicer](docs/prusaslicer.md)** | the one-click "send to the slicer" bridge, the helper, and why the deep link cannot be used |
@@ -456,12 +519,11 @@ something, see [SECURITY.md](SECURITY.md).
 
 ## Contributing
 
-Issues and pull requests are welcome. The ten verification suites in
+Issues and pull requests are welcome. The eleven verification suites in
 `scripts/` are the contract — `verify:models`, `verify:auth`, `verify:upload`,
-`verify:import`, `verify:queue`, `verify:frr`, `verify:catalog`, `verify:api`,
-`verify:passkey` and `probe:security`. All but `verify:models` run in CI against the built
-container image rather than a dev server. If a change makes one fail, that is the
-change talking.
+`verify:badges`, `verify:import`, `verify:queue`, `verify:frr`, `verify:catalog`, `verify:api`,
+`verify:passkey` and `probe:security`. All but `verify:models` run in CI against
+the built stack. If a change makes one fail, that is the change talking.
 
 See [docs/development.md](docs/development.md) to get set up.
 

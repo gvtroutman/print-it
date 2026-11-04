@@ -3,11 +3,14 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/authz";
 import { storyRef } from "@/lib/scope";
 import { LIST_LIMIT_MAX, listPeopleWithPrints, listStories } from "@/lib/stories";
-import { quantityText, relativeTime } from "@/lib/catalog";
+import { quantityText } from "@/lib/catalog";
 import { tornClass } from "@/lib/torn";
 import { AppHeader } from "@/components/app-header";
-import { Kicker, PriorityChip, StatusChip } from "@/components/ui";
+import { OrderTimestamp } from "@/components/order-timestamp";
+import { Kicker, StatusChip } from "@/components/ui";
 import { FilamentSpool } from "@/components/color-swatch";
+import { PrintTimeControl } from "@/components/print-time-control";
+import { Toast } from "@/components/toast";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +35,7 @@ export const dynamic = "force-dynamic";
  * same one every other list goes through.
  */
 
-type Search = { who?: string | string[]; before?: string };
+type Search = { who?: string | string[]; before?: string; toast?: string; error?: string };
 
 /** `/admin/prints` with exactly these people selected. */
 function hrefFor(ids: string[]): string {
@@ -55,6 +58,7 @@ export default async function PrintsByPersonPage({
   const selectedIds = selected.map((p) => p.id);
 
   const before = Number(params.before);
+  const from = `${hrefFor(selectedIds)}${Number.isInteger(before) && before > 0 ? `&before=${before}` : ""}`;
   const { stories, nextCursor } = selected.length
     ? await listStories(admin, {
         uploaderIds: selectedIds,
@@ -77,6 +81,7 @@ export default async function PrintsByPersonPage({
         <p className="m-0 mb-[22px] max-w-[680px] text-[16.5px] leading-[1.5] text-ink-2 text-pretty">
           Pick one person or several to see everything they have uploaded, in any state —
           waiting, on the bed, finished or declined. Pick somebody again to take them out.
+          Record or edit print time beside each completed print.
         </p>
 
         {/* ---- the people: each one a link that toggles itself ---- */}
@@ -159,11 +164,11 @@ export default async function PrintsByPersonPage({
                         </Link>
                         <p className="m-0 mt-[3px] font-mono text-[11px] uppercase tracking-[0.04em] text-ink-3">
                           {storyRef(story.id)} · {story.uploader.name} · {quantityText(story.quantity)} ·{" "}
-                          {story.material} · {relativeTime(story.createdAt)}
+                          {story.material} · <OrderTimestamp iso={story.createdAt.toISOString()} />
                         </p>
                       </div>
-                      <PriorityChip priority={story.priority} quiet />
                       <StatusChip status={story.status} />
+                      <PrintTimeControl storyId={story.id} status={story.status} printHours={story.printHours?.toString() ?? null} from={from} showValue />
                     </div>
                   ))
                 )}
@@ -182,6 +187,8 @@ export default async function PrintsByPersonPage({
           </>
         )}
       </main>
+      {params.toast && <Toast>{params.toast}</Toast>}
+      {params.error && <Toast>{params.error}</Toast>}
     </>
   );
 }

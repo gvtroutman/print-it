@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 import {
   ANY_COLOR,
   AUTO_MATERIAL,
-  DEFAULT_STORY_PRIORITY,
   NEAR_ENOUGH,
+  WHATEVER_STYLE,
   colourDistance,
   labOf,
   type CatalogColorChoice,
@@ -30,6 +30,7 @@ import {
   type FileKind,
 } from "@/lib/upload-limits";
 import { parseLink } from "@/lib/links";
+import { ARTWORK } from "@/lib/artwork-assets";
 
 /** What the file picker offers: every model, photo and video type. */
 const PICKER_ACCEPT = [...ACCEPTED_EXTENSIONS, ...IMAGE_EXTENSIONS, ...VIDEO_EXTENSIONS].join(",");
@@ -43,10 +44,23 @@ const KIND_BADGE: Record<FileKind, { label: string; className: string }> = {
 import { SOURCE_LABEL, identifySource, type ImportSource } from "@/lib/import-source";
 import { Button, Label, Notice } from "@/components/ui";
 import { MaterialFacts } from "@/components/material-chart";
+import { ColorSwatch } from "@/components/color-swatch";
 import { InkCube } from "@/components/ink-cube";
 import { NavIcon } from "@/components/nav-icons";
 
-import { ColorMenu, OtherColors, colorNameOf } from "./spool-finder";
+import type { FilamentColor } from "@/lib/filament-palette-data";
+import { colorDisplayName, colorTitleCase, filamentColorName, filamentColorStyle, filamentColorType } from "@/lib/filament-color-types";
+import { recordedSwatchChoice } from "@/lib/filament-choice";
+import { filamentColorFits } from "@/lib/filament-palette-data";
+import { DEFAULT_FILAMENT_SETTINGS, type FilamentSettings } from "@/lib/filament-brands";
+import { MIN_DONATION_LABEL } from "@/lib/donation-policy";
+import { usePersonalPalette } from "./personal-palette";
+import type { SavedPaletteColor } from "@/lib/palette-types";
+
+// StepCard mounts its contents on first open. Keep the multi-megabyte source
+// palette out of the initial New Order navigation and load it with Color.
+const ColorMenu = lazy(() => import("./spool-finder").then(module => ({ default: module.ColorMenu })));
+const OtherColors = lazy(() => import("./spool-finder").then(module => ({ default: module.OtherColors })));
 
 /**
  * The shelf colour of a material that looks most like `hex`, or null when
@@ -78,10 +92,12 @@ export type Again = {
   title: string;
   material: string;
   colorName: string;
+  colorHex?: string;
   /** The spool the old ticket asked the owner to buy, or null for a shelf colour. */
   swatch: SwatchChoice | null;
+  /** Resolved on the server so a repeat needs no browser-wide palette lookup. */
+  filament?: FilamentColor | null;
   quantity: number;
-  priority: number;
   note: string;
 };
 
@@ -93,7 +109,7 @@ const SEE_THROUGH = 0.8;
 
 /** The round − and + either side of the amount. */
 const STEP_BUTTON =
-  "grid h-[44px] w-[44px] cursor-pointer place-items-center rounded-full border-0 bg-cream-2 text-ink transition-colors hover:bg-cream-3 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-cream-2";
+  "grid h-[44px] w-[44px] shrink-0 cursor-pointer place-items-center rounded-full border-2 border-ink/15 bg-porcelain text-ink shadow-[0_3px_8px_rgba(0,0,0,0.28)] transition-colors hover:border-ink hover:bg-sun-wash disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-ink/15 disabled:hover:bg-porcelain";
 
 type Phase =
   | { kind: "idle" }
@@ -332,139 +348,157 @@ function Dropdown({
   );
 }
 
-/** The four cards of the request board, in the order they are filled in. */
-type StepNo = 1 | 2 | 3 | 4;
+/** The three setup cards; sending is a separate action below the board. */
+type StepNo = 1 | 2 | 3;
 
-/** Each card's own colour, along its top when open and its edge when folded. */
-const STEP_ACCENT: Record<StepNo, string> = { 1: "bg-aqua", 2: "bg-sun", 3: "bg-[#f4c531]", 4: "bg-mint" };
+/** Pastel RGB fills appear only on the pressed or open section. */
+const STEP_ACCENT: Record<StepNo, string> = {
+  1: "bg-[#f5b4b0]",
+  2: "bg-[#afe0c6]",
+  3: "bg-[#b7e2f0]",
+};
 
-/** Clear of the sticky header; the same as the cards' `scroll-mt` and the folded columns' `top`. */
+/** Clear of the sticky header; the same as the cards' `scroll-mt`. */
 const BELOW_HEADER = 112;
 
-function StepBadge({ n, done }: { n: StepNo; done: boolean }) {
-  return (
-    <span
-      aria-hidden
-      className={`grid h-[32px] w-[32px] flex-none place-items-center rounded-full border-[3px] border-ink font-display text-[16px] leading-none text-ink ${
-        done ? "bg-mint" : "bg-porcelain"
-      }`}
-    >
-      {done ? "✓" : n}
-    </span>
-  );
-}
-
 /**
- * One card of the request board. Open, it is the step being filled in and
- * takes the room; folded, it is a narrow column beside it (a bar on a phone)
- * saying what was settled there, and tapping it opens it again. The fields
+ * One section of the shared order container. Open, it shows the fields being filled in;
+ * folded, it is a bar saying what was settled there, or inviting input.
+ * Tapping it opens it again. Fields mount on their first opening and then
  * stay mounted while folded, only hidden, so moving between cards never loses
  * a file, a typed word or the spool library's search.
  *
  * Tapping the open card's header folds it too, so a tap opens and closes a
- * card, and opening one folds whichever was open. With all four folded,
- * none is pushed aside, so they share the row evenly: the whole order at a
- * glance.
+ * card, and opening one folds whichever was open. All three stay stacked
+ * in order, at every screen size.
  */
 function StepCard({
   n,
   title,
   open,
-  allFolded,
   done,
   summary,
+  preview,
   disabled,
   onOpen,
   onClose,
   cardRef,
-  footer,
   children,
 }: {
   n: StepNo;
   title: string;
   open: boolean;
-  /** No card is open, so the folded ones share the row. */
-  allFolded: boolean;
+  /** A usable choice is set for this card. */
   done: boolean;
   /** What the folded card says about this step. */
   summary: ReactNode;
+  /** The icon or selected color shown in both open and folded headers. */
+  preview?: ReactNode;
   disabled: boolean;
   onOpen: () => void;
   onClose: () => void;
   cardRef: (el: HTMLElement | null) => void;
-  footer: ReactNode;
   children: ReactNode;
 }) {
   const headingId = `step-${n}-heading`;
+  const [pressed, setPressed] = useState(false);
+  const [visited, setVisited] = useState(open);
+  useEffect(() => { if (open) setVisited(true); }, [open]);
+  const colored = open || (pressed && !disabled);
+  const cardPreview = preview ?? (
+    n === 3 ? (
+      <ColorSwatch mode="whatever" style={WHATEVER_STYLE} mark={false} className="h-full w-full rounded-card border-[3px] border-ink" />
+    ) : (
+      <span className="grid h-full w-full place-items-center rounded-card border-[3px] border-ink bg-cream-2 text-ink">
+        <NavIcon name={n === 1 ? "cube" : "spool"} size={32} edge={false} />
+      </span>
+    )
+  );
+  const cardIcon = (
+    <span aria-hidden className={`flex-none ${done ? "h-[44px] w-[44px]" : "h-[28px] w-[28px]"}`}>
+      {done ? cardPreview : (
+        <svg viewBox="0 0 24 24" className="h-full w-full" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+          <path d="M12 4v16M4 12h16" />
+        </svg>
+      )}
+    </span>
+  );
+  const checkmark = done && (
+    <span aria-hidden className="flex h-[32px] w-[32px] flex-none items-center justify-center text-ink">
+      <NavIcon name="checkmark" size={40} />
+    </span>
+  );
+  // Equal header widths keep the completed preview icons in one column.
+  const headingContent = (
+    <span data-step-content className={`min-w-0 items-center gap-[8px] ${done ? "grid w-[160px] max-w-full justify-self-center grid-cols-[44px_minmax(0,1fr)]" : "grid w-[160px] max-w-full translate-x-[8px] grid-cols-[28px_minmax(0,1fr)]"}`}>
+      {cardIcon}
+      <span className={`min-w-0 ${done ? "text-center" : "text-left"}`}>
+        <span id={headingId} className={`block font-display text-[17px] leading-tight ${done ? "" : "whitespace-nowrap"}`}>
+          {done ? title : `Add ${title}`}
+          {done && <span className="sr-only"> · Has input</span>}
+        </span>
+        {done && (
+          <span className="mt-[3px] block truncate font-sans text-[13px] font-normal leading-[1.4] text-ink">
+            {summary}
+          </span>
+        )}
+      </span>
+    </span>
+  );
   return (
     <section
       ref={cardRef}
       aria-labelledby={headingId}
-      className={`min-w-0 scroll-mt-[112px] ${
-        open || allFolded ? "lg:flex-1" : "lg:w-[132px] lg:flex-none xl:w-[156px]"
-      }`}
+      data-open={open ? true : undefined}
+      className={`order-section relative -mt-[3px] min-w-0 scroll-mt-[112px] border-[3px] border-ink first:mt-0 ${open ? "z-10" : "z-0"} ${n === 1 ? "rounded-t-panel" : n === 3 ? "rounded-b-panel" : ""} ${colored ? "shadow-stamp" : "border-dashed"}`}
     >
       <div
-        className={`h-full rounded-panel border-[3px] border-ink bg-porcelain ${open ? "shadow-stamp-lg" : "shadow-stamp"}`}
+        className={`h-full ${open ? "bg-porcelain" : "bg-transparent"} ${n === 1 ? "rounded-t-[13px]" : n === 3 ? "rounded-b-[13px]" : ""}`}
       >
-        {open ? (
-          <h2 className="m-0">
-            {/* The whole header is the fold control. Focused when the card
-                opens, so a screen reader hears where it landed. */}
-            <button
-              type="button"
-              data-step-heading
-              onClick={onClose}
-              disabled={disabled}
-              aria-expanded
-              className={`layers flex w-full cursor-pointer items-center gap-[11px] rounded-t-[13px] border-0 border-b-[3px] border-ink px-[17.6px] py-[11px] text-left text-ink transition-[filter] hover:brightness-[0.96] disabled:cursor-not-allowed disabled:hover:brightness-100 sm:px-[26.4px] ${STEP_ACCENT[n]}`}
-            >
-              <StepBadge n={n} done={false} />
-              <span id={headingId} className="min-w-0 flex-1 font-display text-[22px] leading-tight">
-                {title}
-              </span>
-            </button>
-          </h2>
-        ) : (
+        <h2 className={`m-0 ${open ? "border-b-[3px] border-ink" : ""}`}>
+          {/* Keep the same button and contents mounted when toggled, so the
+              centered header stays in place as the fields open below it. */}
           <button
             type="button"
-            data-step-open
-            onClick={onOpen}
+            data-step-toggle
+            data-step-heading={open ? "" : undefined}
+            data-step-open={!open ? "" : undefined}
+            data-pressed={pressed && !disabled ? true : undefined}
+            onClick={open ? onClose : onOpen}
+            onPointerDown={(event) => {
+              if (event.isPrimary && event.button === 0) setPressed(true);
+            }}
+            onPointerUp={() => setPressed(false)}
+            onPointerCancel={() => setPressed(false)}
+            onPointerLeave={() => setPressed(false)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") setPressed(true);
+            }}
+            onKeyUp={() => setPressed(false)}
+            onBlur={() => setPressed(false)}
             disabled={disabled}
-            aria-expanded={false}
-            className="group flex h-full w-full cursor-pointer items-stretch rounded-[13px] border-0 bg-transparent p-0 text-left text-ink transition-colors hover:bg-sun-wash disabled:cursor-not-allowed disabled:hover:bg-transparent lg:flex-col"
+            aria-expanded={open}
+            className={`group relative flex min-h-[66px] w-full touch-manipulation cursor-pointer items-stretch border-0 p-0 text-ink transition-[filter,background-color] duration-[160ms] hover:brightness-[0.96] active:brightness-[0.92] data-[pressed=true]:brightness-[0.92] disabled:cursor-not-allowed disabled:hover:brightness-100 disabled:active:brightness-100 ${n === 1 ? "rounded-t-[13px]" : n === 3 && !open ? "rounded-b-[13px]" : ""} ${colored ? STEP_ACCENT[n] : "bg-transparent"}`}
           >
-            <span
+            {done && colored && <span
               aria-hidden
-              className={`layers w-[12px] flex-none rounded-l-[13px] border-r-[3px] border-ink lg:h-[14px] lg:w-auto lg:rounded-l-none lg:rounded-t-[13px] lg:border-b-[3px] lg:border-r-0 ${STEP_ACCENT[n]}`}
-            />
-            <span className="flex min-w-0 flex-1 items-center gap-[11px] px-[13.2px] py-[11px] lg:sticky lg:top-[112px] lg:flex-none lg:flex-col lg:items-start lg:gap-[8.8px] lg:px-[15px] lg:py-[17.6px]">
-              <StepBadge n={n} done={done} />
-              <span className="min-w-0 flex-1 lg:w-full lg:flex-none">
-                <span id={headingId} className="block font-display text-[17px] leading-tight">
-                  {title}
-                </span>
-                <span className="mt-[3px] block truncate text-[13px] leading-[1.4] text-ink-2 lg:whitespace-normal lg:break-words">
-                  {summary}
-                </span>
-              </span>
+              className={`layers absolute inset-y-0 left-0 w-[12px] border-r-[3px] border-ink ${n === 1 ? "rounded-tl-[13px]" : n === 3 && !open ? "rounded-bl-[13px]" : ""} ${STEP_ACCENT[n]}`}
+            />}
+            <span className={`min-w-0 flex-1 items-center justify-center gap-[8px] px-[13.2px] py-[11px] ${done ? "grid grid-cols-[32px_minmax(0,1fr)_32px]" : "flex"}`}>
+              {done && <span aria-hidden />}
+              {headingContent}
               {done && (
-                // A pencil sticker says "edit" without a word; the word is
-                // still there for a screen reader.
-                <span className="flex flex-none text-ink transition-transform duration-150 ease-out group-hover:scale-125 group-disabled:scale-100">
-                  <NavIcon name="pencil" />
+                <span className="flex flex-none transition-transform duration-150 ease-out group-hover:scale-125 group-disabled:scale-100">
+                  {checkmark}
                   <span className="sr-only">Change</span>
                 </span>
               )}
             </span>
           </button>
-        )}
+        </h2>
 
         <div hidden={!open}>
-          <div className="px-[17.6px] py-[22px] sm:px-[26.4px]">{children}</div>
-          <div className="flex flex-wrap items-end justify-between gap-[13.2px] border-t-[3px] border-dashed border-ink/25 px-[17.6px] py-[17.6px] sm:px-[26.4px]">
-            {footer}
-          </div>
+          <div className="px-[17.6px] py-[22px] sm:px-[26.4px]">{(open || visited) && children}</div>
         </div>
       </div>
     </section>
@@ -476,20 +510,26 @@ export function UploadForm({
   catalog,
   again,
   importSources = [],
+  savedColors = [],
+  filamentConfig = DEFAULT_FILAMENT_SETTINGS,
+  storeAccess,
 }: {
   owner: string;
   catalog: CatalogMaterialChoice[];
   again?: Again;
   /** The sites this instance imports from. Empty hides the link step entirely. */
   importSources?: ImportSource[];
+  savedColors?: SavedPaletteColor[];
+  filamentConfig?: FilamentSettings;
+  storeAccess: boolean;
 }) {
   const router = useRouter();
+  const personalPalette = usePersonalPalette(savedColors);
   const inputRef = useRef<HTMLInputElement>(null);
-  // A fresh request starts on Auto, the filament left to the owner, so the
-  // dropdown shows the choice it opens with and the colour comes from the
-  // circles up top. Printing
-  // again starts from what was asked for last time — where that is still on
-  // the shelf. A material or colour the owner has since retired falls back to
+  // A fresh request leaves the material blank until its card is clicked,
+  // then starts on Auto with the colour chosen independently. Printing again
+  // starts from what was asked for last time — where that is still on the shelf.
+  // A material or colour the owner has since retired falls back to
   // the usual default, and `gone` says which, because a choice that quietly
   // changed under someone is one they will not notice until the print arrives.
   // An order left to the owner is left to them again.
@@ -501,7 +541,8 @@ export function UploadForm({
   const wantedColor = wanted?.colors.find((item) => item.name === again?.colorName);
   // A spool to buy carries across while its material is still offered; the
   // server checks it against the library when the request is sent.
-  const initialSwatch = wanted ? again?.swatch ?? null : null;
+  const initialSwatch = storeAccess && wanted ? again?.swatch ?? null : null;
+  const initialFilament = storeAccess && (initialSwatch || againAuto) ? again?.filament ?? null : null;
   const initialColor = initialMaterial && !initialSwatch
     ? wantedColor ?? initialMaterial.colors.find((item) => item.name === "Slate") ?? initialMaterial.colors[0]!
     : null;
@@ -509,11 +550,12 @@ export function UploadForm({
     ? [
         !wanted
           ? again.material
-          : !wantedColor && !initialSwatch
-            ? `${again.material} in ${again.colorName}`
+          : !wantedColor && !initialSwatch && !again.swatch
+            ? `${again.material} in ${colorDisplayName(again.colorName)}`
             : null,
       ].filter((x): x is string => x !== null)
     : [];
+  const storeSelectionRemoved = Boolean(!storeAccess && again?.swatch);
 
   // Everything picked for the order, in the order it was added. The first 3D
   // file is the main model — the one the slicer link and a reprint use — and
@@ -538,7 +580,11 @@ export function UploadForm({
   const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
 
   const [title, setTitle] = useState(again?.title ?? "");
-  const [material, setMaterial] = useState<string | null>(initialMaterial?.name ?? AUTO_MATERIAL);
+  const [material, setMaterial] = useState<string | null>(initialMaterial?.name ?? (againAuto ? AUTO_MATERIAL : null));
+  // Switching Auto off restores the last manual material, or starts on PETG.
+  const manualMaterial = useRef(initialMaterial?.name ?? catalog.find((item) => item.name === "PETG")?.name ?? catalog[0]?.name);
+  // A color checkmark records the user's choice; repeat orders already have one.
+  const [colorChosen, setColorChosen] = useState(Boolean(again));
   // Whether the material's facts are open below its dropdown.
   const [aboutMaterial, setAboutMaterial] = useState(false);
   const [quantity, setQuantity] = useState<number>(again?.quantity ?? 1);
@@ -549,7 +595,6 @@ export function UploadForm({
   // into "1", so clearing it to type 3 produced 13.
   const [quantityDraft, setQuantityDraft] = useState<string | null>(null);
   // No slider any more: a new request takes the default, a repeat keeps its own.
-  const priority = again?.priority ?? DEFAULT_STORY_PRIORITY;
   const [color, setColor] = useState<string | null>(initialColor?.name ?? null);
   // A spool the owner can get instead of one on the shelf. One or the other:
   // picking either clears the other.
@@ -559,15 +604,20 @@ export function UploadForm({
   // `nearAlpha` is how solid it is; a see-through one looks for clear spools.
   // Printing again lights the circle of the colour asked for last time.
   const [near, setNear] = useState<string | null>(
-    initialColor && initialColor.mode !== "whatever" && /^#[0-9a-f]{6}$/i.test(initialColor.hex) ? initialColor.hex : null,
+    initialFilament?.hex ?? initialSwatch?.hex ?? (againAuto ? again?.colorHex ?? null : initialColor && initialColor.mode !== "whatever" && /^#[0-9a-f]{6}$/i.test(initialColor.hex) ? initialColor.hex : null),
   );
-  const [nearAlpha, setNearAlpha] = useState(1);
+  const [nearAlpha, setNearAlpha] = useState(initialFilament?.translucent ? 0.5 : 1);
+  const [nearName, setNearName] = useState(again?.colorName ?? "");
+  const [nearFilament, setNearFilament] = useState<FilamentColor | null>(initialFilament);
+  // A Library choice keeps its identity even when another finish shares its hex.
+  const [nearShelf, setNearShelf] = useState<CatalogColorChoice | null>(() => initialColor && initialColor.mode !== "whatever"
+    ? initialColor : againAuto && !initialFilament ? catalog.flatMap(item => item.colors).find(candidate =>
+      candidate.name === again?.colorName && candidate.hex.toLowerCase() === again?.colorHex?.toLowerCase()) ?? null : null);
   const [note, setNote] = useState(again?.note ?? "");
+  const [addingNote, setAddingNote] = useState(Boolean(again?.note));
 
-  // The card that is open (null when all are folded), and the furthest one
-  // reached by moving on.
-  const [step, setStep] = useState<StepNo | null>(1);
-  const [reached, setReached] = useState<StepNo>(1);
+  // New orders start folded; repeats open their existing model.
+  const [step, setStep] = useState<StepNo | null>(again ? 1 : null);
   const cards = useRef<(HTMLElement | null)[]>([]);
   // Off until a card is opened, so the page does not grab focus as it loads.
   const moved = useRef(false);
@@ -680,6 +730,7 @@ export function UploadForm({
   function stepQuantity(by: number) {
     setQuantityDraft(null);
     setQuantity((n) => Math.min(MAX_QUANTITY, Math.max(1, n + by)));
+    navigator.vibrate?.(12);
   }
 
   /**
@@ -791,7 +842,7 @@ export function UploadForm({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           url, fileId, title, material, ...wishColor,
-          quantity, priority, note, links,
+          quantity, note, links,
         }),
       });
       const body = await res.json().catch(() => ({}));
@@ -825,7 +876,7 @@ export function UploadForm({
         // No printSettings: left out, the old ticket's carry across as they were.
         // Both colour fields, always: naming either replaces the old ticket's choice.
         body: JSON.stringify({
-          title, material, ...wishColor, quantity, priority, note,
+          title, material, ...wishColor, quantity, note,
         }),
       });
       const body = await res.json().catch(() => ({}));
@@ -855,10 +906,12 @@ export function UploadForm({
       if (!named) return "Say what it is — a few words is enough.";
     }
     if (n === 2 && material === null) {
-      return "Pick a material first, or Auto. Swipe across to see what each one is good at.";
+      return "Pick a material first, or turn on Auto.";
     }
     if (n === 3 && material !== null && !auto && color === null && toBuy === null) {
-      return `Pick a color from the circles, or a spool ${owner} can get from Other colors.`;
+      return storeAccess
+        ? `Pick a color from Library, or find a spool ${owner} can get in Store.`
+        : `Pick a color from Library. A confirmed donation of ${MIN_DONATION_LABEL} unlocks Store.`;
     }
     return null;
   }
@@ -868,10 +921,9 @@ export function UploadForm({
     setPhase({ kind: "idle" });
     setQuantityDraft(null);
     setStep(n);
-    setReached((r) => (n > r ? n : r));
   }
 
-  /** Fold the open card, leaving all four folded side by side. */
+  /** Fold the open card, leaving all three as compact bars. */
   function foldAll() {
     moved.current = true;
     folded.current = step;
@@ -882,9 +934,10 @@ export function UploadForm({
 
   /** On to the next card, once this one is settled. */
   function advance() {
-    if (step === null) return;
+    if (step === null || phase.kind === "uploading") return;
     const problem = problemOn(step);
     if (problem) return setPhase({ kind: "error", message: problem });
+    if (step === 3) return foldAll();
     goTo((step + 1) as StepNo);
   }
 
@@ -894,9 +947,8 @@ export function UploadForm({
     // Enter in the quantity box submits without blurring it; show what is
     // actually being sent rather than a half-typed draft.
     setQuantityDraft(null);
-    // The → buttons submit too, so Enter in a field moves on a card;
-    // only the last card sends.
-    if (step !== 4) return advance();
+    // The standalone send button validates the whole request, whichever
+    // setup card is open.
     // Anything still missing reopens the card it belongs on.
     for (const n of [1, 2, 3] as const) {
       const problem = problemOn(n);
@@ -918,8 +970,8 @@ export function UploadForm({
     if (wishColor.swatchId !== null) body.set("swatchId", String(wishColor.swatchId));
     else if (wishColor.colorName) body.set("colorName", wishColor.colorName);
     if (wishColor.colorHex) body.set("colorHex", wishColor.colorHex);
+    if (wishColor.filamentColorId) body.set("filamentColorId", wishColor.filamentColorId);
     body.set("quantity", String(quantity));
-    body.set("priority", String(priority));
     body.set("note", note);
 
     // XHR rather than fetch: it is still the only way to observe upload
@@ -965,18 +1017,21 @@ export function UploadForm({
 
   const busy = phase.kind === "uploading";
   const selectedMaterial = catalog.find((item) => item.name === material) ?? null;
+  const shelfChoices = useMemo(() => selectedMaterial ? selectedMaterial.colors
+    : catalog.flatMap(item => item.colors.map(color => ({ ...color, materialName: item.name }))), [catalog, selectedMaterial]);
   const auto = material === AUTO_MATERIAL;
 
   // Left to the owner, the colour is the one picked up top, not a shelf spool:
-  // a shelf colour by name, one of your own by hex too, or any colour.
-  const shelfMatch = near !== null && nearAlpha === 1
-    ? catalog.flatMap((item) => item.colors).find((c) => c.mode !== "whatever" && c.hex.toLowerCase() === near.toLowerCase())
+  // a shelf colour by name and shade, one of your own, or any colour.
+  const shelfMatch = !nearFilament && near !== null && nearAlpha === 1
+    ? (nearShelf?.hex.toLowerCase() === near.toLowerCase() ? nearShelf : undefined)
+      ?? catalog.flatMap((item) => item.colors).find((c) => c.mode !== "whatever" && c.hex.toLowerCase() === near.toLowerCase())
     : undefined;
-  const autoColorName = near === null ? ANY_COLOR : shelfMatch?.name ?? colorNameOf(near, nearAlpha);
+  const autoColorName = near === null ? ANY_COLOR : nearFilament ? filamentColorName(nearFilament) : shelfMatch?.name ?? nearName;
   /** The colour half of the wish, as every way of sending it names it. */
   const wishColor = auto
-    ? { colorName: autoColorName, colorHex: near !== null && !shelfMatch ? near : null, swatchId: null }
-    : { colorName: color ?? "", colorHex: null, swatchId: toBuy?.id ?? null };
+    ? { colorName: autoColorName, colorHex: near, swatchId: null, filamentColorId: nearFilament?.id ?? null }
+    : { colorName: color ?? "", colorHex: null, swatchId: toBuy?.id ?? null, filamentColorId: null };
 
   function chooseMaterial(next: string) {
     if (next === AUTO_MATERIAL) {
@@ -987,12 +1042,31 @@ export function UploadForm({
     }
     const item = catalog.find((candidate) => candidate.name === next);
     if (!item) return;
+    manualMaterial.current = item.name;
     // A spool to buy was one kind of filament; another material starts from its shelf.
     if (item.name !== material) setToBuy(null);
     else if (toBuy) return;
     setMaterial(item.name);
-    const match = shelfColorFor(item, near);
+    if (nearFilament) {
+      setNearShelf(null);
+      // A finish selection must not become a plain shelf color with a similar hex.
+      const choice = recordedSwatchChoice(nearFilament);
+      if (filamentColorFits(item.name, nearFilament)) {
+        const shelf = filamentColorType(nearFilament) === "Solid" ? closestShelfColor(item, nearFilament.hex) : null;
+        if (shelf?.mode === "solid") {
+          setColor(shelf.name);
+          setToBuy(null);
+          return;
+        }
+        setColor(null);
+        setToBuy(choice);
+        return;
+      }
+    }
+    setNearFilament(null);
+    const match = item.colors.find(candidate => candidate.id === nearShelf?.id) ?? shelfColorFor(item, near);
     setColor(match?.name ?? null);
+    setNearShelf(near && match?.mode !== "whatever" ? match : null);
     // A circle picked from another material's shelf moves to this one's nearest.
     if (near && match && match.mode !== "whatever" && /^#[0-9a-f]{6}$/i.test(match.hex)
       && catalog.some((m) => m.colors.some((c) => c.hex.toLowerCase() === near.toLowerCase()))) {
@@ -1015,15 +1089,35 @@ export function UploadForm({
   }
 
   /**
-   * A colour from the circles or the rainbow; null is any colour. From the
+   * A colour from the shelf circles or filament chart; null is any colour. From the
    * circles it is the shelf colour asked for, so it replaces a spool to buy
    * when the shelf has one like it. From the library's own colour filter a
    * spool to buy already picked stays.
    */
-  function chooseNear(hex: string | null, alpha = 1, fromCircles = false) {
+  function chooseNear(hex: string | null, alpha = 1, fromCircles = false, filament?: FilamentColor, shelfChoice?: CatalogColorChoice, name?: string) {
+    setColorChosen(true);
     setNear(hex);
     setNearAlpha(hex ? alpha : 1);
+    setNearName(name ?? hex ?? "");
+    setNearFilament(filament ?? null);
+    setNearShelf(shelfChoice ?? null);
     if (!selectedMaterial) return;
+    if (shelfChoice) {
+      setColor(shelfChoice.name);
+      setToBuy(null);
+      return;
+    }
+    if (filament) {
+      const shelf = filamentColorType(filament) === "Solid" ? closestShelfColor(selectedMaterial, filament.hex) : null;
+      if (shelf?.mode === "solid") {
+        setColor(shelf.name);
+        setToBuy(null);
+        return;
+      }
+      setColor(null);
+      setToBuy(recordedSwatchChoice(filament));
+      return;
+    }
     if (toBuy && !fromCircles) return;
     const shelf = hex ? closestShelfColor(selectedMaterial, hex) : shelfColorFor(selectedMaterial, null);
     if (toBuy) {
@@ -1035,6 +1129,8 @@ export function UploadForm({
 
   /** A spool to buy instead of the shelf colour; null goes back to the shelf. */
   function chooseToBuy(next: SwatchChoice | null) {
+    setColorChosen(true);
+    setNearShelf(null);
     setToBuy(next);
     if (next) setColor(null);
     else if (color === null && selectedMaterial) {
@@ -1051,6 +1147,7 @@ export function UploadForm({
 
   // ---- what each folded card says ----
   const fileCount = files.length + (picked ? 1 : 0);
+  const modelHasInput = named || fileCount > 0 || links.length > 0 || Boolean(again?.filename);
   const whatSummary =
     [
       title.trim() || primary?.name || picked?.name || again?.filename || (note.trim() ? "Asked for in words" : ""),
@@ -1063,82 +1160,54 @@ export function UploadForm({
   const materialSummary = material ?? "Not picked yet";
   // Before a material, or left to the owner, the colour is the circle picked.
   const byCircle = auto || selectedMaterial === null;
-  const dotHex = byCircle ? near : toBuy?.hex ?? shelfColor?.hex ?? null;
-  const colorSummary = (
-    <>
-      {dotHex && /^#[0-9a-f]{6}$/i.test(dotHex) && (
-        <span
-          aria-hidden
-          className="mr-[6px] inline-block h-[11px] w-[11px] rounded-full border-2 border-ink align-[-1px]"
-          style={{ background: dotHex }}
-        />
-      )}
-      {byCircle ? autoColorName : toBuy ? `${toBuy.name}, to get` : color ?? "No color yet"}
-    </>
-  );
-  const sendSummary = `${quantity} ${quantity === 1 ? "copy" : "copies"}`;
-
-  // Arrows, not words, so every card's footer reads the same: ← at its left
-  // edge, → at its right. The step each one goes to is still named for a
-  // screen reader, and on hover.
-  const arrow = (d: string) => (
-    <svg
-      aria-hidden
-      viewBox="0 0 24 24"
-      className="block h-[22px] w-[22px]"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2.75}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d={d} />
-    </svg>
-  );
-  const back = (to: StepNo, name: string) => (
-    <Button
-      type="button"
-      variant="ghost"
-      disabled={busy}
-      onClick={() => goTo(to)}
-      aria-label={`Back to ${name}`}
-      title={`Back to ${name}`}
-      className="!px-[18px] !py-[11px]"
-    >
-      {arrow("M19 12H5M11 6l-6 6 6 6")}
-    </Button>
-  );
-  // ml-auto keeps it at the right edge on the first card too, where no ← sits beside it.
-  const next = (name: string) => (
-    <Button
-      type="submit"
-      disabled={busy}
-      aria-label={`Next: ${name}`}
-      title={`Next: ${name}`}
-      className="ml-auto !px-[18px] !py-[11px]"
-    >
-      {arrow("M5 12h14M13 6l6 6-6 6")}
-    </Button>
-  );
+  const colorSummary = byCircle ? colorTitleCase(autoColorName)
+    : toBuy ? `${colorTitleCase(toBuy.name)}, to get`
+    : color ? colorTitleCase(color) : "No color yet";
+  // Match the picker, including catalogue gradients and flakes. A custom
+  // see-through colour keeps its alpha over the picker's pale checkerboard.
+  const tint = near ? `${near}${Math.round(nearAlpha * 255).toString(16).padStart(2, "0")}` : null;
+  const colorPreview: Pick<CatalogColorChoice, "mode" | "style"> | null = byCircle
+    ? near
+      ? nearFilament ? { mode: ["Gradient", "Multi Color"].includes(filamentColorType(nearFilament)) ? "gradient" : "solid", style: filamentColorStyle(nearFilament) } : shelfMatch ?? {
+          mode: "solid",
+          style: `linear-gradient(${tint}, ${tint}), repeating-conic-gradient(#d4d9dd 0% 25%, #ffffff 0% 50%) 0 0 / 12px 12px`,
+        }
+      : { mode: "whatever", style: WHATEVER_STYLE }
+    : toBuy
+      ? { mode: ["Gradient", "Multi Color"].includes(filamentColorType(toBuy)) ? "gradient" : "solid", style: filamentColorStyle(toBuy) }
+      : shelfColor;
 
   return (
     <form
       onSubmit={submit}
-      className="flex flex-col gap-[13.2px] lg:flex-row lg:items-stretch lg:gap-[17.6px]"
+      onKeyDown={(e) => {
+        // Enter in a setup field advances that card; Enter in the amount
+        // field or activating Print It! submits the request.
+        if (e.key === "Enter" && !e.defaultPrevented && e.target instanceof HTMLInputElement
+          && ["text", "url", "search"].includes(e.target.type) && e.target.closest("[data-request-board]")) {
+          e.preventDefault();
+          advance();
+        }
+      }}
+      className="mx-auto flex w-full max-w-[860px] flex-col gap-[26.4px]"
     >
-      {/* ================= 1 · what to print ================= */}
+      <div data-request-board data-has-open={step !== null ? true : undefined} className="mx-auto flex w-[88%] max-w-[720px] flex-col rounded-panel">
+      {/* ================= 1 · model ================= */}
       <StepCard
         n={1}
-        title="What to print"
+        title="Model"
         open={step === 1}
-        done={reached > 1 && problemOn(1) === null}
+        done={modelHasInput}
         summary={whatSummary}
+        preview={
+          <span className="grid h-full w-full place-items-center rounded-card border-[3px] border-ink bg-aqua-wash text-ink">
+            <NavIcon name="cube" size={32} edge={false} />
+          </span>
+        }
         disabled={busy}
-        allFolded={step === null}
         onOpen={() => goTo(1)}
         onClose={foldAll}
         cardRef={(el) => void (cards.current[0] = el)}
-        footer={next("material")}
       >
         {again && (
           <div className="mb-[22px] rounded-panel border-[3px] border-ink bg-cream px-[22px] py-[17.6px]">
@@ -1186,7 +1255,7 @@ export function UploadForm({
            * label carries the visuals, so the label shows the focus. Same colour
            * and offset as the global ring in globals.css.
            */
-          className={`block cursor-pointer rounded-panel border-[3px] border-dashed px-[26.4px] py-[13.2px] text-center transition-colors focus-within:outline focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-cherry-dk ${
+          className={`block cursor-pointer rounded-t-panel border-[3px] border-dashed px-[26.4px] py-[22px] text-center transition-colors focus-within:outline focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-cherry-dk ${
             dragging
               ? "border-ink bg-sun"
               : "border-ink-3 bg-porcelain hover:border-ink hover:bg-sun-wash"
@@ -1217,9 +1286,12 @@ export function UploadForm({
             onChange={(e) => accept(Array.from(e.target.files ?? []))}
           />
           {/* Important classes, because the cube sets its own size inline. */}
-          <InkCube className="mx-auto mb-[8.8px] block !h-[72px] !w-[72px]" />
+          <InkCube className="mx-auto mb-[8.8px] block !h-[56px] !w-[56px]" />
           <span className="block font-display text-[19px] text-ink">
             {files.length > 0 ? "Drop more, or click to add" : "Upload files"}
+          </span>
+          <span className="mt-[6px] block text-[13px] leading-[1.5] text-ink-2">
+            3D models, photos or videos
           </span>
           {(files.length > 0 || (busy && !picked)) && (
             <span className="mt-[6px] block font-mono text-[12px] uppercase tracking-[0.04em] text-ink-3">
@@ -1246,51 +1318,9 @@ export function UploadForm({
         </span>
         </div>}
 
-        {/* ---- what is on the order so far. Outside the <label>, so a remove
-             button does not also open the file picker. ---- */}
-        {!again && files.length > 0 && (
-          <ul aria-label="Files on this order" className="m-0 mt-[13.2px] flex list-none flex-col gap-[6px] p-0">
-            {files.map((f) => {
-              const kind = kindOf(f.name) ?? "model";
-              const badge = KIND_BADGE[kind];
-              return (
-                <li
-                  key={`${f.name}:${f.size}`}
-                  className="flex items-center gap-[11px] rounded-card border-[3px] border-ink bg-porcelain px-[11px] py-[7px]"
-                >
-                  <FileThumb file={f} kind={kind} />
-                  <span
-                    className={`flex-none rounded-chip border-2 border-ink px-[7px] py-[1px] font-mono text-[10.5px] font-bold uppercase tracking-[0.06em] ${badge.className}`}
-                  >
-                    {badge.label}
-                  </span>
-                  <span className="min-w-0 flex-1 break-words text-[14.5px] font-bold text-ink">
-                    {f.name}
-                    {f === primary && (
-                      <span className="ml-[8px] font-mono text-[10.5px] font-bold uppercase tracking-[0.06em] text-cherry-dk">
-                        main model
-                      </span>
-                    )}
-                  </span>
-                  <span className="flex-none font-mono text-[12px] text-ink-3">{formatBytes(f.size)}</span>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => removeFile(f)}
-                    aria-label={`Remove ${f.name}`}
-                    className="flex-none cursor-pointer rounded-chip border-2 border-ink bg-cream px-[8px] py-[1px] font-mono text-[13px] font-bold text-ink hover:bg-cherry hover:text-cream disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    ✕
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-
         {/* ---- links that explain the job ---- */}
         {!again && (
-          <div className="mt-[17.6px]">
+          <div className="rounded-b-panel border-[3px] border-t-0 border-dashed border-ink-3 bg-porcelain p-[13.2px]">
             {/* Folded to one line until wanted: most orders carry no link. */}
             {addingLink ? (
               <>
@@ -1320,7 +1350,7 @@ export function UploadForm({
                       addLink();
                     }}
                     placeholder="https://… the product it fits, a video, a forum post"
-                    className="min-w-[240px] flex-1 rounded-card border-[3px] border-ink bg-porcelain px-[15px] py-[12px] text-[16px] text-ink placeholder:text-ink-3"
+                    className="min-w-0 flex-1 basis-[240px] rounded-card border-[3px] border-ink bg-porcelain px-[15px] py-[12px] text-[16px] text-ink placeholder:text-ink-3"
                   />
                   <Button
                     type="button"
@@ -1338,12 +1368,12 @@ export function UploadForm({
                   type="button"
                   disabled={busy}
                   onClick={() => void pasteLink()}
-                  className="mx-auto flex w-fit cursor-pointer items-center gap-[6px] border-0 bg-transparent p-0 font-mono text-[12px] font-bold uppercase tracking-[0.08em] text-ink-2 underline decoration-2 underline-offset-4 hover:text-cherry-dk disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex w-full cursor-pointer items-center justify-center gap-[8.8px] border-0 bg-transparent px-0 py-[8.8px] font-mono text-[16px] font-bold uppercase tracking-[0.08em] text-ink-2 underline decoration-2 underline-offset-4 hover:text-cherry-dk disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <svg
                     aria-hidden
                     viewBox="0 0 24 24"
-                    className="h-[15px] w-[15px] flex-none"
+                    className="h-[20px] w-[20px] flex-none"
                     fill="none"
                     stroke="currentColor"
                     strokeWidth={2.5}
@@ -1384,6 +1414,49 @@ export function UploadForm({
               </ul>
             )}
           </div>
+        )}
+
+        {/* ---- what is on the order so far. Below the connected upload/link
+             area and outside the <label>, so removing a file does not open
+             the file picker. ---- */}
+        {!again && files.length > 0 && (
+          <ul aria-label="Files on this order" className="m-0 mt-[13.2px] flex list-none flex-col gap-[6px] p-0">
+            {files.map((f) => {
+              const kind = kindOf(f.name) ?? "model";
+              const badge = KIND_BADGE[kind];
+              return (
+                <li
+                  key={`${f.name}:${f.size}`}
+                  className="flex items-center gap-[11px] rounded-card border-[3px] border-ink bg-porcelain px-[11px] py-[7px]"
+                >
+                  <FileThumb file={f} kind={kind} />
+                  <span
+                    className={`flex-none rounded-chip border-2 border-ink px-[7px] py-[1px] font-mono text-[10.5px] font-bold uppercase tracking-[0.06em] ${badge.className}`}
+                  >
+                    {badge.label}
+                  </span>
+                  <span className="min-w-0 flex-1 break-words text-[14.5px] font-bold text-ink">
+                    {f.name}
+                    {f === primary && (
+                      <span className="ml-[8px] font-mono text-[10.5px] font-bold uppercase tracking-[0.06em] text-cherry-dk">
+                        main model
+                      </span>
+                    )}
+                  </span>
+                  <span className="flex-none font-mono text-[12px] text-ink-3">{formatBytes(f.size)}</span>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => removeFile(f)}
+                    aria-label={`Remove ${f.name}`}
+                    className="flex-none cursor-pointer rounded-chip border-2 border-ink bg-cream px-[8px] py-[1px] font-mono text-[13px] font-bold text-ink hover:bg-cherry hover:text-cream disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    ✕
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         )}
 
         {/* ---- or find one (only where the instance has switched importing on) ---- */}
@@ -1566,7 +1639,6 @@ export function UploadForm({
           </div>
         )}
 
-        {step === 1 && error}
       </StepCard>
 
       {/* ================= 2 · material ================= */}
@@ -1574,19 +1646,27 @@ export function UploadForm({
         n={2}
         title="Material"
         open={step === 2}
-        done={reached > 2 && problemOn(2) === null}
+        done={material !== null}
         summary={materialSummary}
+        preview={material !== null && (
+          <span className="grid h-full w-full place-items-center rounded-card border-[3px] border-ink bg-sun-wash text-ink">
+            {auto ? (
+              <svg aria-hidden viewBox="0 0 24 24" className="h-[28px] w-[28px]" fill="var(--color-sun)" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round">
+                <path d="m14 3 2.4 6.6L23 12l-6.6 2.4L14 21l-2.4-6.6L5 12l6.6-2.4L14 3Z" />
+                <path d="m4 2 .8 2.2L7 5l-2.2.8L4 8l-.8-2.2L1 5l2.2-.8L4 2Z" />
+              </svg>
+            ) : (
+              <NavIcon name="spool" size={32} edge={false} />
+            )}
+          </span>
+        )}
         disabled={busy}
-        allFolded={step === null}
-        onOpen={() => goTo(2)}
+        onOpen={() => {
+          if (material === null) chooseMaterial(AUTO_MATERIAL);
+          goTo(2);
+        }}
         onClose={foldAll}
         cardRef={(el) => void (cards.current[1] = el)}
-        footer={
-          <>
-            {back(1, "what to print")}
-            {next("color")}
-          </>
-        }
       >
         {gone.length > 0 && (
           <div className="mb-[22px]">
@@ -1597,20 +1677,25 @@ export function UploadForm({
           </div>
         )}
 
-        {/* ---- the dropdown, and an info button that opens what the one picked is like below it ---- */}
-        <div className="flex max-w-[520px] items-center gap-[6px]">
-          <div className="min-w-0 flex-1">
-            <label htmlFor="material" className="sr-only">
-              Material
-            </label>
-            <Dropdown
-              id="material"
-              options={[AUTO_MATERIAL, ...catalog.map((item) => item.name)]}
-              value={material}
-              onChange={chooseMaterial}
-              placeholder="Pick a filament, or Auto"
-            />
-          </div>
+        {/* Clicking Add Material sets Auto; switching it off reveals the material picker. */}
+        <div className="flex max-w-[520px] items-center justify-between gap-[6px]">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={auto}
+            aria-controls="material-choice"
+            disabled={busy || (auto && !manualMaterial.current)}
+            onClick={() => chooseMaterial(auto ? manualMaterial.current ?? AUTO_MATERIAL : AUTO_MATERIAL)}
+            className="flex min-h-[44px] cursor-pointer items-center gap-[12px] rounded-chip border-0 bg-transparent p-0 font-display text-[18px] font-bold text-ink disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <span>Auto</span>
+            <span
+              aria-hidden
+              className={`relative block h-[28px] w-[52px] flex-none rounded-full border-[3px] border-ink transition-colors motion-reduce:transition-none ${auto ? "bg-mint" : "bg-cream-3"}`}
+            >
+              <span className={`absolute left-[2px] top-[2px] h-[18px] w-[18px] rounded-full border-2 border-ink bg-porcelain transition-transform motion-reduce:transition-none ${auto ? "translate-x-[24px]" : "translate-x-0"}`} />
+            </span>
+          </button>
           <button
             type="button"
             aria-label="About this filament"
@@ -1624,6 +1709,22 @@ export function UploadForm({
             <NavIcon name="info" />
           </button>
         </div>
+        <div id="material-choice" className="max-w-[520px]">
+          {!auto && (
+            <div className="mt-[12px]">
+              <label htmlFor="material" className="sr-only">
+                Material
+              </label>
+              <Dropdown
+                id="material"
+                options={catalog.map((item) => item.name)}
+                value={material}
+                onChange={chooseMaterial}
+                placeholder="Pick a filament"
+              />
+            </div>
+          )}
+        </div>
         <div
           id="material-about"
           hidden={!aboutMaterial}
@@ -1632,7 +1733,6 @@ export function UploadForm({
           <MaterialFacts item={selectedMaterial} auto={auto} owner={owner} />
         </div>
 
-        {step === 2 && error}
       </StepCard>
 
       {/* ================= 3 · color ================= */}
@@ -1640,148 +1740,171 @@ export function UploadForm({
         n={3}
         title="Color"
         open={step === 3}
-        done={reached > 3 && problemOn(3) === null}
+        done={colorChosen}
         summary={colorSummary}
+        preview={colorPreview && (
+          <ColorSwatch
+            mode={colorPreview.mode}
+            style={colorPreview.style}
+            className="h-full w-full rounded-card border-[3px] border-ink"
+          />
+        )}
         disabled={busy}
-        allFolded={step === null}
         onOpen={() => goTo(3)}
         onClose={foldAll}
         cardRef={(el) => void (cards.current[2] = el)}
-        footer={
-          <>
-            {back(2, "material")}
-            {next("send it")}
-          </>
-        }
       >
-        {/* ---- the shelf as circles: the material's own, or every material's ---- */}
-        {/* Keyed by material: another shelf starts back on its circles. */}
+        {/* The material's saved swatches, or every material's for Auto. */}
+        {/* Keyed by material: another shelf starts back on Library. */}
         <section aria-label="Color">
+          {storeSelectionRemoved && (
+            <div className="mb-[17px]">
+              <Notice tone="info">
+                Your previous Store choice needs a confirmed {MIN_DONATION_LABEL} donation. This order starts with a Library color; choose one below or donate to unlock Store.
+              </Notice>
+            </div>
+          )}
+          <Suspense fallback={<p role="status" className="m-0 py-[22px] text-center text-[14px] text-ink-2">Loading colors…</p>}>
           <ColorMenu
             key={material ?? ""}
-            colors={selectedMaterial ? selectedMaterial.colors : catalog.flatMap((item) => item.colors)}
+            colors={shelfChoices}
+            storeAccess={storeAccess}
             value={near}
             alpha={nearAlpha}
-            onChange={(hex, alpha) => chooseNear(hex, alpha, true)}
+            material={selectedMaterial?.name}
+            personalPalette={personalPalette}
+            filamentConfig={filamentConfig}
+            selectedFilament={nearFilament}
+            selectedShelf={nearShelf}
+            onChange={(hex, alpha, filament, shelf, name) => chooseNear(hex, alpha, true, filament, shelf, name)}
+            otherColors={storeAccess && selectedMaterial && (
+              <>
+                {near && !toBuy && closestShelfColor(selectedMaterial, near) === null && (
+                  <p aria-live="polite" className="m-0 mt-[13.2px] text-[13.5px] leading-[1.45] text-ink-2">
+                    Nothing {owner} has in {selectedMaterial.name} looks like your color. Pick a spool {owner} can get
+                    below, or choose a color from Library.
+                  </p>
+                )}
+                <hr aria-hidden className="mx-0 my-[24px] border-0 border-t-[3px] border-dashed border-ink/25" />
+                {/* Keyed by material: another material starts folded, with a fresh library search. */}
+                <OtherColors
+                  key={selectedMaterial.name}
+                  material={selectedMaterial.name}
+                  owner={owner}
+                  filamentConfig={filamentConfig}
+                  colorType={nearFilament ? filamentColorType(nearFilament) : undefined}
+                  picked={toBuy}
+                  onPick={chooseToBuy}
+                  near={near}
+                  onNear={(hex) => chooseNear(hex)}
+                  clear={near !== null && nearAlpha <= SEE_THROUGH}
+                  suggested={near !== null && closestShelfColor(selectedMaterial, near) === null}
+                />
+              </>
+            )}
           />
+          </Suspense>
         </section>
 
-        {selectedMaterial && (
-          <>
-            {near && !toBuy && closestShelfColor(selectedMaterial, near) === null && (
-              <p aria-live="polite" className="m-0 mt-[13.2px] text-[13.5px] leading-[1.45] text-ink-2">
-                Nothing {owner} has in {selectedMaterial.name} looks like your color. Pick a spool {owner} can get
-                below, or one of the circles.
-              </p>
-            )}
-            <hr aria-hidden className="mx-0 my-[24px] border-0 border-t-[3px] border-dashed border-ink/25" />
-            {/* Keyed by material: another material starts folded, with a fresh library search. */}
-            <OtherColors
-              key={selectedMaterial.name}
-              material={selectedMaterial.name}
-              owner={owner}
-              picked={toBuy}
-              onPick={chooseToBuy}
-              near={near}
-              onNear={(hex) => chooseNear(hex)}
-              clear={near !== null && nearAlpha <= SEE_THROUGH}
-              suggested={near !== null && closestShelfColor(selectedMaterial, near) === null}
-            />
-          </>
-        )}
-
-        {step === 3 && error}
       </StepCard>
+      </div>
 
-      {/* ================= 4 · send it ================= */}
-      <StepCard
-        n={4}
-        title="Send it"
-        open={step === 4}
-        done={false}
-        summary={sendSummary}
-        disabled={busy}
-        allFolded={step === null}
-        onOpen={() => goTo(4)}
-        onClose={foldAll}
-        cardRef={(el) => void (cards.current[3] = el)}
-        footer={
-          <>
-            {back(3, "color")}
-            <div className="ml-auto flex flex-wrap items-end gap-[13.2px]">
-              {/* Amount sits by the send button: the last thing settled before it goes. */}
-              <div>
-                <Label htmlFor="quantity">Amount</Label>
-                <div className="inline-flex items-center gap-[6px] py-[3px]">
-                  <button
-                    type="button"
-                    onClick={() => stepQuantity(-1)}
-                    disabled={quantity <= 1}
-                    aria-label="One fewer"
-                    className={STEP_BUTTON}
-                  >
-                    <svg viewBox="0 0 20 20" width={18} height={18} aria-hidden="true">
-                      <path d="M4 10h12" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" />
-                    </svg>
-                  </button>
-                  <input
-                    id="quantity"
-                    type="number"
-                    inputMode="numeric"
-                    min={1}
-                    max={MAX_QUANTITY}
-                    value={quantityDraft ?? quantity}
-                    onChange={(e) => {
-                      setQuantityDraft(e.target.value);
-                      // Only a whole number of at least one becomes the quantity. The
-                      // upper limit is left to the server, whose refusal says who to ask.
-                      const n = Number(e.target.value);
-                      if (Number.isInteger(n) && n >= 1) setQuantity(n);
-                    }}
-                    // Leaving the box settles it: whatever is not a quantity gives way
-                    // to the last one that was.
-                    onBlur={() => setQuantityDraft(null)}
-                    className="w-[48px] appearance-none rounded-chip border-0 bg-transparent px-[4px] py-[10px] text-center font-mono text-[16px] font-bold tabular-nums text-ink [-moz-appearance:textfield] focus:bg-cream-2 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => stepQuantity(1)}
-                    disabled={quantity >= MAX_QUANTITY}
-                    aria-label="One more"
-                    className={STEP_BUTTON}
-                  >
-                    <svg viewBox="0 0 20 20" width={18} height={18} aria-hidden="true">
-                      <path d="M4 10h12M10 4v12" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              <Button type="submit" disabled={busy} className="px-[30px]">
-                {busy
-                  ? again ? "Sending…" : picked ? "Fetching it…" : `Sending… ${phase.percent}%`
-                  : again ? `Send it to ${owner} again` : `Send it to ${owner}`}
-              </Button>
+      {error}
+
+      {/* Optional details and the send action stay outside the setup board. */}
+      <div className="flex flex-col items-center gap-[17.6px]">
+        {/* Equal side columns keep the counter centered as the note action changes. */}
+        <div className="pixel-surface pixel-surface-copies grid w-[88%] max-w-[440px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-[4px] rounded-full px-[8px] py-[6px] sm:gap-[12px] sm:px-[22px] sm:py-[8px]">
+          <div className="col-start-2 row-start-1">
+            <div className="flex items-center justify-center gap-[2px]">
+              <button type="button" onClick={() => stepQuantity(-1)} disabled={busy || quantity <= 1} aria-label="One fewer" className={STEP_BUTTON}>
+                <svg viewBox="0 0 20 20" width={18} height={18} aria-hidden="true">
+                  <path d="M4 10h12" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" />
+                </svg>
+              </button>
+              <input
+                id="quantity"
+                aria-label="Quantity"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={MAX_QUANTITY}
+                disabled={busy}
+                value={quantityDraft ?? quantity}
+                onChange={(e) => {
+                  setQuantityDraft(e.target.value);
+                  // Incomplete drafts keep the last valid quantity until blur.
+                  const n = Number(e.target.value);
+                  if (Number.isInteger(n) && n >= 1) setQuantity(n);
+                }}
+                onBlur={() => setQuantityDraft(null)}
+                className="w-[40px] appearance-none rounded-chip border-0 bg-transparent px-[4px] py-[10px] text-center font-mono text-[18px] font-bold tabular-nums text-ink [-moz-appearance:textfield] focus:bg-porcelain [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+              <button type="button" onClick={() => stepQuantity(1)} disabled={busy || quantity >= MAX_QUANTITY} aria-label="One more" className={STEP_BUTTON}>
+                <svg viewBox="0 0 20 20" width={18} height={18} aria-hidden="true">
+                  <path d="M4 10h12M10 4v12" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" />
+                </svg>
+              </button>
             </div>
-          </>
-        }
-      >
-        {/* ---- note ---- */}
-        <div>
-          {/* Named, not "he" — the printer owner is a role anyone can hold. */}
-          <Label htmlFor="note">Anything {owner} should know</Label>
+          </div>
+          <button
+            type="button"
+            aria-label={addingNote ? "Hide note" : note.trim() ? "Edit note" : "Add note"}
+            title={addingNote ? "Hide note" : note.trim() ? "Edit note" : "Add note"}
+            aria-expanded={addingNote}
+            aria-controls="note-details"
+            onClick={() => {
+              setAddingNote((open) => !open);
+              navigator.vibrate?.(12);
+            }}
+            disabled={busy}
+            className={`col-start-3 row-start-1 grid h-[44px] w-[44px] max-w-full cursor-pointer place-items-center self-end justify-self-end rounded-chip border-2 p-[8px] text-ink transition-colors hover:border-ink hover:bg-sun-wash disabled:cursor-not-allowed disabled:opacity-40 ${addingNote || note.trim() ? "border-ink bg-porcelain" : "border-transparent bg-transparent"}`}
+          >
+            <NavIcon name="note" size={24} edge={false} />
+          </button>
+        </div>
+        <div id="note-details" hidden={!addingNote} className="w-[88%] min-w-0 max-w-[720px]">
           <textarea
             id="note"
+            aria-label="Notes"
             rows={3}
             value={note}
             onChange={(e) => setNote(e.target.value)}
             maxLength={2000}
-            placeholder="No rush — needs to survive a bit of pulling."
+            disabled={busy}
+            placeholder="Add notes"
             className="w-full resize-y rounded-card border-[3px] border-ink bg-porcelain px-[15px] py-[12px] text-[16px] text-ink placeholder:text-ink-3"
           />
         </div>
-
-        {step === 4 && error}
-      </StepCard>
+        <Button
+          type="submit"
+          variant="ghost"
+          disabled={busy}
+          aria-label={busy ? undefined : again ? "Print It! again" : "Print It!"}
+          aria-busy={busy}
+          onPointerDown={(event) => { event.currentTarget.dataset.logoPressed = "true"; }}
+          onPointerUp={(event) => { delete event.currentTarget.dataset.logoPressed; }}
+          onPointerCancel={(event) => { delete event.currentTarget.dataset.logoPressed; }}
+          onPointerLeave={(event) => { delete event.currentTarget.dataset.logoPressed; }}
+          className="inline-flex min-w-[210px] max-w-full items-center justify-center !bg-porcelain !shadow-none px-[30px] hover:!bg-porcelain"
+          data-send-request
+        >
+          {busy
+            ? again ? "Sending…" : picked ? "Fetching it…" : `Sending… ${phase.percent}%`
+            : (
+              <span aria-hidden className="print-button-logo flex h-[33px] w-[144px] items-center">
+                {/* eslint-disable-next-line @next/next/no-img-element -- fixed-size button artwork */}
+                <img
+                  src={ARTWORK.wordmarkStraight}
+                  alt=""
+                  width={759}
+                  height={127}
+                  className="block h-auto w-full"
+                />
+              </span>
+            )}
+        </Button>
+      </div>
     </form>
   );
 }

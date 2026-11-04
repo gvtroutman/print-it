@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="480" viewBox="0 0 600 480" preserveAspectRatio="none">
+  <defs>
+    <!-- Broad, muted folds keep the small cream lettering clear. -->
+    <linearGradient id="cloth" x1="0" y1="0" x2="600" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#861d24"/>
+      <stop offset=".07" stop-color="#9e2024"/>
+      <stop offset=".12" stop-color="#b52524"/>
+      <stop offset=".18" stop-color="#aa2224"/>
+      <stop offset=".24" stop-color="#b92927"/>
+      <stop offset=".29" stop-color="#ab2224"/>
+      <stop offset=".37" stop-color="#b92927"/>
+      <stop offset=".43" stop-color="#ab2224"/>
+      <stop offset=".5" stop-color="#bd2e29"/>
+      <stop offset=".57" stop-color="#ab2224"/>
+      <stop offset=".63" stop-color="#b92927"/>
+      <stop offset=".71" stop-color="#ab2224"/>
+      <stop offset=".76" stop-color="#b92927"/>
+      <stop offset=".82" stop-color="#aa2224"/>
+      <stop offset=".88" stop-color="#b52524"/>
+      <stop offset=".93" stop-color="#9e2024"/>
+      <stop offset="1" stop-color="#861d24"/>
+    </linearGradient>
+    <pattern id="weave" width="4" height="4" patternUnits="userSpaceOnUse">
+      <path d="M0 .5 H4 M.5 0 V4" fill="none" stroke="#fff6e9" stroke-opacity=".035" stroke-width=".5"/>
+      <circle cx="2" cy="2" r=".35" fill="#221a14" fill-opacity=".05"/>
+    </pattern>
+  </defs>
+  <!-- Both layers repeat cleanly at the top and bottom of the fabric. -->
+  <path d="M0 0 H600 V480 H0 Z" fill="url(#cloth)"/>
+  <path d="M0 0 H600 V480 H0 Z" fill="url(#weave)"/>
+</svg>

@@ -8,22 +8,26 @@ notifications and audit trail a print goes through. It lives at **`/frr`**.
 
 ## For everyone
 
-- **`/frr`** — the rail. Your own requests (the owner sees everyone's), one
-  column per stage, with anything closed gathered under *Closed* so you keep
-  your history without a second page. A **filter bar** narrows by priority,
-  status and category (the choices ride in the URL, applied server-side, so a
-  filter can only ever shrink what you were already allowed to see).
-- **`/frr/new`** — file one: a title, what-and-why, a **priority**
-  (low / medium / high) and a **category** (UI / API / bug / other).
-- **`/frr/[id]`** — the request in full: where it sits in the flow, the
-  conversation, a **priority** control — three buttons, the current one filled
-  in (the requester may change it in **any**
-  status — a closed request can still be re-ranked; the owner may change any),
-  and — while nobody has started on it — a **Withdraw** control for the person
-  who filed it.
+- **`/frr`** — members see a simple list of their own open requests, each with
+  its current status and replies. Completed and declined requests sit under
+  **Past requests**. **Filter requests** expands optional priority, status and
+  category filters; an active filter keeps that section and matching past
+  requests open. Choices ride in the URL and are applied server-side, so a
+  filter can only shrink what you were already allowed to see.
+- **`/frr/new`** — a title and description, then **Send request**. Members can
+  expand **More options (optional)** to set priority or category; otherwise
+  those stay at medium / other. The owner's options start expanded.
+- **`/frr/[id]`** — members see the request, a plain-language status update and
+  the conversation. **Request options** below the replies holds category,
+  the priority control (editable in any status), and **Withdraw** when the
+  request is still Requested or has been Declined. Withdrawal has its own
+  confirmation. These disclosures and forms work without JavaScript.
 
 ## For the owner
 
+- **`/frr`** — the stage board for everyone's requests, with the full filter
+  bar and closed requests below. Request detail pages retain the metadata,
+  full timeline and workflow controls.
 - **`/frr/queue`** — triage, reached by the **Triage** button on `/frr`.
   *Waiting on you* (still `Requested`) comes first, ordered high-priority
   first; everything in flight is a list with one control each. The same

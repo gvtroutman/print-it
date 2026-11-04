@@ -1,0 +1,25 @@
+{
+  "id": "/",
+  "name": "Print It!",
+  "short_name": "Print It!",
+  "description": "Request prints and collect Amazon filament listings.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "related_applications": [
+    { "platform": "webapp", "url": "/manifest.webmanifest", "id": "/" }
+  ],
+  "background_color": "#fff6e9",
+  "theme_color": "#fff6e9",
+  "icons": [
+    { "src": "/pwa/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/pwa/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/pwa/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "share_target": {
+    "action": "/share-filament",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  }
+}

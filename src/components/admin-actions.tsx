@@ -1,6 +1,8 @@
-import { advanceStory, clearFlag, declineStory, flagStory } from "@/app/actions/stories";
+import { advanceStory, clearFlag, declineStory, flagStory, recordStoryFilament } from "@/app/actions/stories";
 import { nextStatus } from "@/lib/scope";
 import type { StoryStatus } from "@prisma/client";
+import { PreparationControl } from "@/components/preparation-control";
+import { PrintTimeControl } from "@/components/print-time-control";
 
 /**
  * The printer owner's controls for one ticket.
@@ -16,6 +18,10 @@ export function AdminActions({
   status,
   flagged,
   flagReason,
+  filamentMeters = null,
+  printHours = null,
+  prepared = false,
+  hasModel = true,
   from,
   compact = false,
 }: {
@@ -23,6 +29,10 @@ export function AdminActions({
   status: StoryStatus;
   flagged: boolean;
   flagReason?: string | null;
+  filamentMeters?: string | null;
+  printHours?: string | null;
+  prepared?: boolean;
+  hasModel?: boolean;
   /** Where to return with the result. Validated server-side. */
   from: string;
   compact?: boolean;
@@ -42,10 +52,21 @@ export function AdminActions({
   return (
     <div className={compact ? "flex flex-wrap items-start gap-[8px]" : "flex flex-col gap-[13.2px]"}>
       <div className="flex flex-wrap items-start gap-[8px]">
-        {next && (
+        {status === "Accepted" && <PreparationControl storyId={storyId} prepared={prepared} blocked={flagged || !hasModel} from={from} />}
+        {next && (status !== "Accepted" || (prepared && !flagged && hasModel)) && (
           <form action={advanceStory}>
             <input type="hidden" name="id" value={storyId} />
             <input type="hidden" name="from" value={from} />
+            {next === "Delivery" && (
+              <div className="mb-[8px] max-w-[260px]">
+                <label htmlFor={`filament-finish-${storyId}`} className="block text-[13px] font-bold text-ink">Filament used (meters)</label>
+                <input id={`filament-finish-${storyId}`} type="number" name="filamentMeters" min="0" max="1000000" step="0.001" defaultValue={filamentMeters ?? ""} placeholder="Optional" className="mt-[5px] w-full min-w-0 rounded-[8px] border-[3px] border-ink bg-porcelain px-[11px] py-[7px] text-[14px] text-ink" />
+                <p className="mb-0 mt-[4px] text-[12px] leading-[1.4] text-ink-2">Actual total extruded, including all copies.</p>
+                <label htmlFor={`time-finish-${storyId}`} className="mt-[8px] block text-[13px] font-bold text-ink">Print time (hours)</label>
+                <input id={`time-finish-${storyId}`} type="number" name="printHours" min="0" max="1000000" step="0.001" defaultValue={printHours ?? ""} placeholder="Optional" className="mt-[5px] w-full min-w-0 rounded-[8px] border-[3px] border-ink bg-porcelain px-[11px] py-[7px] text-[14px] text-ink" />
+                <p className="mb-0 mt-[4px] text-[12px] leading-[1.4] text-ink-2">Actual printer runtime for all copies. 1.5 hours = 1 hour 30 minutes.</p>
+              </div>
+            )}
             <button
               type="submit"
               className="stamp cursor-pointer rounded-chip border-[3px] border-ink bg-cherry-dk px-[18px] py-[8px] text-[14px] font-bold text-cream hover:bg-cherry"
@@ -53,6 +74,22 @@ export function AdminActions({
               {isNew ? "Accept it" : `Move to ${next}`}
             </button>
           </form>
+        )}
+
+        <PrintTimeControl storyId={storyId} status={status} printHours={printHours} from={from} />
+
+        {!compact && (status === "Delivery" || status === "Done") && (
+          <details>
+            <summary className="stamp inline-block cursor-pointer list-none rounded-chip border-[3px] border-ink bg-porcelain px-[15px] py-[8px] text-[14px] font-bold text-ink hover:bg-sun">Record filament used</summary>
+            <form action={recordStoryFilament} className="mt-[8px] max-w-[340px] rounded-card border-[3px] border-ink bg-cream-2 p-[11px]">
+              <input type="hidden" name="id" value={storyId} />
+              <input type="hidden" name="from" value={from} />
+              <label htmlFor={`filament-record-${storyId}`} className="block text-[13px] font-bold text-ink">Filament used (meters)</label>
+              <input id={`filament-record-${storyId}`} type="number" name="filamentMeters" min="0" max="1000000" step="0.001" defaultValue={filamentMeters ?? ""} placeholder="Unknown" className="mt-[5px] w-full min-w-0 rounded-[8px] border-[3px] border-ink bg-porcelain px-[11px] py-[7px] text-[14px] text-ink" />
+              <p className="mb-[8px] mt-[4px] text-[12px] leading-[1.4] text-ink-2">Actual total extruded, including all copies. Leave blank if unknown.</p>
+              <button type="submit" className="stamp cursor-pointer rounded-chip border-[3px] border-ink bg-mint px-[15px] py-[7px] text-[13.5px] font-bold text-ink">Save usage</button>
+            </form>
+          </details>
         )}
 
         {/* A reason is required, so this cannot be a one-click button. */}

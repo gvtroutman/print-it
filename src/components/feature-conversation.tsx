@@ -20,11 +20,11 @@ export function FeatureConversation({
 }) {
   return (
     <section className="mt-[26.4px]">
-      <h2 className="m-0 mb-[13.2px] font-display text-[22px] text-ink">Talk it over</h2>
+      <h2 className="m-0 mb-[13.2px] font-display text-[22px] text-ink">{viewerRole === "admin" ? "Talk it over" : "Replies"}</h2>
 
       {comments.length === 0 ? (
-        <p className="m-0 mb-[13.2px] rounded-card border-[3px] border-dashed border-ink-3 bg-cream-2 px-[15px] py-[13.2px] font-mono text-[12px] uppercase tracking-[0.05em] text-ink-3">
-          Nothing said yet
+        <p className="m-0 mb-[13.2px] text-[14px] leading-[1.5] text-ink-2">
+          No replies yet. Add a detail or ask a question below.
         </p>
       ) : (
         <ol className="m-0 mb-[13.2px] flex list-none flex-col gap-[11px] p-0">
@@ -41,7 +41,7 @@ export function FeatureConversation({
                   {c.author.initials}
                 </span>
                 <div
-                  className={`flex-1 rounded-card border-[3px] border-ink p-[13.2px] shadow-stamp ${
+                  className={`min-w-0 flex-1 rounded-card border-[3px] border-ink p-[13.2px] shadow-stamp ${
                     fromOwner ? "bg-sun-wash" : "bg-porcelain"
                   }`}
                 >
@@ -50,7 +50,7 @@ export function FeatureConversation({
                     {fromOwner ? " · the printer" : ""} · {relativeTime(c.createdAt)}
                   </p>
                   {/* React escapes this; a hostile body renders as text. */}
-                  <p className="m-0 whitespace-pre-wrap text-[15.5px] leading-[1.5] text-ink">
+                  <p className="m-0 whitespace-pre-wrap break-words text-[15.5px] leading-[1.5] text-ink">
                     {c.body}
                   </p>
                 </div>

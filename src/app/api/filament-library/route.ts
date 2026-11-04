@@ -1,12 +1,15 @@
 import { fail, ok, withActor } from "@/lib/api";
 import { SWATCH_SHADES, swatchImagePath, type SwatchChoice, type SwatchShade } from "@/lib/catalog";
 import { LibraryUnavailable, searchLibrary, swatchColour } from "@/lib/filament-library";
+import { FILAMENT_COLOR_TYPES, type FilamentColorType } from "@/lib/filament-color-types";
+import { printedSwatchId } from "@/lib/filament-ids";
+import { STORE_ACCESS_REQUIRED } from "@/lib/donation-policy";
+import { hasStoreAccess } from "@/lib/store-access";
 
 /**
  * Spools the owner does not have but can buy, for one material: the
- * filamentcolors.xyz library, with SpoolmanDB filling in where it finds too
- * few (negative ids), searched on the server because the browser may not
- * talk to either site (`connect-src 'self'`).
+ * photographed printed samples from filamentcolors.xyz and linked owner
+ * listings, searched on the server (`connect-src 'self'`).
  *
  * `material` is a catalogue material's name and decides which kind of
  * filament is listed; `q` narrows by words in the name, maker or type, and
@@ -16,7 +19,7 @@ import { LibraryUnavailable, searchLibrary, swatchColour } from "@/lib/filament-
  * puts see-through spools first, for a colour picked partly transparent. At most
  * `SEARCH_LIMIT` swatches come back, with `total` saying how many matched.
  *
- * Any signed-in person may search — it is what the request form shows them.
+ * Members may search after a confirmed donation; the owner always has access.
  * Picking one opens a request with `swatchId`, and the server reads the
  * swatch back from its own copy of the library then; nothing here is trusted
  * at that point.
@@ -24,7 +27,8 @@ import { LibraryUnavailable, searchLibrary, swatchColour } from "@/lib/filament-
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export const GET = withActor(async (request) => {
+export const GET = withActor(async (request, actor) => {
+  if (!await hasStoreAccess(actor)) return fail(403, STORE_ACCESS_REQUIRED);
   const params = new URL(request.url).searchParams;
   const material = (params.get("material") ?? "").trim().slice(0, 40);
   if (!material) return fail(400, "Say which material to look for.");
@@ -36,10 +40,13 @@ export const GET = withActor(async (request) => {
   const near = nearParam && /^#?[0-9a-f]{6}$/i.test(nearParam) ? `#${nearParam.replace("#", "").toLowerCase()}` : null;
   if (nearParam && !near) return fail(400, "That is not a colour — send #rrggbb.");
   const clear = params.get("clear") === "1";
+  const colorTypeParam = params.get("colorType");
+  if (colorTypeParam && !FILAMENT_COLOR_TYPES.includes(colorTypeParam as FilamentColorType)) return fail(400, "That is not a color type.");
+  const colorType = colorTypeParam as FilamentColorType | null;
 
   try {
-    const { total, swatches } = await searchLibrary(material, { query, shade: shade as SwatchShade | null, near, clear });
-    return ok({
+    const { total, swatches } = await searchLibrary(material, { query, shade: shade as SwatchShade | null, near, clear, colorType: colorType ?? undefined });
+    const response = ok({
       total,
       // Every field named — see `storyResource` in src/lib/api.ts.
       swatches: swatches.map((s) => ({
@@ -51,11 +58,17 @@ export const GET = withActor(async (request) => {
         hex: swatchColour(s),
         shade: s.shade,
         buyUrl: s.buyUrl,
+        purchaseOptions: s.purchaseOptions,
         pageUrl: s.pageUrl,
+        colorType: s.colorType,
+        translucent: s.translucent,
+        colors: s.colors,
         // This app's copy of the library's photo, not the library's own URL.
-        image: s.photoUrl || s.imageUrl ? swatchImagePath(s.id) : null,
+        image: s.sampleImage ?? swatchImagePath(printedSwatchId(s.pageUrl) ?? s.id),
       })) satisfies SwatchChoice[],
     });
+    response.headers.set("Cache-Control", "private, no-store");
+    return response;
   } catch (error) {
     if (error instanceof LibraryUnavailable) {
       return fail(503, "The spool libraries cannot be reached right now. Try again in a minute.");

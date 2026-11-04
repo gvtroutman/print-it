@@ -10,6 +10,8 @@ import { requireAdmin } from "@/lib/authz";
 import { record } from "@/lib/audit";
 import { AUTO_MATERIAL, COLOR_MODES, MAX_MATERIAL_DESCRIPTION, WHATEVER_HEX, WHATEVER_STYLE, funfettiStyle } from "@/lib/catalog";
 import { TOP_MARK, TRAITS, asMark, type OwnerRatings } from "@/lib/filament-traits";
+import { resolveAmazonListing } from "../../../../scripts/lib/resolve-amazon-listing";
+import { libraryScannedSwatches } from "@/lib/library-swatches";
 
 const Name = z.string().trim().min(1).max(40).transform((value) => value.replace(/\s+/g, " "));
 /** One paragraph: line breaks and runs of spaces fold to single spaces. */
@@ -28,7 +30,7 @@ const OwnMark = z.string().trim().transform((value, ctx) => {
 const Direction = z.enum(["up", "down"]);
 const Mode = z.enum(COLOR_MODES);
 
-function colorInput(formData: FormData) {
+async function colorInput(formData: FormData) {
   const parsedName = Name.safeParse(formData.get("name"));
   if (!parsedName.success) back("error", "Give the color a name between 1 and 40 characters.");
   const name = parsedName.data;
@@ -49,7 +51,15 @@ function colorInput(formData: FormData) {
       : mode === "funfetti"
         ? funfettiStyle(hex)
         : hex;
-  return { name, hex, style, mode };
+  // An older open form has no link field; preserve its saved link on edit.
+  let amazonUrl: string | null | undefined;
+  if (formData.has("amazonUrl")) {
+    const raw = String(formData.get("amazonUrl") ?? "").trim();
+    if (raw.length > 2048) back("error", "The filament product link must be at most 2048 characters.");
+    amazonUrl = mode === "whatever" || !raw ? null : await resolveAmazonListing(raw);
+    if (mode !== "whatever" && raw && !amazonUrl) back("error", "Use an exact Amazon product/color link for the filament, or leave it blank.");
+  }
+  return { name, hex, style, mode, amazonUrl };
 }
 
 function back(kind: "toast" | "error", message: string): never {
@@ -58,6 +68,72 @@ function back(kind: "toast" | "error", message: string): never {
 
 function duplicate(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
+
+function refreshColors() {
+  revalidatePath("/admin/catalog");
+  revalidatePath("/upload");
+  revalidatePath("/story/[id]/again", "page");
+}
+
+export async function addScannedColorAction(formData: FormData): Promise<void> {
+  const admin = await requireAdmin();
+  const materialId = String(formData.get("materialId") ?? "");
+  const material = await db.catalogMaterial.findUnique({
+    where: { id: materialId }, include: { colors: { select: { sortOrder: true } } },
+  });
+  if (!material) back("error", "That material no longer exists.");
+  const scan = libraryScannedSwatches(material.name).find(scan => scan.id === formData.get("sourceId"));
+  if (!scan) back("error", "Choose a scanned swatch compatible with this material.");
+  const { name, hex, style, mode } = scan;
+  try {
+    await db.catalogColor.create({ data: { materialId, name, hex, style, mode,
+      sortOrder: material.colors.reduce((max, color) => Math.max(max, color.sortOrder), -1) + 1 } });
+  } catch (error) {
+    if (duplicate(error)) back("error", `${material.name} already has a color named ${name}.`);
+    throw error;
+  }
+  await record({ action: "catalog.color_added", actor: admin, subject: `${material.name} · ${name}`,
+    detail: { sourceId: scan.id, hex, style, mode } });
+  refreshColors();
+  back("toast", `${name} added to the ${material.name} Library.`);
+}
+
+const OrderedIds = z.array(z.string().min(1).max(100)).max(2000);
+
+export async function reorderColorsAction(formData: FormData): Promise<{ error?: string; saved?: boolean }> {
+  const admin = await requireAdmin();
+  let ids: string[], previousIds: string[];
+  try {
+    ids = OrderedIds.parse(JSON.parse(String(formData.get("ids") ?? "")));
+    previousIds = OrderedIds.parse(JSON.parse(String(formData.get("previousIds") ?? "")));
+  } catch { return { error: "Supply a valid swatch order." }; }
+  if (new Set(ids).size !== ids.length || new Set(previousIds).size !== previousIds.length)
+    return { error: "Each swatch must appear exactly once." };
+  const materialId = String(formData.get("materialId") ?? "");
+  const stale = "The Library changed while you were editing. Refresh and try again.";
+  let result: { error: string } | { name: string };
+  try {
+    result = await db.$transaction(async tx => {
+      const material = await tx.catalogMaterial.findUnique({ where: { id: materialId },
+        include: { colors: { orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true } } } });
+      if (!material) return { error: "That material no longer exists." };
+      const current = material.colors.map(color => color.id);
+      if (current.length !== ids.length || current.length !== previousIds.length
+        || current.some((id, index) => id !== previousIds[index]) || ids.some(id => !current.includes(id)))
+        return { error: stale };
+      for (const [sortOrder, id] of ids.entries())
+        await tx.catalogColor.update({ where: { id }, data: { sortOrder } });
+      return { name: material.name };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") return { error: stale };
+    throw error;
+  }
+  if ("error" in result) return result;
+  await record({ action: "catalog.color_reordered", actor: admin, subject: result.name, detail: { ids } });
+  refreshColors();
+  return { saved: true };
 }
 
 export async function addMaterialAction(formData: FormData): Promise<void> {
@@ -227,7 +303,7 @@ export async function moveMaterialAction(formData: FormData): Promise<void> {
 export async function addColorAction(formData: FormData): Promise<void> {
   const admin = await requireAdmin();
   const materialId = String(formData.get("materialId") ?? "");
-  const { name, hex, style, mode } = colorInput(formData);
+  const { name, hex, style, mode, amazonUrl } = await colorInput(formData);
 
   const material = await db.catalogMaterial.findUnique({
     where: { id: materialId },
@@ -237,7 +313,7 @@ export async function addColorAction(formData: FormData): Promise<void> {
   const sortOrder = material.colors.reduce((max, color) => Math.max(max, color.sortOrder), -1) + 1;
   try {
     await db.catalogColor.create({
-      data: { materialId, name, hex, style, mode, sortOrder },
+      data: { materialId, name, hex, style, mode, amazonUrl, sortOrder },
     });
   } catch (error) {
     if (duplicate(error)) back("error", `${material.name} already has a color named ${name}.`);
@@ -247,24 +323,25 @@ export async function addColorAction(formData: FormData): Promise<void> {
     action: "catalog.color_added",
     actor: admin,
     subject: `${material.name} · ${name}`,
-    detail: { hex, style, mode },
+    detail: { hex, style, mode, amazonUrl },
   });
   revalidatePath("/admin/catalog");
   revalidatePath("/upload");
+  revalidatePath("/story/[id]/again", "page");
   back("toast", `${name} added to ${material.name}.`);
 }
 
 export async function editColorAction(formData: FormData): Promise<void> {
   const admin = await requireAdmin();
   const id = String(formData.get("id") ?? "");
-  const { name, hex, style, mode } = colorInput(formData);
+  const { name, hex, style, mode, amazonUrl } = await colorInput(formData);
   const color = await db.catalogColor.findUnique({
     where: { id },
     include: { material: { select: { name: true } } },
   });
   if (!color) back("error", "That color no longer exists.");
   try {
-    await db.catalogColor.update({ where: { id }, data: { name, hex, style, mode } });
+    await db.catalogColor.update({ where: { id }, data: { name, hex, style, mode, amazonUrl } });
   } catch (error) {
     if (duplicate(error)) back("error", `${color.material.name} already has a color named ${name}.`);
     throw error;
@@ -273,10 +350,11 @@ export async function editColorAction(formData: FormData): Promise<void> {
     action: "catalog.color_updated",
     actor: admin,
     subject: `${color.material.name} · ${name}`,
-    detail: { previousName: color.name, previousStyle: color.style, previousMode: color.mode, hex, style, mode },
+    detail: { previousName: color.name, previousStyle: color.style, previousMode: color.mode, previousAmazonUrl: color.amazonUrl, hex, style, mode, amazonUrl },
   });
   revalidatePath("/admin/catalog");
   revalidatePath("/upload");
+  revalidatePath("/story/[id]/again", "page");
   back("toast", `${name} updated for ${color.material.name}.`);
 }
 
@@ -300,6 +378,7 @@ export async function toggleColorAction(formData: FormData): Promise<void> {
   });
   revalidatePath("/admin/catalog");
   revalidatePath("/upload");
+  revalidatePath("/story/[id]/again", "page");
   back("toast", `${color.name} is now ${updated.active ? "available" : "unavailable"} for ${color.material.name}.`);
 }
 
@@ -320,6 +399,7 @@ export async function removeColorAction(formData: FormData): Promise<void> {
   });
   revalidatePath("/admin/catalog");
   revalidatePath("/upload");
+  revalidatePath("/story/[id]/again", "page");
   back("toast", `${color.name} was removed from ${color.material.name}. Old tickets are unchanged.`);
 }
 
@@ -357,5 +437,6 @@ export async function moveColorAction(formData: FormData): Promise<void> {
   });
   revalidatePath("/admin/catalog");
   revalidatePath("/upload");
+  revalidatePath("/story/[id]/again", "page");
   back("toast", `${colors[to].name} moved ${parsedDirection.data} for ${selected.material.name}.`);
 }

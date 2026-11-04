@@ -1,4 +1,9 @@
 import { z } from "zod";
+import { amazonListingUrl } from "@/lib/amazon-listing";
+import { isAdminSwatch, isBundledSwatch } from "@/lib/filament-ids";
+import type { FilamentColorType } from "@/lib/filament-color-types";
+import type { FilamentPurchaseOption } from "@/lib/filament-purchases";
+import { scannedFilamentImage } from "@/lib/filament-scanned-swatches";
 
 import type { OwnerRatings } from "@/lib/filament-traits";
 
@@ -56,9 +61,13 @@ export const funfettiStyle = (base: string) =>
 export type CatalogColorChoice = {
   id: string;
   name: string;
+  /** The originating shelf material when Auto combines multiple materials' colors. */
+  materialName?: string;
   hex: string;
   style: string;
   mode: ColorMode;
+  /** Optional exact product/color listing saved as a reference for this shelf filament. */
+  amazonUrl?: string | null;
 };
 export type CatalogMaterialChoice = {
   id: string;
@@ -148,7 +157,11 @@ export const NEAR_ENOUGH = 28;
  * src/lib/filament-library.ts and src/lib/spoolman-library.ts.
  */
 export type LibrarySwatch = {
-  /** Positive for a filamentcolors.xyz swatch, negative for a SpoolmanDB spool. */
+  purchaseOptions?: FilamentPurchaseOption[];
+  colorType?: FilamentColorType;
+  translucent?: boolean;
+  colors?: string[];
+  /** Measured ids are small positives; admin/bundled ids are reserved positives; SpoolmanDB ids are negative. */
   id: number;
   name: string;
   maker: string;
@@ -159,7 +172,7 @@ export type LibrarySwatch = {
   /** The filament table's family for `type`, or null when it knows none. */
   family: string | null;
   shade: SwatchShade | null;
-  /** Where to buy it: the maker's shop when listed, else the library's Amazon link. */
+  /** A direct Amazon product listing, or null when the source supplies none. */
   buyUrl: string | null;
   /**
    * The swatch's own page on filamentcolors.xyz, or for a SpoolmanDB spool,
@@ -176,14 +189,16 @@ export type LibrarySwatch = {
    * tile size; `imageUrl` is the fallback. Server only, like `imageUrl`.
    */
   photoUrl: string | null;
+  /** A verified owner scan already served from this app. */
+  sampleImage?: string | null;
 };
 
 /**
  * Where the app serves a library swatch's photo from. The version changes
  * whenever what is served there does, because browsers keep a photo a day:
- * v2 is the full photo cut down, which replaced the library's thumbnail.
+ * v3 removes the photographed table and preserves the swatch's transparency.
  */
-export const swatchImagePath = (id: number) => `/api/filament-library/${id}/image?v=2`;
+export const swatchImagePath = (id: number) => `/api/filament-library/${id}/image?v=3`;
 
 /**
  * A library swatch as the browser sees it: what `GET /api/filament-library`
@@ -221,23 +236,17 @@ export function storySwatch(story: {
   if (story.swatchId === null) return null;
   const spool = { maker: story.swatchMaker ?? "", type: story.swatchType ?? "", name: story.colorName };
   const spoolman = fromSpoolman(story.swatchId);
-  let buyUrl: string | null = null;
-  try {
-    const url = story.swatchBuyUrl ? new URL(story.swatchBuyUrl) : null;
-    if (url && (url.protocol === "https:" || url.protocol === "http:")) buyUrl = url.href;
-  } catch {
-    /* not a link; leave it off */
-  }
+  const buyUrl = amazonListingUrl(story.swatchBuyUrl);
   return {
     id: story.swatchId,
     ...spool,
     hex: story.colorHex,
     shade: null,
     buyUrl,
-    pageUrl: spoolman ? spoolSearchUrl(spool) : swatchPageUrl(story.swatchId),
+    pageUrl: isAdminSwatch(story.swatchId) || isBundledSwatch(story.swatchId) ? buyUrl ?? "https://www.amazon.com/" : spoolman ? spoolSearchUrl(spool) : swatchPageUrl(story.swatchId),
     // Served while the library still lists the swatch; the colour stands in
     // when not, and for a SpoolmanDB spool, which has no photo.
-    image: spoolman ? null : swatchImagePath(story.swatchId),
+    image: scannedFilamentImage(spool) ?? (spoolman || isAdminSwatch(story.swatchId) || isBundledSwatch(story.swatchId) ? null : swatchImagePath(story.swatchId)),
   };
 }
 
@@ -255,39 +264,6 @@ export const STATUS_CHIP: Record<
   Delivery: { bg: "#e2e6ea", fg: "#1b2126" },
   Declined: { bg: "#e2e6ea", fg: "#6b747c" },
 };
-
-/**
- * How much a print matters to the person asking: 1, the turtle (whenever),
- * to 100, the rabbit (now). A feature request still has three steps
- * (`FEATURE_PRIORITIES`, below); the two backlogs are parallel, not shared.
- */
-export const MIN_STORY_PRIORITY = 1;
-export const MAX_STORY_PRIORITY = 100;
-export const DEFAULT_STORY_PRIORITY = 50;
-
-/**
- * The three steps priority used to be, still accepted on the wire from
- * clients written before the slider, each at the middle of its third.
- */
-export const LEGACY_STORY_PRIORITY: Record<string, number> = { low: 25, medium: 50, high: 75 };
-
-/**
- * Which third a priority falls in: the colour its chip wears, and what the
- * retired three-step column is kept at for a rolled-back image.
- */
-export function priorityBand(priority: number): "low" | "medium" | "high" {
-  return priority <= 33 ? "low" : priority >= 67 ? "high" : "medium";
-}
-
-/** A priority from a form or a JSON body: 1–100, or one of the old words. */
-export const StoryPrioritySchema = z.preprocess(
-  (v) => (typeof v === "string" ? LEGACY_STORY_PRIORITY[v.trim()] ?? (v.trim() === "" ? v : Number(v)) : v),
-  z
-    .number("That is not a priority.")
-    .int("That is not a priority.")
-    .min(MIN_STORY_PRIORITY, "That is not a priority.")
-    .max(MAX_STORY_PRIORITY, "That is not a priority."),
-);
 
 export const QuantitySchema = z.coerce
   .number()
@@ -311,7 +287,7 @@ export const WishSchema = z.object({
   // A shelf colour by name, or a spool to buy by its filamentcolors.xyz id;
   // see the refinement below. With a swatch the name is read from the
   // library, not from here, so this may be left empty.
-  colorName: z.string().trim().max(40).optional().default(""),
+  colorName: z.string().trim().max(80).optional().default(""),
   colorHex: z
     .string()
     .regex(/^#[0-9a-f]{6}$/i, "That is not a color.")
@@ -320,22 +296,19 @@ export const WishSchema = z.object({
       `Only with material "${AUTO_MATERIAL}": a color of the requester's own, named by colorName. ` +
         "Ignored when colorName is a shelf color.",
     ),
+  filamentColorId: z.string().max(80).regex(/^(?:fcx:\d+|admin:\d+|ofd:[a-f0-9-]+|scan:[a-z0-9-]+)$/i, "That is not a filament color.").nullish(),
   swatchId: z.coerce
     .number("That is not a swatch.")
     .int("That is not a swatch.")
-    // Negative ids are SpoolmanDB spools; see `fromSpoolman`.
+    // Negative ids are SpoolmanDB spools; admin ids are above 1e9 and bundled catalog ids start at 2e9.
     .refine((id) => id !== 0, "That is not a swatch.")
     .nullish()
     .describe(
       "A spool to buy instead of a shelf color: an id from GET /api/filament-library " +
-        "(negative for a SpoolmanDB spool). " +
+        "(negative for a SpoolmanDB spool; above 1000000000 for admin or bundled catalog listings). " +
         "Replaces colorName; the swatch has to be the kind of filament `material` is.",
     ),
   quantity: QuantitySchema,
-  // Optional on the wire, so a client written before priority existed still
-  // files a request — it comes out in the middle, which is what it would have
-  // meant. The old words still work, for a client written before the slider.
-  priority: StoryPrioritySchema.optional().default(DEFAULT_STORY_PRIORITY),
   note: z.string().trim().max(2000, "That note is very long.").optional().default(""),
   // Optional free-text print settings (FRR-103 option A). Shown to the owner so
   // slicer specifics live on the ticket rather than in a chat thread.

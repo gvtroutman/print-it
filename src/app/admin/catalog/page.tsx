@@ -1,4 +1,5 @@
 import { AppHeader } from "@/components/app-header";
+import Link from "next/link";
 import { Button, Input, Kicker, Label, Notice } from "@/components/ui";
 import { requireAdmin } from "@/lib/authz";
 import { db } from "@/lib/db";
@@ -9,6 +10,11 @@ import { EditMaterialInline } from "./edit-material-inline";
 import { EditMaterialDescription } from "./edit-material-description";
 import { EditMaterialRatings } from "./edit-material-ratings";
 import { EditColorInline } from "./edit-color-inline";
+import { ScannedColorForm } from "./scanned-color-form";
+import { LibraryColorList } from "./library-color-list";
+import { shelfColorSample } from "@/lib/shelf-colors";
+import { filamentSettings } from "@/lib/filament-settings";
+import { FilamentPhoto } from "@/components/filament-photo";
 import {
   addMaterialAction,
   moveColorAction,
@@ -54,30 +60,32 @@ export default async function CatalogPage({
 }: {
   searchParams: Promise<{ toast?: string; error?: string }>;
 }) {
-  const [admin, params, materials] = await Promise.all([
+  const [admin, params, materials, settings] = await Promise.all([
     requireAdmin(),
     searchParams,
     db.catalogMaterial.findMany({
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       include: { colors: { orderBy: [{ sortOrder: "asc" }, { name: "asc" }] } },
     }),
+    filamentSettings(),
   ]);
 
   return (
     <>
       <AppHeader user={admin} active="/admin/catalog" />
       <main className="mx-auto w-full max-w-[1180px] px-[26.4px] pb-[80px] pt-[35.2px]">
-        <Kicker>Admin · what is on the shelf</Kicker>
-        <h1 className="m-0 mb-[13.2px] text-[46px] leading-[0.98] text-ink">Materials &amp; colors</h1>
+        <Kicker>Admin · Library</Kicker>
+        <h1 className="m-0 mb-[13.2px] text-[38px] leading-[1.05] text-ink sm:text-[46px]">Library colors &amp; materials</h1>
         <p className="m-0 mb-[22px] max-w-[680px] text-[16.5px] leading-[1.5] text-ink-2 text-pretty">
-          Offer only combinations you can actually print today. Use the arrows to set the order shown on the request form. Turning something off hides it temporarily; removing it deletes the catalog entry and its colors. Old tickets are unchanged either way.
+          Control the swatches shown in the Library tab when placing an order. Add a scanned swatch or create a color, remove swatches, and drag or use the arrows to set their order. Turn a swatch off to hide it temporarily. “Any color” always appears first.
         </p>
 
         {params.toast && <div className="mb-[17.6px] max-w-[780px]"><Notice tone="good">{params.toast}</Notice></div>}
         {params.error && <div className="mb-[17.6px] max-w-[780px]"><Notice tone="warn">{params.error}</Notice></div>}
+        <Link href="/admin/catalog/brands" className="stamp mb-[22px] inline-block rounded-chip border-[3px] border-ink bg-sun px-[16px] py-[10px] font-mono text-[12px] font-bold text-ink hover:bg-aqua">Manage brands &amp; Amazon links →</Link>
 
         <form action={addMaterialAction} className="mb-[26.4px] flex max-w-[680px] flex-wrap items-end gap-[13.2px] rounded-panel border-[3px] border-ink bg-aqua-wash p-[22px] shadow-stamp">
-          <div className="min-w-[220px] flex-1">
+          <div className="min-w-0 flex-1 basis-[220px]">
             <Label htmlFor="material-name">Add a material</Label>
             <Input id="material-name" name="name" required maxLength={40} placeholder="ASA" />
           </div>
@@ -124,9 +132,14 @@ export default async function CatalogPage({
                 }}
               />
 
-              <div className="space-y-[8.8px]">
-                {material.colors.map((color, colorIndex) => (
-                  <div key={color.id} className="flex flex-wrap items-center gap-[11px] rounded-card border-2 border-dashed border-rule bg-cream px-[11px] py-[8.8px]">
+              <h3 className="mb-[10px] text-[20px] text-ink">Library swatches</h3>
+              <LibraryColorList materialId={material.id} items={material.colors.map((color, colorIndex) => {
+                const sample = shelfColorSample(color, material.name, settings);
+                return { id: color.id, name: color.name, content: <>
+                    {sample && <div className="w-full min-w-0">
+                      <FilamentPhoto color={sample.color} bare sampleOnly className="mx-auto w-full max-w-[320px]" />
+                      <p className="m-0 mt-[5px] text-center text-[11px] text-ink-2">{sample.exact ? "" : sample.baseColorOnly ? "Similar base color · " : "Similar color · "}{sample.color.maker} · {sample.color.product}</p>
+                    </div>}
                     <EditColorInline
                       id={color.id}
                       name={color.name}
@@ -134,6 +147,7 @@ export default async function CatalogPage({
                       colorStyle={color.style}
                       colorMode={color.mode}
                       materialName={material.name}
+                      amazonUrl={color.amazonUrl}
                     />
                     <OrderButtons
                       id={color.id}
@@ -144,16 +158,16 @@ export default async function CatalogPage({
                     />
                     <form action={toggleColorAction}>
                       <input type="hidden" name="id" value={color.id} />
-                      <button type="submit" className={`cursor-pointer rounded-chip border-2 border-ink px-[10px] py-[4px] font-mono text-[10.5px] font-bold uppercase ${color.active ? "bg-mint text-ink" : "bg-cream-3 text-ink-2"}`}>
-                        {color.active ? "On" : "Off"}
+                      <button type="submit" aria-label={`${color.active ? "Hide" : "Show"} ${color.name} for ${material.name}`} className={`cursor-pointer rounded-chip border-2 border-ink px-[10px] py-[4px] font-mono text-[10.5px] font-bold uppercase ${color.active ? "bg-mint text-ink" : "bg-cream-3 text-ink-2"}`}>
+                        {color.active ? "Visible" : "Hidden"}
                       </button>
                     </form>
                     <RemoveColorButton id={color.id} name={color.name} materialName={material.name} />
-                  </div>
-                ))}
-                {material.colors.length === 0 && <p className="font-mono text-[11.5px] uppercase text-ink-3">No colors yet. This material will stay off the order form.</p>}
-              </div>
+                  </> };
+              })} />
+              {material.colors.length === 0 && <p className="font-mono text-[11.5px] uppercase text-ink-3">No swatches yet. Add one to offer this material in Library.</p>}
 
+              <ScannedColorForm materialId={material.id} materialName={material.name} colors={material.colors} />
               <AddColorForm materialId={material.id} />
             </section>
           ))}

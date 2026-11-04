@@ -76,6 +76,8 @@ services:
       # this directory and hands it to uid 1001 before the app ever starts —
       # see its command below.
       MODELS_ROOT: /uploads
+      # Editable brand PNGs, read afresh on every image request.
+      ARTWORK_ROOT: /artwork
       # Better Auth derives cookie scope, invitation and set-password link
       # URLs, and the WebAuthn relying party from this. It must match what the browser actually sees,
       # including scheme and port.
@@ -88,6 +90,7 @@ services:
     # docker-compose.test.yml. Nothing is reachable by default.
     volumes:
       - ${DATA_ROOT:-./data}/uploads:/uploads
+      - ${DATA_ROOT:-./data}/1x:/artwork:ro
     depends_on:
       db:
         condition: service_healthy

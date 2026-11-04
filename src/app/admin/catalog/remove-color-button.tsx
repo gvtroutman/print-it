@@ -26,7 +26,7 @@ export function RemoveColorButton({
         aria-label={`Remove ${name} from ${materialName}`}
         className="cursor-pointer rounded-chip border-2 border-ink bg-cherry-wash px-[10px] py-[4px] font-mono text-[10.5px] font-bold uppercase text-cherry-dk hover:bg-cherry hover:text-cream"
       >
-        Delete
+        Remove
       </button>
     </form>
   );

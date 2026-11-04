@@ -26,11 +26,12 @@ const HEADERS = {
   Accept: "application/json",
 };
 const PAGE = 100;
-/** A visit to the owner's home starts a sync when the last one is older than this. */
+/** Finished history needs an occasional refresh; active jobs need a prompt completion check. */
 export const SYNC_EVERY_MS = 15 * 60_000;
+export const ACTIVE_SYNC_EVERY_MS = 60_000;
 
-/** Bambu task status codes, checked against real history: 2 finished, 3 failed or cancelled. */
-const OUTCOMES: Record<number, string> = { 2: "finished", 3: "failed" };
+/** Matches Bambu Studio's TaskManager::parse_task_status: 1 and 4 are printing. */
+const OUTCOMES: Record<number, string> = { 1: "printing", 2: "finished", 3: "failed", 4: "printing" };
 
 export class BambuError extends Error {
   constructor(
@@ -182,9 +183,11 @@ export async function applyTasks(tasks: BambuTask[]): Promise<number> {
     }
 
     // Real time on the machine. costTime is the slicer's estimate, not what the job took.
-    const endedAt = toDate(task.endTime);
+    const reportedEnd = toDate(task.endTime);
+    const outcome = OUTCOMES[task.status ?? -1] ?? (reportedEnd ? `status ${task.status}` : "printing");
+    // Bambu supplies a placeholder endTime while printing. It is not elapsed runtime.
+    const endedAt = outcome === "printing" ? null : reportedEnd;
     const seconds = endedAt && endedAt > startedAt ? Math.round((endedAt.getTime() - startedAt.getTime()) / 1000) : 0;
-    const outcome = OUTCOMES[task.status ?? -1] ?? (endedAt ? `status ${task.status}` : "printing");
     const data = {
       printerId,
       title: (task.designTitle || task.title || "Untitled").slice(0, 300),
@@ -200,11 +203,21 @@ export async function applyTasks(tasks: BambuTask[]): Promise<number> {
   return db.printerPrint.count();
 }
 
-/**
- * Pull the whole history and store it. Never throws: the outcome lands on the
- * link row (`lastSyncAt`, `lastError`) for the card to show.
- */
-export async function syncPrints(): Promise<{ ok: boolean; message: string }> {
+type SyncResult = { ok: boolean; message: string };
+let running: Promise<SyncResult> | null = null;
+
+/** Manual refresh and page loads share a sync, so an older response cannot overwrite a newer one. */
+export function syncPrints(): Promise<SyncResult> {
+  if (!running) {
+    running = performSync().finally(() => {
+      running = null;
+    });
+  }
+  return running;
+}
+
+/** Cloud failures land on the link row (`lastSyncAt`, `lastError`) for the card to show. */
+async function performSync(): Promise<SyncResult> {
   const link = await bambuLink();
   if (!link) return { ok: false, message: "Bambu Lab is not connected." };
 
@@ -229,13 +242,17 @@ export async function syncPrints(): Promise<{ ok: boolean; message: string }> {
   }
 }
 
-let running: Promise<unknown> | null = null;
-
-/** Sync in the background when the last one is stale; one at a time. */
-export function syncIfStale(link: { lastSyncAt: Date | null } | null): void {
-  if (!link || running) return;
-  if (link.lastSyncAt && Date.now() - link.lastSyncAt.getTime() < SYNC_EVERY_MS) return;
-  running = syncPrints().finally(() => {
-    running = null;
-  });
+/** Await a due sync before reading the meter, including any sync another request started. */
+export async function syncIfStale(
+  link: { lastSyncAt: Date | null } | null,
+  hasActivePrints = false,
+): Promise<void> {
+  if (!link) return;
+  if (running) {
+    await running;
+    return;
+  }
+  const interval = hasActivePrints ? ACTIVE_SYNC_EVERY_MS : SYNC_EVERY_MS;
+  if (link.lastSyncAt && Date.now() - link.lastSyncAt.getTime() < interval) return;
+  await syncPrints();
 }

@@ -153,6 +153,22 @@ function threeMfScaled(x: number, y: number, z: number): Uint8Array {
   });
 }
 
+function assembly3mf(objects: string, build: string, extra: Record<string, string> = {}): Uint8Array {
+  const model = `<model><resources>${objects}</resources>${build}</model>`;
+  return zipSync(Object.fromEntries(Object.entries({ "3D/3dmodel.model": model, ...extra })
+    .map(([name, xml]) => [name, new TextEncoder().encode(xml)])));
+}
+const componentObject = (id: number, children: string) =>
+  `<object id="${id}"><components>${children}</components></object>`;
+const leafMesh = `<object id="1"><mesh><vertices><vertex x="0" y="0" z="0"/><vertex x="1" y="0" z="0"/><vertex x="0" y="1" z="1"/></vertices><triangles><triangle v1="0" v2="1" v3="2"/></triangles></mesh></object>`;
+function doubledAssembly(depth: number): string {
+  let objects = leafMesh;
+  for (let id = 2; id <= depth + 1; id++) {
+    objects += componentObject(id, `<component objectid="${id - 1}"/><component objectid="${id - 1}"/>`);
+  }
+  return objects;
+}
+
 const ok = (r: ReturnType<typeof inspectModel>) => (r.ok ? r : null);
 const why = (r: ReturnType<typeof inspectModel>): Rejection | "accepted" =>
   r.ok ? "accepted" : r.reason;
@@ -193,6 +209,41 @@ check("its dimensions come from the referenced part",
 const scaled = inspectModel("cura.3mf", threeMfScaled(30, 20, 10));
 check("3MF build-item transform is applied (not 0 × 0 × 0)",
       ok(scaled)?.dims === "30 × 20 × 10 mm", ok(scaled)?.dims);
+
+section("3MF component work is bounded without losing valid instances");
+
+const repeated = inspectModel("instances.3mf", assembly3mf(
+  leafMesh + componentObject(2, '<component objectid="1"/><component objectid="1" transform="1 0 0 0 1 0 0 0 1 100 0 0"/>'),
+  '<build><item objectid="2"/><item objectid="1" transform="1 0 0 0 1 0 0 0 1 0 30 0"/></build>',
+));
+check("reused meshes at different component/build transforms are all measured",
+  ok(repeated)?.dims === "101 × 31 × 1 mm", ok(repeated)?.dims ?? why(repeated));
+const modest = inspectModel("assembly.3mf", assembly3mf(doubledAssembly(8), '<build><item objectid="9"/></build>'));
+check("a modest repeated component assembly remains valid", modest.ok, why(modest));
+const exponential = inspectModel("exponential.3mf", assembly3mf(doubledAssembly(17), '<build><item objectid="18"/></build>'));
+check("a tiny exponentially expanding graph is refused", why(exponential) === "too_complex", why(exponential));
+const manyRoots = inspectModel("roots.3mf", assembly3mf(doubledAssembly(15), '<build><item objectid="16"/><item objectid="16"/></build>'));
+check("the component budget is shared across build roots", why(manyRoots) === "too_complex", why(manyRoots));
+const manyParts = inspectModel("parts.3mf", assembly3mf(doubledAssembly(15), '<build><item objectid="16"/></build>', {
+  "3D/Objects/second.model": `<model><resources>${doubledAssembly(15)}</resources><build><item objectid="16"/></build></model>`,
+}));
+check("the component budget is shared across model parts", why(manyParts) === "too_complex", why(manyParts));
+const noBuildBudget = inspectModel("no-build.3mf", assembly3mf(doubledAssembly(16), ""));
+check("omitting build does not bypass the component budget", why(noBuildBudget) === "too_complex", why(noBuildBudget));
+const denseMesh = `<object id="1"><mesh><vertices>${'<vertex x="1" y="1" z="1"/>'.repeat(30_000)}</vertices><triangles><triangle v1="0" v2="1" v3="2"/></triangles></mesh></object>`;
+const vertexBudget = inspectModel("dense-instances.3mf", assembly3mf(denseMesh,
+  `<build>${'<item objectid="1"/>'.repeat(1_000)}</build>`));
+check("repeated dense meshes exhaust the total vertex/work budget", why(vertexBudget) === "too_complex", why(vertexBudget));
+const cycle = inspectModel("cycle.3mf", assembly3mf(leafMesh + componentObject(2, '<component objectid="1"/><component objectid="2"/>'), '<build><item objectid="2"/></build>'));
+check("a cycle rejects the whole file even after placing geometry", why(cycle) === "corrupt", why(cycle));
+const crossCycle = inspectModel("cross-cycle.3mf", assembly3mf(leafMesh + componentObject(2, '<component objectid="1"/><component objectid="2" p:path="/3D/Objects/child.model"/>'), '<build><item objectid="2"/></build>', {
+  "3D/Objects/child.model": `<model><resources>${componentObject(2, '<component objectid="2" p:path="/3D/3dmodel.model"/>')}</resources></model>`,
+}));
+check("cycles across part boundaries are refused", why(crossCycle) === "corrupt", why(crossCycle));
+let deepObjects = leafMesh;
+for (let id = 2; id <= 53; id++) deepObjects += componentObject(id, `<component objectid="${id - 1}"/>`);
+const deep = inspectModel("deep.3mf", assembly3mf(deepObjects, '<build><item objectid="53"/></build>'));
+check("depth exhaustion rejects instead of falling back to raw geometry", why(deep) === "too_complex", why(deep));
 
 // A binary STL whose 80-byte header begins with the word "solid" — the classic
 // way a naive sniffer misreads the format.

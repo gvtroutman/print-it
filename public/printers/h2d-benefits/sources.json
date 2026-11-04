@@ -1,0 +1,16 @@
+{
+  "page": "https://bambulab.com/en/h2d",
+  "retrieved": "2026-10-13",
+  "owner": "Bambu Lab; original creator credits retained below and in the UI",
+  "processing": "Images resized to at most 960px wide and encoded as WebP. Silent H.264 demo clips resized to 960px wide at 25 fps with faststart. No generated imagery.",
+  "assets": [
+    { "file": "laser.webp", "source": "https://portal.bblmw.com/h2d/a25d4edaccfbe/18update/gallery/LaserGallerypc3.jpg", "credit": "Automata by Ross McSweeney" },
+    { "file": "blade.webp", "source": "https://portal.bblmw.com/h2d/a25d4edaccfbe/14update/DigitalCuttingpc4.jpg", "credit": "Birthday Card by popupcardKagisippo" },
+    { "file": "pen.webp", "source": "https://portal.bblmw.com/h2d/a25d4edaccfbe/4Gallery/PenDrawingpc1.jpg" },
+    { "file": "multicolor.webp", "source": "https://portal.bblmw.com/h2d/a25d4edaccfbe/6DualNozzle/pc3.jpg", "credit": "Tesla Model S Plaid by Mr.Rod" },
+    { "file": "build-volume.webp", "source": "https://portal.bblmw.com/h2d/a25d4edaccfbe/poster/bigger-pc.jpg" },
+    { "file": "build-volume.mp4", "source": "https://portal.bblmw.com/h2d/a25d4edaccfbe/14update/video/bigger-pc.mp4" },
+    { "file": "dual-nozzle.webp", "source": "https://portal.bblmw.com/h2d/a25d4edaccfbe/poster/dual-nozzle-pc.jpg" },
+    { "file": "dual-nozzle.mp4", "source": "https://portal.bblmw.com/h2d/a25d4edaccfbe/video/v/dual-nozzle-pc.mp4" }
+  ]
+}

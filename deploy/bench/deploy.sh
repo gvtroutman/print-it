@@ -11,7 +11,7 @@
 set -euo pipefail
 scenario=$1
 here=$(dirname "$0")
-export STACK_DIR="/DATA/AppData/print-it-bench-$RUN" PROJECT="ppp-bench-$RUN"
+export STACK_DIR="/srv/print-it-bench-$RUN" PROJECT="ppp-bench-$RUN"
 export REPO="localhost:3002/$OWNER" TAG="bench-$RUN-$scenario" LABEL="$scenario"
 export MEASURE_DOCKER_HEALTH=1
 
@@ -33,14 +33,14 @@ if [ "$scenario" = teardown ]; then
         "http://$REGISTRY/api/v1/packages/$OWNER/container/$name/bench-$RUN-$s" || true
     done
   done
-  docker run --rm -v /DATA/AppData:/a alpine:3 rm -rf "/a/print-it-bench-$RUN"
+  docker run --rm -v /srv:/a alpine:3 rm -rf "/a/print-it-bench-$RUN"
   docker image prune -f > /dev/null
   exit 0
 fi
 
 # The first deploy of a run lays the stack down fresh.
 if [ "$scenario" = s0 ]; then
-  docker run --rm -v /DATA/AppData:/a alpine:3 sh -c "rm -rf /a/print-it-bench-$RUN && mkdir /a/print-it-bench-$RUN"
+  docker run --rm -v /srv:/a alpine:3 sh -c "rm -rf /a/print-it-bench-$RUN && mkdir /a/print-it-bench-$RUN"
   secret=$(head -c 32 /dev/urandom | base64)
   sed "s#__BENCH_SECRET__#$secret#" "$here/compose.yml" \
     | docker run --rm -i --mount "type=bind,source=$STACK_DIR,target=/s" alpine:3 \

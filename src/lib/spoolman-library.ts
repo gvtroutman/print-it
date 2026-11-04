@@ -1,6 +1,7 @@
 import "server-only";
 
 import { builtInTraits } from "@/lib/filament-traits";
+import { recordedAmazonListingFor, recordedAmazonPackagesFor } from "@/lib/amazon-product-links";
 import { labOf, spoolSearchUrl, type LibrarySwatch, type SwatchShade } from "@/lib/catalog";
 import { sourceUrl as appSourceUrl } from "@/lib/runtime";
 
@@ -122,7 +123,8 @@ function toSwatch(raw: unknown): { key: string; swatch: LibrarySwatch } | null {
     // "ABS+GF20" is ABS with glass fibre to the filament table.
     family: builtInTraits(type.replace(/\+(?=[a-z0-9])/gi, " "))?.family ?? null,
     shade: shadeOf(`#${hex}`, r.translucent === true),
-    buyUrl: null,
+    buyUrl: recordedAmazonListingFor({ maker, type, name }),
+    purchaseOptions: recordedAmazonPackagesFor({ maker, type, name }),
     pageUrl: spoolSearchUrl({ maker, type, name }),
     imageUrl: null,
     photoUrl: null,

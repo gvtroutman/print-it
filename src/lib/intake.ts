@@ -1,10 +1,10 @@
 import "server-only";
 
-import { db } from "@/lib/db";
+import { createStoryWithBadges } from "@/lib/badges";
 import { notify, printerOwner, storyRef } from "@/lib/authz";
 import type { Actor } from "@/lib/scope";
 import { record } from "@/lib/audit";
-import { WishSchema, priorityBand, type Wish } from "@/lib/catalog";
+import { WishSchema, type Wish } from "@/lib/catalog";
 import { SELECTION_REFUSAL, resolveSelection, type Selection } from "@/lib/catalog-data";
 import { REJECTION_COPY, extensionOf, inspectModel, safeFilename } from "@/lib/models";
 import { MEDIA_REJECTION_COPY, inspectMedia } from "@/lib/media";
@@ -13,6 +13,8 @@ import { kindOf, type FileKind } from "@/lib/upload-limits";
 import { MIME_FOR, deleteModel, ensureStorageRoot, putModel, storageKeyFor } from "@/lib/storage";
 import { StoryProblem } from "@/lib/stories";
 import type { ImportSource } from "@/lib/import-source";
+import { isStoreSelection, STORE_ACCESS_REQUIRED } from "@/lib/donation-policy";
+import { hasStoreAccess } from "@/lib/store-access";
 
 /**
  * Opening a request from a model's bytes — the part an upload and an import
@@ -47,12 +49,16 @@ export type CheckedWish = {
  * import should not pull 200 MB across the internet to discover the colour is
  * off the shelf.
  */
-export async function checkWish(raw: Record<string, unknown>): Promise<CheckedWish> {
+export async function checkWish(actor: Actor, raw: Record<string, unknown>): Promise<CheckedWish> {
   const parsed = WishSchema.safeParse(raw);
   if (!parsed.success) {
     throw problem(400, parsed.error.issues[0]?.message ?? "Check the form.");
   }
   const wish = parsed.data;
+
+  if (isStoreSelection(wish) && !await hasStoreAccess(actor)) {
+    throw problem(403, STORE_ACCESS_REQUIRED);
+  }
 
   const resolved = await resolveSelection(wish);
   if (!resolved.ok) {
@@ -227,41 +233,37 @@ export async function openRequest(
 
   let story;
   try {
-    story = await db.story.create({
-      data: {
-        title,
-        uploaderId: actor.id,
-        status: "Requested",
-        quantity: wish.quantity,
-        priority: wish.priority,
-        legacyPriority: priorityBand(wish.priority),
-        material: wish.material,
-        colorName: selection.colorName,
-        colorHex: selection.hex,
-        colorStyle: selection.style,
-        colorMode: selection.mode,
-        // A spool the owner has to buy first; left null for a shelf colour.
-        ...selection.toBuy,
-        note: wish.note,
-        printSettings: wish.printSettings,
-        filename,
-        fileSize: bytes?.length ?? null,
-        mimeType: extension !== null ? MIME_FOR[extension] ?? "application/octet-stream" : null,
-        storageKey: key,
-        dims: measured?.dims ?? null,
-        sourceUrl: origin?.url ?? null,
-        links,
-        attachments: {
-          create: extras.map((extra, i) => ({
-            kind: extra.kind,
-            filename: extra.filename,
-            fileSize: extra.bytes.length,
-            mimeType: extra.mimeType,
-            storageKey: extra.key,
-            dims: extra.dims,
-            sortOrder: i,
-          })),
-        },
+    story = await createStoryWithBadges({
+      title,
+      uploaderId: actor.id,
+      status: "Requested",
+      quantity: wish.quantity,
+      material: wish.material,
+      colorName: selection.colorName,
+      colorHex: selection.hex,
+      colorStyle: selection.style,
+      colorMode: selection.mode,
+      // A spool the owner has to buy first; left null for a shelf colour.
+      ...selection.toBuy,
+      note: wish.note,
+      printSettings: wish.printSettings,
+      filename,
+      fileSize: bytes?.length ?? null,
+      mimeType: extension !== null ? MIME_FOR[extension] ?? "application/octet-stream" : null,
+      storageKey: key,
+      dims: measured?.dims ?? null,
+      sourceUrl: origin?.url ?? null,
+      links,
+      attachments: {
+        create: extras.map((extra, i) => ({
+          kind: extra.kind,
+          filename: extra.filename,
+          fileSize: extra.bytes.length,
+          mimeType: extra.mimeType,
+          storageKey: extra.key,
+          dims: extra.dims,
+          sortOrder: i,
+        })),
       },
     });
   } catch (error) {

@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { safeRedirectPath } from "@/lib/safe-redirect";
+import { safeRedirect } from "@/lib/safe-redirect";
 
 import { requireAdmin, requireUser } from "@/lib/authz";
 import {
@@ -10,7 +10,8 @@ import {
   clearFlag as clear,
   declineStory as decline,
   flagStory as flag,
-  changeStoryPriority as reprioritise,
+  recordStoryFilament as recordFilament,
+  recordStoryPrintTime as recordPrintTime,
   storyIdOr400,
   withdrawStory as withdraw,
 } from "@/lib/stories";
@@ -42,9 +43,11 @@ import {
  * a phishing page borrows your domain's credibility.
  */
 function back(from: FormDataEntryValue | null, params: Record<string, string>): never {
-  const safe = safeRedirectPath(from, "/queue");
-  const q = new URLSearchParams(params).toString();
-  redirect(`${safe}?${q}`);
+  const target = new URL(safeRedirect(from, "/queue"), "https://redirect.invalid");
+  target.searchParams.delete("toast");
+  target.searchParams.delete("error");
+  for (const [key, value] of Object.entries(params)) target.searchParams.set(key, value);
+  redirect(`${target.pathname}${target.search}${target.hash}`);
 }
 
 /**
@@ -73,8 +76,26 @@ async function run(
 export async function advanceStory(formData: FormData): Promise<void> {
   const admin = await requireAdmin();
   await run(formData, async (id) => {
-    const done = await advance(admin, id);
+    const done = await advance(admin, id,
+      formData.has("filamentMeters") ? formData.get("filamentMeters") : undefined,
+      formData.has("printHours") ? formData.get("printHours") : undefined);
     return { toast: `“${done.title}” → ${done.to} · ${done.uploaderName} notified` };
+  });
+}
+
+export async function recordStoryFilament(formData: FormData): Promise<void> {
+  const admin = await requireAdmin();
+  await run(formData, async (id) => {
+    const done = await recordFilament(admin, id, formData.get("filamentMeters"));
+    return { toast: done.filamentMeters === null ? "Filament usage cleared." : `Filament usage saved: ${done.filamentMeters} meters.` };
+  });
+}
+
+export async function recordStoryPrintTime(formData: FormData): Promise<void> {
+  const admin = await requireAdmin();
+  await run(formData, async (id) => {
+    const done = await recordPrintTime(admin, id, formData.get("printHours"));
+    return { toast: done.printHours === null ? "Print time cleared." : `Print time saved: ${done.printHours} hours.` };
   });
 }
 
@@ -117,25 +138,6 @@ export async function withdrawStory(formData: FormData): Promise<void> {
   try {
     const done = await withdraw(user, id);
     back("/me", { toast: `${done.ref} withdrawn.` });
-  } catch (error) {
-    if (error instanceof StoryProblem) back(`/story/${id}`, { toast: error.message });
-    throw error;
-  }
-}
-
-/**
- * Change a ticket's priority. The requester's on their own ticket and the
- * owner's on any — which is why this takes `requireUser`, like withdraw; who
- * may is the service's decision. Lands back on the ticket.
- */
-export async function changeStoryPriority(formData: FormData): Promise<void> {
-  const user = await requireUser();
-  const id = storyIdOr400(formData.get("storyId"));
-  try {
-    const done = await reprioritise(user, id, formData.get("priority") ?? "");
-    back(`/story/${id}`, {
-      toast: done.unchanged ? `Already priority ${done.to}.` : `Priority → ${done.to}.`,
-    });
   } catch (error) {
     if (error instanceof StoryProblem) back(`/story/${id}`, { toast: error.message });
     throw error;

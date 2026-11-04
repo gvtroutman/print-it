@@ -5,7 +5,6 @@ import {
   binTotals,
   currentBin,
   formatCents,
-  myDonations,
 } from "@/lib/donations";
 import { kofiConnected } from "@/lib/kofi";
 import {
@@ -13,12 +12,15 @@ import {
   markReceived,
   pledge,
   removeGift,
-  withdrawPledge,
 } from "@/app/actions/donations";
 import { AppHeader } from "@/components/app-header";
 import { Button, Input, Kicker, Label, Notice } from "@/components/ui";
 import { Toast } from "@/components/toast";
 import { PRINTER_PHOTOS, PrinterPeek } from "@/components/printer-peek";
+import { PrinterComparison } from "@/components/printer-comparison";
+import { CommunityBenefits } from "@/components/community-benefits";
+import { hasStoreAccess } from "@/lib/store-access";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -27,11 +29,9 @@ export const dynamic = "force-dynamic";
  *
  * Everyone signed in sees the goal and how full the bin is. The money itself
  * goes through Ko-fi, and with the webhook switched on it arrives here by
- * itself; the form is for claiming a gift made under another email, or for
- * logging one by hand when the webhook is off. A member sees their own
- * entries; the printer owner sees everybody's, and confirms what the webhook
- * did not. Totals carry no names, so showing them to all is safe; the
- * per-person list is queried only for the owner.
+ * itself. The owner can log a gift the webhook missed and manage the ledger.
+ * Members see the totals; donation confirmation for Store is managed by the
+ * owner from the guest list.
  */
 const STATUS: Record<string, { chip: string; label: string }> = {
   Pledged: { chip: "bg-sun", label: "Waiting" },
@@ -60,7 +60,7 @@ export default async function DonationBinPage({
   searchParams: Promise<{ toast?: string; error?: string }>;
 }) {
   const [{ toast, error }, user] = await Promise.all([searchParams, requireUser("/bin")]);
-  const [owner, bin] = await Promise.all([printerName(), currentBin()]);
+  const [owner, bin, storeAccess] = await Promise.all([printerName(), currentBin(), hasStoreAccess(user)]);
   const isAdmin = user.role === "admin";
   const connected = kofiConnected();
 
@@ -69,7 +69,7 @@ export default async function DonationBinPage({
       <>
         <AppHeader user={user} active="/bin" />
         <main className="mx-auto w-full max-w-[780px] px-[16px] pb-[80px] pt-[35.2px] sm:px-[26.4px]">
-          <Kicker>Donation bin</Kicker>
+          <Kicker>Donate</Kicker>
           <h1 className="m-0 mt-[6px] font-display text-[30px] leading-[1.05] text-ink">
             Nothing to chip in for
           </h1>
@@ -81,9 +81,8 @@ export default async function DonationBinPage({
     );
   }
 
-  const [totals, mine, everyone] = await Promise.all([
+  const [totals, everyone] = await Promise.all([
     binTotals(bin.id),
-    myDonations(user, bin.id),
     isAdmin ? allDonations(bin.id) : Promise.resolve([]),
   ]);
 
@@ -107,32 +106,47 @@ export default async function DonationBinPage({
         <PrinterPeek src={PRINTER_PHOTOS[bin.id]} alt={bin.title}>
           <section className="overflow-hidden rounded-panel border-[3px] border-ink bg-cream-2 shadow-stamp-lg">
             <div className="p-[17.6px] sm:p-[26.4px]">
-              <Kicker>Donation bin · chipping in together</Kicker>
-              <h1 className="m-0 mb-[11px] text-[30px] leading-[1] text-ink sm:text-[40px]">
-                {bin.title}
-              </h1>
-              <p className="m-0 max-w-[620px] text-[16.5px] leading-[1.5] text-ink-2 text-pretty">
-                {full
-                  ? `The bin is full — thank you. ${owner} can order it.`
-                  : connected
-                    ? "Saving up for it together. Give on Ko-fi and it lands in the bin by itself."
-                    : `Saving up for it together. Give on Ko-fi, then log it here so ${owner} can match it up — it counts once they see it come in.`}
-                {bin.url && (
-                  <>
-                    {" "}
+              <div className="mb-[17.6px] flex flex-col gap-[17.6px] sm:flex-row sm:items-start sm:justify-between">
+                <h1 className="m-0 min-w-0 text-[30px] leading-[1] text-ink sm:flex-1 sm:text-[40px]">
+                  {bin.title}
+                  {bin.url && (
                     <a
                       href={bin.url}
                       target="_blank"
                       rel="noreferrer noopener"
-                      className="font-bold text-ink underline underline-offset-2 hover:text-cherry-dk"
+                      aria-label={`View ${bin.title} in the shop (opens in a new tab)`}
+                      title="View in the shop"
+                      className="ml-[8px] inline-flex h-[36px] w-[36px] items-center justify-center rounded-chip align-middle text-ink-2 transition-colors hover:bg-cream-3 hover:text-cherry-dk sm:h-[40px] sm:w-[40px]"
                     >
-                      See it in the shop ↗
+                      <svg
+                        aria-hidden="true"
+                        focusable="false"
+                        viewBox="0 0 24 24"
+                        className="h-[24px] w-[24px] sm:h-[28px] sm:w-[28px]"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                      </svg>
                     </a>
-                  </>
+                  )}
+                </h1>
+                {(!full || !storeAccess) && bin.payUrl && (
+                  <a
+                    href={bin.payUrl}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="stamp shrink-0 self-center cursor-pointer whitespace-nowrap rounded-chip border-[3px] border-ink bg-cherry-dk px-[28px] py-[14px] font-display text-[18px] text-cream hover:bg-cherry sm:self-start"
+                  >
+                    Give on Ko-fi ↗
+                  </a>
                 )}
-              </p>
-
-              <div className="mt-[22px]">
+              </div>
+              <div>
                 <div className="mb-[8px] flex flex-wrap items-baseline justify-between gap-[8px]">
                   <span className="font-display text-[28px] leading-none text-ink sm:text-[34px]">
                     {formatCents(totals.received)}
@@ -168,19 +182,18 @@ export default async function DonationBinPage({
                 </p>
               </div>
 
-              {!full && bin.payUrl && (
-                <a
-                  href={bin.payUrl}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="stamp mt-[22px] inline-block cursor-pointer rounded-chip border-[3px] border-ink bg-cherry-dk px-[28px] py-[14px] font-display text-[18px] text-cream hover:bg-cherry"
-                >
-                  Give on Ko-fi ↗
-                </a>
+              {full && (
+                <p className="m-0 mt-[13.2px] max-w-[620px] text-[16.5px] leading-[1.5] text-ink-2 text-pretty">
+                  The bin is full — thank you. {owner} can order it.
+                </p>
               )}
             </div>
           </section>
         </PrinterPeek>
+
+        {bin.id === "h2d-laser-40w" && <CommunityBenefits />}
+
+        {bin.id === "h2d-laser-40w" && <PrinterComparison />}
 
         {error && (
           <div className="mt-[22px]">
@@ -188,28 +201,18 @@ export default async function DonationBinPage({
           </div>
         )}
 
-        {!full && (
+        {isAdmin && !full && (
           <form
             action={pledge}
             className="mt-[26.4px] rounded-panel border-[3px] border-ink bg-aqua-wash p-[17.6px] shadow-stamp sm:p-[22px]"
           >
             <h2 className="m-0 mb-[4px] font-display text-[22px] text-ink">
-              {isAdmin
-                ? connected
-                  ? "Log a gift Ko-fi did not send"
-                  : "Log a Ko-fi gift"
-                : connected
-                  ? "Gave under another email? Claim it"
-                  : "Gave on Ko-fi? Log it"}
+              {connected ? "Log a gift Ko-fi did not send" : "Log a Ko-fi gift"}
             </h2>
             <p className="m-0 mb-[17.6px] text-[14.5px] text-ink-2">
-              {isAdmin
-                ? connected
-                  ? "Ko-fi gifts arrive on their own. This is for one that did not. It goes straight in the bin."
-                  : "For money that came in on Ko-fi from somebody who has not logged it here. It goes straight in the bin."
-                : connected
-                  ? "Nothing is charged here. A gift from the email you use here is yours by itself. Gave under another one? Say how much and the name you gave it under, and it becomes yours."
-                  : `Nothing is charged here. Say what you gave and the name you gave it under, and ${owner} marks it received once it shows up on Ko-fi.`}
+              {connected
+                ? "Ko-fi gifts arrive on their own. This is for one that did not. It goes straight in the bin."
+                : "For money that came in on Ko-fi. It goes straight in the bin."}
             </p>
 
             <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-[17.6px]">
@@ -227,26 +230,26 @@ export default async function DonationBinPage({
               </div>
               <div>
                 <Label htmlFor="note">
-                  {isAdmin ? "Who it was from" : connected ? "Name on Ko-fi" : "Name on Ko-fi (optional)"}
+                  Who it was from
                 </Label>
                 <Input
                   id="note"
                   name="note"
-                  required={isAdmin || connected}
+                  required
                   maxLength={280}
-                  placeholder={isAdmin ? "Sam, via Ko-fi" : "Ayla B."}
+                  placeholder="Sam, via Ko-fi"
                   autoComplete="off"
                 />
               </div>
             </div>
 
             <div className="mt-[17.6px]">
-              <Button type="submit">{isAdmin ? "Add it to the bin" : connected ? "Claim it" : "Log it"}</Button>
+              <Button type="submit">Add it to the bin</Button>
             </div>
           </form>
         )}
 
-        {isAdmin ? (
+        {isAdmin && (
           <>
             <div className="mt-[26.4px]">
               {connected ? (
@@ -262,6 +265,11 @@ export default async function DonationBinPage({
                 </Notice>
               )}
             </div>
+
+            <p className="mt-[17.6px] text-[14.5px] text-ink-2">
+              To confirm a member has donated and unlock their Store access, tick{" "}
+              <strong>Donated</strong> on <Link href="/admin/invites" className="font-bold underline underline-offset-2">the guest list</Link>.
+            </p>
 
             <h2 className="mb-[13.2px] mt-[35.2px] font-display text-[26px] text-ink">
               Waiting on you
@@ -346,44 +354,6 @@ export default async function DonationBinPage({
               </>
             )}
           </>
-        ) : (
-          mine.length > 0 && (
-            <>
-              <h2 className="mb-[13.2px] mt-[35.2px] font-display text-[26px] text-ink">
-                What you have put in
-              </h2>
-              <div className="rounded-panel border-[3px] border-ink bg-porcelain px-[17.6px] pb-[8.8px] pt-[4.4px] shadow-stamp sm:px-[22px]">
-                {mine.map((d) => (
-                  <div
-                    key={d.id}
-                    className="flex flex-wrap items-center gap-[13.2px] border-b-2 border-dashed border-rule py-[15px] last:border-b-0"
-                  >
-                    <div className="min-w-[160px] flex-[1_1_220px]">
-                      <div className="font-display text-[17px] text-ink">
-                        {formatCents(d.amountCents)}
-                      </div>
-                      <div className="mt-[2px] text-[13px] text-ink-3">
-                        {d.note && <>as “{d.note}” · </>}
-                        {relativeTime(d.createdAt)}
-                      </div>
-                    </div>
-                    <Chip status={d.status} />
-                    {d.status === "Pledged" && (
-                      <form action={withdrawPledge}>
-                        <input type="hidden" name="id" value={d.id} />
-                        <button
-                          type="submit"
-                          className={`${smallButton} bg-cherry-wash text-cherry-dk hover:bg-cherry hover:text-cream`}
-                        >
-                          Withdraw
-                        </button>
-                      </form>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </>
-          )
         )}
       </main>
 

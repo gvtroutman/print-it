@@ -1,0 +1,17 @@
+{
+  "scans": [
+    { "sourceFile": "Scan_20261013 (2).tiff", "scannedOn": "2026-10-13" },
+    { "sourceFile": "Scan_20261014.tiff", "scannedOn": "2026-10-14" }
+  ],
+  "processing": "Cropped, geometrically masked, and straightened from the original scan. Original RGB retained; no color correction or generated detail. WebP thumbnails are 480 pixels wide.",
+  "swatches": [
+    { "id": "polymaker-cope-blue", "maker": "Polymaker", "name": "Blue", "type": "CoPE", "product": "CoPE", "family": "PETG", "hex": "#72c3e5", "file": "polymaker-cope-blue.webp", "discontinued": false, "shelfNames": ["Blue", "CoPE Blue", "Polymaker CoPE Blue"] },
+    { "id": "panchroma-satin-pla-orange", "maker": "Panchroma", "name": "Orange", "type": "Satin PLA", "product": "Panchroma Satin PLA", "family": "PLA", "hex": "#eb7650", "file": "panchroma-satin-pla-orange.webp", "discontinued": true, "shelfNames": ["Orange"] },
+    { "id": "3d-hojor-blue-glacier", "maker": "3D HoJor", "name": "Blue Glacier", "type": "PLA", "product": "Gradient PLA", "family": "PLA", "hex": "#8ec5d0", "file": "3d-hojor-blue-glacier.webp", "discontinued": false, "shelfNames": ["Blue gradient", "Glacier", "Blue Glacier"] },
+    { "id": "polymaker-cope-white", "maker": "Polymaker", "name": "White", "type": "CoPE", "product": "CoPE", "family": "PETG", "hex": "#efebec", "file": "polymaker-cope-white.webp", "discontinued": false, "shelfNames": ["White", "CoPE White", "Polymaker CoPE White"] },
+    { "id": "iemai-petg-white", "maker": "IEMAI", "name": "White", "type": "PETG", "product": "PETG", "family": "PETG", "hex": "#e1e0e3", "file": "iemai-petg-white.webp", "scannedOn": "2026-10-14", "discontinued": false, "shelfNames": ["IEMAI White", "IEMAI PETG White"] },
+    { "id": "justmaker-silk-pla-bronze", "maker": "Justmaker", "name": "Bronze", "type": "Silk PLA", "product": "Silk PLA", "family": "PLA", "hex": "#796a6f", "file": "justmaker-silk-pla-bronze.webp", "scannedOn": "2026-10-14", "discontinued": false, "shelfNames": ["Justmaker Bronze (Silk)", "Justmaker Silk PLA Bronze"] },
+    { "id": "iemai-petg-black", "maker": "IEMAI", "name": "Black", "type": "PETG", "product": "PETG", "family": "PETG", "hex": "#1d1c1f", "file": "iemai-petg-black.webp", "scannedOn": "2026-10-14", "discontinued": false, "shelfNames": ["IEMAI Black", "IEMAI PETG Black"] },
+    { "id": "bambu-lab-pla-green", "maker": "Bambu Lab", "name": "Green", "type": "PLA", "product": "PLA", "family": "PLA", "hex": "#00a256", "file": "bambu-lab-pla-green.webp", "scannedOn": "2026-10-14", "discontinued": false, "nameAliases": ["Bambu Green", "Green 10501", "Bambu Green 10501"], "shelfNames": ["Bambu Lab Green", "Bambu Green"] }
+  ]
+}

@@ -21,7 +21,10 @@ import { isBuildPhase } from "@/lib/runtime";
 import { enabledSources } from "@/lib/import-source";
 import { record } from "@/lib/audit";
 import { deviceSessions } from "@/lib/device-sessions";
+import { rememberedSessions } from "@/lib/remembered-sessions";
+import { passkeyAccess } from "@/lib/passkey-access";
 import {
+  FRESH_AUTH_SECONDS,
   PASSWORD_MAX,
   PASSWORD_MIN,
   SESSION_IDLE_SECONDS,
@@ -76,6 +79,8 @@ if (isProd && !isBuildPhase) {
   }
 }
 
+const bearerSessions = bearer();
+
 export const auth = betterAuth({
   appName: "Print It!",
   baseURL,
@@ -127,30 +132,12 @@ export const auth = betterAuth({
     expiresAt: undefined,
 
     /**
-     * Twenty minutes of inactivity, not thirty days.
-     *
-     * `expiresIn` is an *idle* window rather than an absolute one: Better Auth
-     * pushes `expiresAt` back out to `now + expiresIn` whenever a session is
-     * used and the last push was more than `updateAge` ago. At the thirty days
-     * this used to be, that meant a session never really expired — anybody who
-     * opened the app monthly renewed it forever, on a cookie written into the
-     * browser profile with `Max-Age=2592000`. "Thirty days" was the number in
-     * the config; "indefinitely" was the behaviour.
-     *
-     * The machine this app runs on is a shared office desktop, so the threat
-     * that matters is somebody sitting down after you — and against a captured
-     * cookie the only thing that helps is how long it stays worth something.
-     * Twenty minutes is that window. It also settles the cookie question by
-     * itself: at `Max-Age=1200` the cookie is no longer something that outlives
-     * the browser or turns up in a profile backup, so there is nothing to gain
-     * from forcing a session cookie via `rememberMe: false` — which would in
-     * fact be worse, because Better Auth reads that as a *fixed* 24-hour
-     * session and skips the sliding refresh entirely.
-     *
-     * Twenty minutes is only humane because passkeys are here: conditional UI
-     * signs a returning holder back in with no click. It does make the passkey
-     * nudge load-bearing rather than decorative — anyone still on a password
-     * types it several times a day, and that pressure is the point.
+     * Ordinary sign-ins expire after twenty idle minutes. Choosing Remember
+     * this device extends only that authenticated session to a fixed ninety
+     * days; rememberedSessions() keeps its cookie and row in step, preserves
+     * it through re-authentication, and stops it sliding indefinitely.
+     * Better Auth's rememberMe:false is not our short-session switch: it
+     * creates a fixed 24-hour session instead of this twenty-minute window.
      */
     expiresIn: SESSION_IDLE_SECONDS,
 
@@ -167,16 +154,12 @@ export const auth = betterAuth({
     updateAge: 60,
 
     /**
-     * Left at a day, and deliberately not doing the job its name suggests.
-     *
-     * `freshAge` gates exactly two Better Auth endpoints — `/unlink-account`
-     * and `/list-sessions` — and this app exposes neither. It is NOT the
-     * re-authentication control for this app's own destructive actions; that
-     * is `requireFreshPasskey` in `src/lib/reauth.ts`, which asks for a passkey
-     * touch rather than trusting the age of a session that may have been
-     * captured. Kept at a day so the two library endpoints stay sane.
+     * Credential enrollment must use the same five-minute window as access
+     * management. Better Auth's fresh-session middleware guards both passkey
+     * registration endpoints, as well as its own account/session operations.
+     * The app's server actions use requireFreshAuth with this same constant.
      */
-    freshAge: 60 * 60 * 24,
+    freshAge: FRESH_AUTH_SECONDS,
 
     // Cookie caching is deliberately OFF.
     //
@@ -241,6 +224,10 @@ export const auth = betterAuth({
       // `role: "admin"` at sign-up. They are set server-side in the
       // `user.create.before` hook below, from the invite row.
       initials: { type: "string", required: false, input: false },
+      // The validated card-sticker action owns changes to this preference.
+      cardFlair: { type: "string", required: false, input: false },
+      previewCardFlair: { type: "string", required: false, input: false },
+      stickersEnabled: { type: "boolean", required: false, input: false, defaultValue: true },
       role: { type: "string", required: false, input: false, defaultValue: "client" },
       invitedById: { type: "string", required: false, input: false },
       // The owner's per-member switches. Read off the row on every request
@@ -456,7 +443,9 @@ export const auth = betterAuth({
      * token may be re-signed on the way in, and the token this app hands out
      * in `set-auth-token` is already the signed one.
      */
-    bearer(),
+    bearerSessions,
+    // Apply the credential policy to direct API calls as well as the page.
+    passkeyAccess(bearerSessions),
 
     /**
      * Passwordless sign-in for members: a name, typed once per device, behind
@@ -464,6 +453,7 @@ export const auth = betterAuth({
      * `/api/auth`. See `src/lib/device-sessions.ts`.
      */
     deviceSessions(),
+    rememberedSessions(),
 
     /**
      * Describes every endpoint above, for `src/lib/openapi.ts` to fold into

@@ -92,6 +92,15 @@ app_image="$REPO/ppp-app:$TAG"
 migrate_image="$REPO/ppp-migrate:$TAG"
 echo "deploying $TAG over ${prev:-nothing} ($STRATEGY)"
 
+# Builds now run on the workstation. An old NAS builder cache can still fill
+# its small system partition and prevent Docker unpacking the next app image.
+# Reclaim unused build cache before pulling, retaining 4 GB for fallback
+# builds. A 1 GB limit evicted npm's install layer and Next's compiler/type
+# cache after every small change. Keep this in step with build-images.yml.
+# This does not remove images, containers or persistent volumes,
+# and the workstation's compiler/download caches live on another daemon.
+docker builder prune -af --keep-storage 4gb
+
 if [ "$STRATEGY" = full ]; then
   pin "$TAG"
   t=$(now)
@@ -150,7 +159,8 @@ else
 fi
 
 c=$(cid app)
-if unchanged app "$app_image" && [ "$(docker inspect -f '{{.State.Running}}' "$c")" = true ]; then
+# An artwork mount change also needs a new container when the image is identical.
+if [ "${FORCE_RECREATE_APP:-false}" != true ] && unchanged app "$app_image" && [ "$(docker inspect -f '{{.State.Running}}' "$c")" = true ]; then
   echo "app unchanged: left running"
   report recreate 0
   report ready 0

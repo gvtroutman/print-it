@@ -18,6 +18,10 @@ How each kind of account gets in:
 - **The printer owner: passkey** (WebAuthn). Optional, stronger and faster.
   Offered through browser conditional UI, so it can sign the owner in from the
   username field with no click at all.
+- **Remember this device:** enabled on the sign-in form. After a successful
+  password or passkey sign-in, this browser stays signed in for **90 days**,
+  including after closing and reopening it. Uncheck it on a shared computer
+  to use the ordinary twenty-minute idle session.
 
 Members who registered with a password before it went away keep it, and it
 still works. Everything below about passwords and passkeys applies to the
@@ -56,7 +60,7 @@ So there are three prompts, and two tests holding them in place:
 
 - A banner for anyone with zero passkeys, dismissible **for the session only** —
   closing it means "not right now", not "never".
-- A line in the account menu saying how you currently sign in, with a way to
+- A section on the Member page saying how you currently sign in, with a way to
   change it.
 - Honest copy on the skip: "Not now — keep typing my password", rather than
   implying it is a postponement.
@@ -238,8 +242,8 @@ clearing cookies, they need a **device link**:
 Both endpoints live in `src/lib/device-sessions.ts` and are declared with
 `createAuthEndpoint.serverOnly`, so they are not on the HTTP router: nothing
 new is reachable under `/api/auth`, and they are not in the OpenAPI document.
-They refuse any account that is not a client. A passwordless way into the
-admin surface would bypass both the twenty-minute window and the sudo gate.
+They refuse any account that is not a client. The owner must authenticate with
+a password or passkey before a browser can be remembered.
 Better Auth's admin plugin still refuses a session for a suspended member,
 and revoking access also revokes any device link still outstanding.
 
@@ -259,8 +263,9 @@ authority, and revoking access or signing out ends it immediately.
 On a shared office machine, anyone who sits down at a member's browser is
 that member until somebody signs out. That is the threat the twenty-minute
 window was chosen for, and members no longer have it. Signing out asks for
-confirmation, because getting back in takes a new link. The owner keeps the
-short window, which guards the admin surface.
+confirmation, because getting back in takes a new link. The owner can choose
+the short window on a shared computer. Sensitive access changes still require
+a fresh password or passkey on remembered devices.
 
 #### Usernames
 
@@ -273,6 +278,26 @@ different clothes. `displayUsername` keeps whatever was typed.
 Matching case-insensitively rather than refusing capitals is the friendlier
 half of that: somebody whose phone capitalises the first letter should be told
 the username is taken, not that it is malformed.
+
+### Remembering a browser after password or passkey sign-in
+
+[`src/lib/remembered-sessions.ts`](../src/lib/remembered-sessions.ts) extends a
+session only after a successful password or passkey sign-in. The sign-in form
+sends the checkbox choice with either method, including passkey autofill;
+API sign-ins without a preference retain the ordinary short window.
+
+The session row and its `HttpOnly`, `SameSite=Lax` cookie have the same fixed
+ninety-day expiry. HTTPS adds `Secure`. The session-bound `ppp.device` marker
+keeps middleware from cutting that cookie to twenty minutes and prevents
+Better Auth from sliding the expiry. Every request still checks the database;
+the marker alone cannot sign anybody in. Clearing cookies or using another
+browser requires another sign-in. Signing out, resetting the password, or
+revoking access ends remembered sessions immediately.
+
+Re-authenticating a sensitive action keeps the original remembered expiry,
+rotates the session cookie, and revokes the replaced session. A marker belonging
+to another account cannot carry the preference into a different account's
+sign-in. Explicitly unchecking the option returns to the short window.
 
 ### Privileged fields cannot be set over the wire
 
@@ -341,8 +366,8 @@ passkey would leave an admin without one unable to revoke access.
 One thing worth knowing, because it explains a spare row in `session`: Better
 Auth has no way to assert an identity without creating a session, so
 re-authenticating signs you in again and the gate reads the age of the session
-that comes back. The session it replaces is left to expire, which at twenty
-minutes is not long.
+that comes back. The session it replaces is revoked after the successful
+sign-in, and a remembered browser retains its original expiry.
 
 ### Other decisions worth knowing
 
@@ -350,13 +375,13 @@ minutes is not long.
   on the *URL scheme* rather than `NODE_ENV` — a production boot over plain
   HTTP throws unless it is loopback, and an HTTPS deployment always gets the
   flag regardless of how the env is set.
-- **The printer owner's session is worth twenty idle minutes**, sliding every
-  minute (`SESSION_IDLE_SECONDS`); a member's device session is the exception
+- **Ordinary sign-ins last twenty idle minutes**, sliding every
+  minute (`SESSION_IDLE_SECONDS`). Remembered sign-ins last a fixed ninety days
+  (`REMEMBERED_SESSION_SECONDS`); a member's device session is the exception
   described [above](#members-sign-in-by-device). It used to be thirty days with a daily slide, which
   in practice meant *forever*: `expiresIn` is an idle window that renews, so a
-  session used once a month never expired at all. Twenty minutes is only
-  humane because passkeys are here — which does make the passkey nudge
-  load-bearing rather than decorative. The full reasoning, including why not a
+  session used once a month never expired at all. Remembered sessions now have
+  a fixed expiry instead. The reasoning for the ordinary short window, including why not a
   JWT and why the token stays in a cookie, is in
   [the security audit](security-audit.md#the-session-window).
 - **Middleware re-stamps the session cookie on page navigations.** Better Auth

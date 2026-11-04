@@ -250,7 +250,10 @@ export async function withdrawFeature(actor: Actor, id: number) {
   const ref = featureRef(feature.id);
   const owner = await printerOwner();
 
-  await db.featureRequest.delete({ where: { id: feature.id } });
+  const withdrawn = await db.featureRequest.deleteMany({
+    where: { id: feature.id, requesterId: actor.id, status: feature.status },
+  });
+  if (withdrawn.count === 0) throw problem(409, "This request has changed. Refresh and try again.");
 
   if (owner && feature.status === "Requested" && owner.id !== actor.id) {
     await notify({ recipientId: owner.id, text: `${actor.name} withdrew ${ref} — “${feature.title}”.` });
@@ -348,7 +351,10 @@ export async function advanceFeature(actor: Actor, id: number) {
     asProblem(e);
   }
 
-  await db.featureRequest.update({ where: { id: feature.id }, data: { status: next } });
+  const advanced = await db.featureRequest.updateMany({
+    where: { id: feature.id, status: feature.status }, data: { status: next },
+  });
+  if (advanced.count === 0) throw problem(409, "This request has changed. Refresh and try again.");
 
   await notify({
     recipientId: feature.requesterId,
@@ -383,7 +389,10 @@ export async function declineFeature(actor: Actor, id: number) {
     asProblem(e);
   }
 
-  await db.featureRequest.update({ where: { id: feature.id }, data: { status: "Declined" } });
+  const declined = await db.featureRequest.updateMany({
+    where: { id: feature.id, status: "Requested" }, data: { status: "Declined" },
+  });
+  if (declined.count === 0) throw problem(409, "This request has changed. Refresh and try again.");
 
   await notify({
     recipientId: feature.requesterId,

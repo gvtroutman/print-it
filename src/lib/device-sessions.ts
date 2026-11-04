@@ -27,9 +27,8 @@ import { deviceMarkerFor } from "@/lib/device-marker";
  * for a suspended account here, because that check is a `session.create`
  * database hook rather than something the sign-in routes do for themselves.
  *
- * Members only. A device session for the printer owner would be a way round
- * the twenty-minute window and the re-authentication gate that protect the
- * admin surface, so both endpoints refuse anything that is not a client.
+ * Members only. The owner must prove a password or passkey to remember a
+ * browser through rememberedSessions(); a member link cannot grant owner access.
  */
 async function startDeviceSession(ctx: GenericEndpointContext, user: User & { role?: unknown }) {
   if (user.role !== "client") {

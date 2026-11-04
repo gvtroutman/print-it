@@ -44,6 +44,16 @@ export const MAX_INFLATED_BYTES = 3 * MAX_UPLOAD_BYTES;
  */
 export const MAX_TRIANGLES = 8_000_000;
 
+/** Shared across every part and instance of one 3MF, including parsing. */
+export const MAX_3MF_WORK = 3 * MAX_TRIANGLES;
+/** Empty component graphs need a tighter cap than dense meshes. */
+export const MAX_3MF_OBJECT_VISITS = 100_000;
+
+/** glTF may describe zero-filled arrays much larger than its stored bytes. */
+export const MAX_GLTF_ELEMENTS = 3 * MAX_TRIANGLES;
+export const MAX_GLTF_OBJECTS = 100_000;
+export const MAX_GLTF_DECODED_BYTES = 2 * MAX_UPLOAD_BYTES;
+
 /**
  * How many uploads may be inspected at once.
  *
@@ -92,6 +102,8 @@ export const MAX_REQUEST_BYTES = Math.ceil(MAX_UPLOAD_BYTES * 1.2);
  * as what the server would accept.
  */
 export const VIEWER_MAX_BYTES = 50 * 1024 * 1024;
+/** Include buffer copies, accessor arrays and instantiated geometry. */
+export const VIEWER_MAX_DECODED_BYTES = 3 * VIEWER_MAX_BYTES;
 
 /**
  * The 3D formats an order's model may be in.

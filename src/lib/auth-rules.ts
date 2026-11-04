@@ -51,6 +51,12 @@ export const PASSWORD_MAX = 128;
  */
 export const SESSION_IDLE_SECONDS = 60 * 20;
 
+/** An explicitly remembered browser stays signed in for ninety days. */
+export const REMEMBERED_SESSION_SECONDS = 60 * 60 * 24 * 90;
+
+/** Sign-in preference only; a successful password or passkey is still required. */
+export const REMEMBER_DEVICE_HEADER = "x-ppp-remember-device";
+
 /**
  * How long a member's device stays signed in: four hundred days.
  *
@@ -60,16 +66,16 @@ export const SESSION_IDLE_SECONDS = 60 * 20;
  * longest a browser will keep a cookie at all (Chrome caps `Max-Age` there),
  * so asking for more would be a number nothing honours.
  *
- * Fixed, not sliding: `expiresIn` stays twenty minutes for the printer owner,
- * and Better Auth only slides a session once it is within that of expiring.
- * A device session simply lasts its four hundred days and then asks for a new
- * link. See `src/lib/device-sessions.ts`.
+ * Fixed, not sliding: rememberedSessions() disables refresh for a matching
+ * device marker. A device session lasts its four hundred days and then asks
+ * for a new link. See `src/lib/device-sessions.ts`.
  */
 export const DEVICE_SESSION_SECONDS = 60 * 60 * 24 * 400;
 
 /**
- * Marks a browser whose session is a member's device session, so that
- * `src/middleware.ts` leaves its cookie's `Max-Age` alone instead of cutting
+ * Marks a browser whose session is a member's device session or a remembered
+ * password/passkey session, so `src/middleware.ts` leaves its cookie's
+ * `Max-Age` alone instead of cutting
  * it to twenty minutes. Holds a digest of that session's token rather than a
  * flag, so a marker left behind cannot spare a later sign-in on the same
  * browser — the printer owner's, say — from the twenty-minute rule.

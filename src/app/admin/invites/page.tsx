@@ -14,6 +14,8 @@ import { ResetPassword } from "@/components/reset-password";
 import { DeviceLink } from "@/components/device-link";
 import { MemberAccess } from "@/components/member-access";
 import { MemberSwitches } from "@/components/member-switches";
+import { MemberDonation } from "@/components/member-donation";
+import { MEMBER_BADGES } from "@/lib/badge-catalog";
 import { ResendInvite } from "@/components/resend-invite";
 import { revokeInviteAction } from "./actions";
 
@@ -75,6 +77,8 @@ export default async function InvitesPage() {
         banned: true,
         canAddDevice: true,
         canAddMember: true,
+        hasDonated: true,
+        badges: { select: { badgeKey: true } },
         // Members who registered before sign-in went passwordless still have
         // one, and still need a way to reset it.
         accounts: { where: { providerId: "credential" }, select: { id: true } },
@@ -136,6 +140,11 @@ export default async function InvitesPage() {
                     {contactEmail(m.email) && (
                       <p className="m-0 font-mono text-[11.5px] text-ink-3">{contactEmail(m.email)}</p>
                     )}
+                    <div className="mt-[5px] flex flex-wrap gap-[6px]">
+                      {MEMBER_BADGES.filter((badge) => m.badges.some((b) => b.badgeKey === badge.key)).map((badge) => (
+                        <span key={badge.key} className="rounded-chip border-2 border-ink bg-aqua-wash px-[8px] py-[2px] font-mono text-[10.5px] font-bold text-ink">★ {badge.name}</span>
+                      ))}
+                    </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-[8.8px]">
                     {/* What this person has sent — the first thing to look at
@@ -166,6 +175,9 @@ export default async function InvitesPage() {
                   </div>
                   {/* On its own row under the actions: these are settings,
                       not things to do, and they read better apart. */}
+                  <div className="flex basis-full flex-wrap items-center gap-[8.8px]">
+                    <MemberDonation userId={m.id} name={m.name} hasDonated={m.hasDonated} />
+                  </div>
                   <div className="flex basis-full flex-wrap items-center gap-[8.8px]">
                     <span className="font-mono text-[11.5px] uppercase text-ink-3">
                       May, from their menu:

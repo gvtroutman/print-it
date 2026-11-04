@@ -411,15 +411,11 @@ side:
 - **A feature request's priority is editable in any status, and both `/frr`
   views filter** by priority/status/category. The filter is ANDed onto
   `featureScope`, so it can only ever narrow a caller's own set.
-- **A print request has a priority**, as a feature request has had since
-  FRR-104 — and built as the parallel of that, not a shared piece: its own
-  `StoryPriority` enum and `changeStoryPriority` in `stories.ts`, drawn with
-  the same `PRIORITY_CHIP`. Set on the request form, changeable on the ticket
-  by the requester or the owner, and over `POST /api/stories/{id}/priority`.
-  Two deliberate differences from the feature side: it is only editable while
-  the ticket is still moving (a finished print has nothing left to order, and
-  editing it afterwards would rewrite what was asked for). The
-  queue's *Waiting on you* reads high first, oldest first within a priority.
+- **Print tickets have no priority.** Each queue column lists the oldest
+  request first, then ticket number. Ticket facts, upload/reprint forms and
+  the JSON API omit priority. The old database columns are retained for
+  existing installations and rollbacks, but the app no longer uses or explicitly
+  writes them. The priority mutation endpoint and server action have been removed.
 - **Prints by person** (`/admin/prints`) is the owner's answer to "what has
   this person sent me". It adds no new read: the list is `listStories` with an
   `uploaderIds` filter ANDed onto `storyScope` like every other filter, so the
@@ -488,9 +484,9 @@ src/app/
   invite/[token]/        the registration page and its server action
   set-password/          where a reset link lands; sets no session
   welcome/               passkey enrolment after registration
-  queue/                 the printer owner's queue, urgent first
+  queue/                 the printer owner's queue, oldest request first
   upload/                the request form: dropzone, wish, XHR progress
-  story/[id]/            a ticket: viewer, facts, priority, conversation
+  story/[id]/            a ticket: viewer, facts, conversation
   story/[id]/again/      the request form again, filled in from an old ticket
   history/               finished prints, filterable, with "Print again"
   me/                    your own tickets and the profile card
@@ -507,7 +503,7 @@ src/app/api/
   upload/                the multipart door onto intake.ts
   import/                the link door: list a model's files, import one
   stories/               list, read, withdraw
-  stories/[id]/…         advance, decline, flag, comments, priority, requeue
+  stories/[id]/…         advance, decline, flag, comments, requeue
   catalog/               what can be asked for right now
   models/[id]/           the model's bytes, scoped like the ticket
   notifications/         the Activity feed
@@ -524,7 +520,7 @@ scripts/
   verify-upload.ts       upload -> board -> ticket, and printing again
   verify-import.ts       a model from a link, and every way the far end can misbehave
   stubs/                 the stand-in for Printables that suite runs against
-  verify-queue.ts        the queue, the flow, priority, prints by person
+  verify-queue.ts        the queue, the flow, oldest-first ordering, prints by person
   verify-frr.ts          the feature-request track, filed and triaged
   verify-catalog.ts      the owner-managed material/colour catalogue
   verify-api.ts          the JSON API, the document and the console

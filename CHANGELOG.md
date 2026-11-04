@@ -54,6 +54,11 @@ Notable changes. Every entry names a released version; deployments pin
 
 ### Changed
 
+- **First completed print** replaces the submission-based first-print sticker.
+  It unlocks at Delivery or Done, once per member. The
+  `first_completed_print_badge` migration corrects existing awards and dates
+  and removes premature announcements.
+
 - **The old name is gone from everything a person reads.** Emails, the
   passkey prompt, the OpenAPI title, the README, the slicer handler's menu
   entry and the package name now say *Print It!* too. Cookies,

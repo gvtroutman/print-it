@@ -140,7 +140,24 @@ const FAMILIES: Family[] = [
 ];
 
 /** Carbon or glass fibre in the mix: stiffer and stronger, less bendy, matte. */
-const FIBRE = /(^|[^a-z0-9])(cf|gf|carbon|glass)(?![a-z0-9])/i;
+const FIBRE = /(^|[^a-z0-9])(cf[0-9]*|gf[0-9]*|carbon|glass|fib(?:er|re)(?:glass)?)(?![a-z0-9])/i;
+
+/** Shared by the comparison chart and fiber-request stickers. */
+export function isFiberMaterial(name: string): boolean {
+  return FIBRE.test(name);
+}
+
+/** Explicit scent labels only: rose/coffee colours and fluorescent PLA are not scented. */
+export function isScentedMaterial(name: string): boolean {
+  if (/(^|[^a-z0-9])(?:unscented|(?:non|not)[-\s]+scented|(?:scent|fragrance)[-\s]+free|no[-\s]+scent)(?![a-z0-9])/i.test(name)) return false;
+  return /(^|[^a-z0-9])scent(?:ed)?(?![a-z0-9])/i.test(name);
+}
+
+/** Explicit rainbow filament labels; a gradient or several colors alone is not enough. */
+export function isRainbowFilament(name: string): boolean {
+  if (/(^|[^a-z0-9])(?:(?:non|not|no)[-\s]+rainbow|rainbow[-\s]+free)(?![a-z0-9])/i.test(name)) return false;
+  return /(^|[^a-z0-9])rainbow(?![a-z0-9])/i.test(name);
+}
 
 const clamp = (n: number) => Math.min(TOP_MARK, Math.max(1, n)) as Mark;
 
@@ -156,7 +173,7 @@ const spaced = (s: string) => ` ${s.toLowerCase().replace(/[^a-z0-9+]+/g, " ").t
  * nothing this table knows. Longer aliases win, so "Tough PLA" is PLA and
  * "PA12" is Nylon rather than a stray "PA" inside something else.
  */
-export function builtInTraits(name: string): BuiltInTraits | null {
+function matchingFamily(name: string): Family | null {
   let best: { family: Family; length: number } | null = null;
   for (const family of FAMILIES) {
     for (const alias of family.aliases) {
@@ -164,10 +181,25 @@ export function builtInTraits(name: string): BuiltInTraits | null {
       if (!best || alias.length > best.length) best = { family, length: alias.length };
     }
   }
-  if (!best) return null;
+  return best?.family ?? null;
+}
 
-  const { family, ratings, goodFor } = best.family;
-  if (!FIBRE.test(name)) return { family, ratings, goodFor };
+/** Stable base family for both material ratings and filament stickers. */
+export function filamentFamily(name: string): string | null {
+  return matchingFamily(name)?.family ?? null;
+}
+
+/** Saved spool type is more specific than a shelf label; Auto never claims a family. */
+export function requestedFilamentFamily(material: string, swatchType?: string | null): string | null {
+  if (material.trim().toLowerCase() === "auto") return null;
+  return filamentFamily(swatchType ?? "") ?? filamentFamily(material);
+}
+
+export function builtInTraits(name: string): BuiltInTraits | null {
+  const matched = matchingFamily(name);
+  if (!matched) return null;
+  const { family, ratings, goodFor } = matched;
+  if (!isFiberMaterial(name)) return { family, ratings, goodFor };
   return {
     family: `${family} with fibre`,
     ratings: {

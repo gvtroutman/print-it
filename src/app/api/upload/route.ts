@@ -7,6 +7,8 @@ import { MAX_BYTES, REJECTION_COPY } from "@/lib/models";
 import { StoryProblem } from "@/lib/stories";
 import { MAX_FILES_PER_ORDER, MAX_REQUEST_BYTES, formatBytes } from "@/lib/upload-limits";
 import { BUSY_COPY, acquireSlot, releaseSlot } from "@/lib/upload-slots";
+import { crossOriginWrite } from "@/lib/request-origin";
+import { maintenanceResponse } from "@/lib/maintenance";
 
 /**
  * Opening a request from the form — with a model, or without one.
@@ -30,8 +32,11 @@ const bad = (status: number, error: string) =>
   NextResponse.json({ error }, { status });
 
 export async function POST(request: Request) {
+  if (crossOriginWrite(request)) return bad(403, "Cross-origin writes are refused.");
   const user = await currentUser();
   if (!user) return bad(401, "Sign in first.");
+  const paused = await maintenanceResponse(user);
+  if (paused) return paused;
 
   // Cheap rejection before reading a single byte of the body. The allowance
   // over the file cap is multipart's own overhead, and it matches the
@@ -82,14 +87,14 @@ async function handleUpload(request: Request, user: Actor) {
     return bad(413, `Those files come to ${formatBytes(total)} — an order can carry ${formatBytes(MAX_BYTES)} in all.`);
   }
 
-  const checked = await checkWish({
+  const checked = await checkWish(user, {
     title: form.get("title") ?? "",
     material: form.get("material"),
     colorName: form.get("colorName") ?? "",
     colorHex: form.get("colorHex") || null,
+    filamentColorId: form.get("filamentColorId") || null,
     swatchId: form.get("swatchId"),
     quantity: form.get("quantity"),
-    priority: form.get("priority") ?? undefined,
     note: form.get("note") ?? "",
     printSettings: form.get("printSettings") ?? "",
     links: form.getAll("links"),

@@ -170,6 +170,7 @@ async function main() {
   await db.$executeRawUnsafe('DELETE FROM "rateLimit"');
   await db.auditEvent.deleteMany();
   await db.notification.deleteMany();
+  await db.memberBadge.deleteMany();
   await db.story.deleteMany();
   await db.verification.deleteMany();
   await db.session.deleteMany();
@@ -194,6 +195,16 @@ async function main() {
   const anon = new Browser();
   check("three sessions established",
         [aylaB, jonasB, rubenB].every((b) => [...b.jar.keys()].some((k) => k.includes("session_token"))));
+
+  section("a first-print sticker starts locked");
+  const lockedProfile = await (await aylaB.go(`${APP}/me`)).text();
+  check("a new member sees the sticker and how to earn it",
+        lockedProfile.includes('data-badge="first-print" data-earned="false"') &&
+        lockedProfile.includes("Complete your first print"));
+  const refusedFirst = await upload(aylaB, "bad-first.stl", new Uint8Array([1, 2, 3]));
+  check("a refused first submission earns no sticker or announcement",
+        refusedFirst.status === 422 && (await db.memberBadge.count({ where: { userId: ayla.id } })) === 0 &&
+        (await db.notification.count({ where: { recipientId: ayla.id, badgeKey: "first-print" } })) === 0);
 
   section("a good file becomes a story");
 
@@ -231,8 +242,15 @@ async function main() {
 
   check("the admin was notified",
         (await db.notification.count({ where: { recipientId: admin.id, storyId: story!.id } })) === 1);
-  check("the uploader was not notified of their own upload",
-        (await db.notification.count({ where: { recipientId: ayla.id } })) === 0);
+  check("submitting a request sends no completion sticker announcement",
+        (await db.notification.count({ where: { recipientId: ayla.id, badgeKey: "first-print" } })) === 0);
+  check("the uploader gets no redundant upload announcement",
+        (await db.notification.count({ where: { recipientId: ayla.id, storyId: story!.id } })) === 0);
+  const firstBadge = await db.memberBadge.findUnique({ where: { userId_badgeKey: { userId: ayla.id, badgeKey: "first-print" } } });
+  check("the saved first request leaves the completion sticker locked", firstBadge === null);
+  const firstLanding = await (await aylaB.go(`${APP}/story/${story!.id}?sent=1`)).text();
+  check("the first submission landing does not celebrate an unfinished print",
+        !firstLanding.includes('aria-label="Sticker earned"'));
   check("an audit event was written",
         (await db.auditEvent.count({ where: { action: "story.created", actorId: ayla.id } })) === 1);
 
@@ -299,6 +317,7 @@ async function main() {
   section("bad files are refused, and leave nothing behind");
 
   const before = await db.story.count();
+  const refusalsBefore = await db.auditEvent.count({ where: { action: "upload.rejected" } });
   const cases: Array<[string, string, Uint8Array, number]> = [
     ["a PDF renamed .stl", "invoice.stl",
       new TextEncoder().encode("%PDF-1.7\n%âãÏÓ\n1 0 obj"), 422],
@@ -314,7 +333,7 @@ async function main() {
   check("no story rows were created by the refused uploads",
         (await db.story.count()) === before);
   check("refusals are recorded in the audit trail",
-        (await db.auditEvent.count({ where: { action: "upload.rejected" } })) === cases.length);
+        (await db.auditEvent.count({ where: { action: "upload.rejected" } })) === refusalsBefore + cases.length);
 
   const anonUpload = await upload(anon, "sneaky.stl", binaryStl(10, 10, 10));
   check("an unauthenticated upload is refused", anonUpload.status === 401, `got ${anonUpload.status}`);
@@ -322,15 +341,18 @@ async function main() {
   section("my orders are scoped");
 
   const aylaBoard = await (await aylaB.go(`${APP}/me`)).text();
+  check("the completion sticker stays locked on the member's profile", aylaBoard.includes('data-badge="first-print" data-earned="false"'));
   check("the uploader sees her story", aylaBoard.includes("Hook for the monitor arm"));
   check("her row does not name her (it is always her)",
         !aylaBoard.includes(" · Ayla Berg"), "the uploader name appeared on a client's own row");
 
   const jonasBoard = await (await jonasB.go(`${APP}/me`)).text();
+  check("another member's sticker stays locked", jonasBoard.includes('data-badge="first-print" data-earned="false"'));
   check("another client does not see it", !jonasBoard.includes("Hook for the monitor arm"));
   check("and gets the empty state instead", jonasBoard.includes("No orders yet"));
 
   const rubenBoard = await (await rubenB.go(`${APP}/me`)).text();
+  check("the owner's group view does not borrow a member's sticker", rubenBoard.includes('data-badge="first-print" data-earned="false"'));
   check("the admin sees it", rubenBoard.includes("Hook for the monitor arm"));
   check("with the uploader named", rubenBoard.includes(" · Ayla Berg"));
 
@@ -421,9 +443,9 @@ async function main() {
   // Stats are facts about data, so they leak just as readily as a list.
   const aylaCount = await db.story.count({ where: { uploaderId: ayla.id } });
   const allCount = await db.story.count();
+  const requestStat = rendered(mine).match(/<p\b[^>]*>\s*(\d+)\s*<\/p>\s*<p\b[^>]*>\s*Requests made\s*<\/p>/);
   check("the counts are scoped, not global",
-        aylaCount < allCount && new RegExp(`>${aylaCount}<`).test(mine) &&
-        !new RegExp(`>${allCount}<`).test(mine),
+        aylaCount < allCount && Number(requestStat?.[1]) === aylaCount,
         `client sees ${aylaCount} of ${allCount}; a global count would be a leak`);
 
   const theirs = await (await jonasB.go(`${APP}/me`)).text();
@@ -493,6 +515,9 @@ async function main() {
         (await db.story.findUnique({ where: { id: story!.id } }))?.storageKey === beforeKey);
   check("the owner was notified of the re-queue",
         (await db.notification.count({ where: { recipientId: admin.id, storyId: newId } })) === 1);
+  check("later requests and reprints do not unlock or announce a completion sticker",
+        (await db.memberBadge.count({ where: { userId: ayla.id, badgeKey: "first-print" } })) === 0 &&
+        (await db.notification.count({ where: { recipientId: ayla.id, badgeKey: "first-print" } })) === 0);
   check("re-queue was audited",
         (await db.auditEvent.count({ where: { action: "story.requeued", actorId: ayla.id } })) === 1);
 
@@ -528,25 +553,14 @@ async function main() {
   const copy2 = await db.story.findUnique({ where: { id: newId2 } });
   check("re-queue carries the print settings onto the copy", copy2?.printSettings === SETTINGS, copy2?.printSettings);
 
-  section("priority rides on the request");
+  section("old priority inputs are ignored");
   const rushUp = await upload(aylaB, "rush.stl", binaryStl(12, 12, 12), { title: "Rush part", priority: "88" });
   const rushRow = await db.story.findFirst({ where: { title: "Rush part" } });
-  check("an upload can say how much it matters", rushUp.status < 300 && rushRow?.priority === 88,
-        `status ${rushUp.status} ${rushRow?.priority}`);
-  check("and the retired three-step column follows it, for a rolled-back image",
-        rushRow?.legacyPriority === "high", `${rushRow?.legacyPriority}`);
-  const wordUp = await upload(aylaB, "word.stl", binaryStl(12, 12, 12), { title: "Worded part", priority: "low" });
-  const wordRow = await db.story.findFirst({ where: { title: "Worded part" } });
-  check("an old client's word still files, at the middle of its third",
-        wordUp.status < 300 && wordRow?.priority === 25, `status ${wordUp.status} ${wordRow?.priority}`);
-  for (const silly of ["URGENT!!", "0", "101"]) {
-    const sillyUp = await upload(aylaB, "silly.stl", binaryStl(12, 12, 12), { title: "Silly part", priority: silly });
-    check(`a priority that is not one (${silly}) is refused, and files nothing`,
-          sillyUp.status === 400 && (await db.story.count({ where: { title: "Silly part" } })) === 0,
-          `status ${sillyUp.status}`);
-  }
-  const rushForm = rendered(await (await aylaB.go(`${APP}/upload`)).text());
-  check("the request form asks", rushForm.includes(">Priority<") && /<input[^>]*id="priority"[^>]*type="range"/.test(rushForm));
+  check("an old client can upload but cannot set priority",
+        rushUp.status < 300 && rushRow?.priority === 50 && rushRow.legacyPriority === "medium");
+  const rushTicket = rendered(await (await aylaB.go(APP + "/story/" + rushRow!.id)).text());
+  check("the saved request has no priority editor or fact",
+        !rushTicket.includes("Change priority") && !rushTicket.includes('name="priority"') && !rushTicket.includes(">Priority<"));
 
   section("printing again with the settings tuned");
 
@@ -568,12 +582,12 @@ async function main() {
   const rushCopy = await db.story.findUnique({
     where: { id: Number(((await rushAgain.json()) as { story?: { id?: number } }).story?.id) },
   });
-  check("printing again keeps the priority unless it is changed", rushCopy?.priority === 88, `${rushCopy?.priority}`);
+  check("printing again uses no priority selection", rushCopy?.priority === 50, `${rushCopy?.priority}`);
   const calmer = await requeue(aylaB, rushRow!.id, { priority: 12 });
   const calmCopy = await db.story.findUnique({
     where: { id: Number(((await calmer.json()) as { story?: { id?: number } }).story?.id) },
   });
-  check("and takes a new one when it is", calmCopy?.priority === 12, `${calmCopy?.priority}`);
+  check("an old client cannot reprioritise a reprint", calmCopy?.priority === 50, `${calmCopy?.priority}`);
 
   const stillOld = await db.story.findUnique({ where: { id: psStory!.id } });
   check("the old ticket is exactly as it was",
@@ -604,7 +618,149 @@ async function main() {
   const plain = await db.story.findFirst({ where: { title: "No settings here" } });
   check("and its print settings default to empty", plain?.printSettings === "", JSON.stringify(plain?.printSettings));
 
-    section("the audit trail reads correctly");
+  section("simultaneous first completions award one lasting sticker");
+  const simultaneous = await Promise.all(["one", "two"].map(async (title) => {
+    const body = new FormData();
+    body.set("title", `Jonas concurrent ${title}`);
+    body.set("material", "PETG");
+    body.set("colorName", "Slate");
+    body.set("quantity", "1");
+    const response = await jonasB.raw(`${APP}/api/upload`, { method: "POST", body });
+    return { status: response.status, body: await response.json() };
+  }));
+  check("both valid requests are saved", simultaneous.every((r) => r.status === 200));
+  check("concurrent submissions do not earn a completion sticker",
+        (await db.memberBadge.count({ where: { userId: jonas.id, badgeKey: "first-print" } })) === 0 &&
+        (await db.notification.count({ where: { recipientId: jonas.id, badgeKey: "first-print" } })) === 0);
+  for (const request of simultaneous) {
+    for (const status of ["Accepted", "Printing"]) {
+      const advanced = await rubenB.raw(`${APP}/api/stories/${request.body.id}/advance`, { method: "POST" });
+      check(`the owner advances the print to ${status}`, advanced.status === 200);
+      check(`${status} does not earn the completion sticker`,
+            (await db.memberBadge.count({ where: { userId: jonas.id, badgeKey: "first-print" } })) === 0);
+    }
+  }
+  const completions = await Promise.all(simultaneous.map((request) =>
+    rubenB.raw(`${APP}/api/stories/${request.body.id}/advance`, { method: "POST" })));
+  check("both prints complete at Delivery", completions.every((r) => r.status === 200));
+  const jonasBadge = await db.memberBadge.findUnique({ where: { userId_badgeKey: { userId: jonas.id, badgeKey: "first-print" } } });
+  check("concurrent completions award and announce exactly once",
+        jonasBadge !== null && simultaneous.some((r) => r.body.id === jonasBadge.storyId) &&
+        (await db.memberBadge.count({ where: { userId: jonas.id, badgeKey: "first-print" } })) === 1 &&
+        (await db.notification.count({ where: { recipientId: jonas.id, badgeKey: "first-print" } })) === 1);
+  const withdrewFirst = await jonasB.raw(`${APP}/api/stories/${jonasBadge!.storyId}`, { method: "DELETE" });
+  check("a completed print cannot be withdrawn", withdrewFirst.status === 409);
+  await rubenB.raw(`${APP}/api/stories/${jonasBadge!.storyId}/advance`, { method: "POST" });
+  const retained = await db.memberBadge.findUnique({ where: { id: jonasBadge!.id } });
+  check("collection preserves the sticker and its completion date",
+        retained?.storyId === jonasBadge!.storyId && retained?.earnedAt.getTime() === jonasBadge!.earnedAt.getTime());
+  check("collection does not repeat the sticker announcement",
+        (await db.notification.count({ where: { recipientId: jonas.id, badgeKey: "first-print" } })) === 1);
+  const completedLanding = await (await jonasB.go(`${APP}/story/${jonasBadge!.storyId}?sent=1`)).text();
+  check("the earned sticker uses its completion name",
+        completedLanding.includes("You earned the First completed print sticker!"));
+  const notificationFeed = await (await jonasB.go(`${APP}/api/notifications`)).json();
+  check("the notification API identifies the earned sticker",
+        notificationFeed.notifications.some((n: { badgeKey?: string }) => n.badgeKey === "first-print"));
+
+  section("the hundredth request earns 100 Prints in Sticker Gallery");
+  // Stand in for a member's earlier history without uploading 99 models.
+  await db.user.update({ where: { id: jonas.id }, data: { printSubmissionCount: 99 } });
+  const almostGallery = await (await jonasB.go(`${APP}/stickers`)).text();
+  check("the gallery uses the capitalized name and shows lifetime progress",
+        almostGallery.includes("Sticker Gallery") &&
+        almostGallery.replace(/<!--.*?-->/g, "").includes("99 of 100 requests submitted") &&
+        almostGallery.includes('data-badge="hundred-prints" data-earned="false"'));
+  const invalidHundred = await upload(jonasB, "invalid-hundred.stl", new Uint8Array([1, 2, 3]));
+  check("a refused hundredth request keeps progress at 99",
+        invalidHundred.status === 422 && (await db.user.findUniqueOrThrow({ where: { id: jonas.id } })).printSubmissionCount === 99);
+  const milestoneRequests = await Promise.all(["hundred", "hundred and one"].map(async (title) => {
+    const body = new FormData();
+    body.set("title", `Jonas ${title}`);
+    body.set("material", "PETG");
+    body.set("colorName", "Slate");
+    body.set("quantity", "1");
+    const response = await jonasB.raw(`${APP}/api/upload`, { method: "POST", body });
+    return { status: response.status, body: await response.json() };
+  }));
+  check("concurrent milestone requests save and count once each",
+        milestoneRequests.every((r) => r.status === 200) &&
+        (await db.user.findUniqueOrThrow({ where: { id: jonas.id } })).printSubmissionCount === 101);
+  const hundredBadge = await db.memberBadge.findUnique({ where: { userId_badgeKey: { userId: jonas.id, badgeKey: "hundred-prints" } } });
+  check("the milestone awards and announces once",
+        hundredBadge !== null && milestoneRequests.some((r) => r.body.id === hundredBadge.storyId) &&
+        (await db.notification.count({ where: { recipientId: jonas.id, badgeKey: "hundred-prints" } })) === 1);
+  const milestoneLanding = await (await jonasB.go(`${APP}/story/${hundredBadge!.storyId}?sent=1`)).text();
+  check("the qualifying story celebrates the new sticker and links to its gallery",
+        milestoneLanding.includes("You earned the 100 Prints sticker!") && milestoneLanding.includes('href="/stickers"'));
+  const hundredGallery = await (await jonasB.go(`${APP}/stickers`)).text();
+  check("the new sticker is earned in the gallery",
+        hundredGallery.includes('data-badge="hundred-prints" data-earned="true"') && hundredGallery.includes("100 Prints"));
+  const otherGallery = await (await aylaB.go(`${APP}/stickers`)).text();
+  check("another member's hundred-print sticker stays locked",
+        otherGallery.includes('data-badge="hundred-prints" data-earned="false"'));
+  const withdrewHundred = await jonasB.raw(`${APP}/api/stories/${hundredBadge!.storyId}`, { method: "DELETE" });
+  const keptHundred = await db.memberBadge.findUnique({ where: { id: hundredBadge!.id } });
+  check("withdrawing the milestone request preserves its sticker, date and lifetime progress",
+        withdrewHundred.status === 200 && keptHundred?.storyId === null &&
+        keptHundred?.earnedAt.getTime() === hundredBadge!.earnedAt.getTime() &&
+        (await db.user.findUniqueOrThrow({ where: { id: jonas.id } })).printSubmissionCount === 101);
+
+  section("material exploration and a printer's daily fiber");
+  const stickerMaterials = await Promise.all(["PETG-CF", "PA6-GF"].map((name) => db.catalogMaterial.create({ data: {
+    name: `${name} stickers ${Date.now()}`,
+    colors: { create: { name: "Slate", hex: "#4a5d78", style: "#4a5d78" } },
+  } })));
+  async function requestMaterial(b: Browser, name: string, color = "Slate") {
+    const body = new FormData();
+    body.set("title", `Trying ${name}`);
+    body.set("material", name);
+    body.set("colorName", color);
+    body.set("quantity", "2");
+    const response = await b.raw(`${APP}/api/upload`, { method: "POST", body });
+    return { status: response.status, body: await response.json() };
+  }
+  try {
+    for (let i = 0; i < 4; i++) {
+      const fiberRequest = await requestMaterial(jonasB, stickerMaterials[0]!.name);
+      check(`fiber request ${i + 1} is saved`, fiberRequest.status === 200);
+    }
+    const fourFiberGallery = rendered(await (await jonasB.go(`${APP}/stickers`)).text());
+    check("four requests for two copies each keep Daily Fiber locked at four",
+          fourFiberGallery.includes('data-badge="daily-fiber" data-earned="false"') &&
+          fourFiberGallery.includes("4 of 5 fiber requests submitted"));
+    const fifthFiber = await requestMaterial(jonasB, stickerMaterials[1]!.name);
+    const dailyFiber = await db.memberBadge.findUnique({ where: { userId_badgeKey: { userId: jonas.id, badgeKey: "daily-fiber" } } });
+    check("a fifth request using glass fiber unlocks Daily Fiber",
+          fifthFiber.status === 200 && dailyFiber?.storyId === fifthFiber.body.id &&
+          (await db.user.findUniqueOrThrow({ where: { id: jonas.id } })).fiberSubmissionCount === 5);
+    const fiberNotes = await db.notification.findMany({ where: { recipientId: jonas.id, badgeKey: "daily-fiber" } });
+    check("the fiber award includes the joke, once", fiberNotes.length === 1 && fiberNotes[0]!.text.includes("daily fiber"));
+    const fiberLanding = await (await jonasB.go(`${APP}/story/${fifthFiber.body.id}?sent=1`)).text();
+    check("the fiber story celebrates its own sticker", fiberLanding.includes("You earned the Daily Fiber sticker!") && fiberLanding.includes("Your printer is getting its daily fiber!"));
+
+    const availableForExplorer = await db.catalogMaterial.findMany({
+      where: { active: true, name: { not: "Auto" }, colors: { some: { active: true } } },
+      include: { colors: { where: { active: true }, take: 1 } },
+    });
+    const beforeExploring = await db.user.findUniqueOrThrow({ where: { id: ayla.id } });
+    const missing = availableForExplorer.filter((row) => !beforeExploring.requestedMaterialIds.includes(row.id));
+    const explorerBefore = rendered(await (await aylaB.go(`${APP}/stickers`)).text());
+    check("the gallery names the materials still to try", missing.length > 0 && explorerBefore.includes("Still to try:") && missing.every((row) => explorerBefore.includes(row.name)));
+    const newMaterialRequests = [];
+    for (const row of missing) newMaterialRequests.push(await requestMaterial(aylaB, row.name, row.colors[0]!.name));
+    check("each available material can be requested", newMaterialRequests.every((r) => r.status === 200));
+    const explorerAward = await db.memberBadge.findUnique({ where: { userId_badgeKey: { userId: ayla.id, badgeKey: "material-explorer" } } });
+    check("the last missing material unlocks Material Explorer", explorerAward !== null && explorerAward.storyId === newMaterialRequests.at(-1)?.body.id);
+    const explorerGallery = await (await aylaB.go(`${APP}/stickers`)).text();
+    check("Material Explorer is earned in the gallery", explorerGallery.includes('data-badge="material-explorer" data-earned="true"'));
+    const explorerFiberCount = (await db.user.findUniqueOrThrow({ where: { id: ayla.id } })).fiberSubmissionCount;
+    check("fiber achievements follow each member's own requests", explorerGallery.includes(`data-badge="daily-fiber" data-earned="${explorerFiberCount >= 5}"`));
+  } finally {
+    await db.catalogMaterial.deleteMany({ where: { id: { in: stickerMaterials.map((row) => row.id) } } });
+  }
+
+  section("the audit trail reads correctly");
 
   const actions = await db.auditEvent.groupBy({ by: ["action"], _count: true });
   const byAction = Object.fromEntries(actions.map((a) => [a.action, a._count]));

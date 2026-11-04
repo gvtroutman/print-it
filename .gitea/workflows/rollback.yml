@@ -27,10 +27,10 @@ jobs:
     env:
       OWNER: ${{ github.repository_owner }}
       REPO: localhost:3002/${{ github.repository_owner }}
-      RECORD_DIR: /DATA/AppData/print-it
+      RECORD_DIR: ${{ vars.RECORD_DIR }}
       RECORD_FILE: docker-compose.zimaos.yml
-      STACK_DIR: /var/lib/casaos/apps/compose-65c2260ca510a529
-      PROJECT: compose-65c2260ca510a529
+      STACK_DIR: ${{ vars.STACK_DIR }}
+      PROJECT: ${{ vars.PROJECT }}
     steps:
       - uses: actions/checkout@v4
 

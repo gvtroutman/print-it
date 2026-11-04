@@ -1,10 +1,25 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { fromSpoolman, hslHex, type CatalogColorChoice, type SwatchChoice } from "@/lib/catalog";
+import { WHATEVER_STYLE, hslHex, type CatalogColorChoice, type SwatchChoice } from "@/lib/catalog";
+import { colorNameOf, filamentAlpha, filamentPaletteFor, type FilamentColor } from "@/lib/color-names";
+import { FILAMENT_COLOR_FILTERS, colorDisplayName, colorTitleCase, filamentColorName, filamentColorStyle, filamentColorType, filamentMatchesColorFilter, type FilamentColorFilter, type FilamentColorType } from "@/lib/filament-color-types";
+import { configuredFilamentRecords } from "@/lib/filament-settings-data";
+import { filamentColorFits } from "@/lib/filament-palette-data";
+import { DEFAULT_FILAMENT_SETTINGS, matchingFilamentBrand, type FilamentSettings } from "@/lib/filament-brands";
+import { BrandLogo } from "@/components/brand-logo";
+import { NavIcon } from "@/components/nav-icons";
+import { FilamentPurchase } from "@/components/amazon-product";
+import { amazonListingUrl } from "@/lib/amazon-listing";
+import { pickOf } from "@/lib/shade-field";
 import { SwatchPhoto } from "@/components/swatch-photo";
+import { FilamentPhoto } from "@/components/filament-photo";
 import { SLIDER } from "@/components/ui";
+import { shelfColors, shelfColorSample } from "@/lib/shelf-colors";
+import { PersonalPalette, SavePaletteColor, type PersonalPaletteController } from "./personal-palette";
+import Link from "next/link";
+import { MIN_DONATION_LABEL, STORE_ACCESS_REQUIRED } from "@/lib/donation-policy";
 
 /** What `GET /api/filament-library` answers with. */
 type Found = { total: number; swatches: SwatchChoice[] };
@@ -18,16 +33,23 @@ type Search =
 /** How long typing has to pause before the library is asked again. */
 const DEBOUNCE_MS = 300;
 
+function SamplePhotoRetry({ onRetry }: { onRetry: () => void }) {
+  return <div className="my-[12px] flex flex-wrap items-center justify-center gap-x-[10px] text-[12px] text-ink-2">
+    <span role="status">Some sample photos couldn’t load.</span>
+    <button type="button" onClick={onRetry} className="min-h-[44px] cursor-pointer border-0 bg-transparent p-0 font-bold underline underline-offset-4 hover:text-cherry-dk">Retry photos</button>
+  </div>;
+}
+
 /**
- * Spools the owner does not have but can buy, under the shelf colours: the
- * filamentcolors.xyz library for one material, filled in from SpoolmanDB
- * where it has too few. Folded to a button until it
+ * Spools the owner does not have but can buy, in the "Store" tab: the
+ * photographed filamentcolors.xyz samples for one material. Folded to a button until it
  * is wanted, so the library is not asked for nothing; it opens on its own
  * when a spool to buy is already picked, or when `suggested` says nothing on
  * the shelf looks like the colour picked up top. Key it by material: another
  * material starts folded, with a fresh search.
  */
 export function OtherColors({
+  filamentConfig = DEFAULT_FILAMENT_SETTINGS,
   material,
   owner,
   picked,
@@ -36,7 +58,9 @@ export function OtherColors({
   onNear,
   clear,
   suggested,
+  colorType,
 }: {
+  filamentConfig?: FilamentSettings;
   material: string;
   owner: string;
   picked: SwatchChoice | null;
@@ -46,6 +70,7 @@ export function OtherColors({
   /** The colour picked up top is partly see-through. */
   clear: boolean;
   suggested: boolean;
+  colorType?: FilamentColorType;
 }) {
   const [open, setOpen] = useState(picked !== null || suggested);
 
@@ -82,6 +107,7 @@ export function OtherColors({
         )}
       </div>
       <SpoolFinder
+        filamentConfig={filamentConfig}
         material={material}
         owner={owner}
         picked={picked}
@@ -90,6 +116,7 @@ export function OtherColors({
         near={near}
         onNear={onNear}
         clear={clear}
+        colorType={colorType}
       />
     </section>
   );
@@ -100,10 +127,11 @@ export function OtherColors({
  * narrowed to the material picked, searched by words and shade. The server
  * does the searching (the browser may not reach that site), and reads the
  * picked swatch back from its own copy when the request is sent. `near` is
- * the colour picked from the rainbow at the top of the form, and the library
+ * the colour picked from the chart at the top of the form, and the library
  * answers closest to it first; `clear`, see-through spools ahead of the rest.
  */
 function SpoolFinder({
+  filamentConfig,
   material,
   owner,
   picked,
@@ -112,7 +140,9 @@ function SpoolFinder({
   near,
   onNear,
   clear,
+  colorType,
 }: {
+  filamentConfig: FilamentSettings;
   material: string;
   owner: string;
   picked: SwatchChoice | null;
@@ -121,9 +151,15 @@ function SpoolFinder({
   near: string | null;
   onNear: (hex: string | null) => void;
   clear: boolean;
+  colorType?: FilamentColorType;
 }) {
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState<Search>({ kind: "loading" });
+  const [failedPhotos, setFailedPhotos] = useState<Set<number>>(() => new Set());
+  const [photoAttempt, setPhotoAttempt] = useState(0);
+  const visibleSwatches = search.kind === "found" ? search.found.swatches.filter(swatch => swatch.image) : [];
+  const visibleTotal = search.kind === "found" ? search.found.total - (search.found.swatches.length - visibleSwatches.length) : 0;
+  const pickedAmazonUrl = amazonListingUrl(picked?.buyUrl);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -135,6 +171,7 @@ function SpoolFinder({
       if (query.trim()) params.set("q", query.trim());
       if (near) params.set("near", near);
       if (clear) params.set("clear", "1");
+      if (colorType) params.set("colorType", colorType);
       try {
         const res = await fetch(`/api/filament-library?${params}`, { signal: controller.signal });
         const body = await res.json().catch(() => ({}));
@@ -150,29 +187,27 @@ function SpoolFinder({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [material, query, near, clear]);
+  }, [material, query, near, clear, colorType]);
 
   return (
     <>
       <p className="m-0 mb-[11px] text-[13.5px] leading-[1.45] text-ink-2">
-        Thousands of real {material} colors {owner} doesn&apos;t have yet, but can get.
+        Swatched, Amazon-listed {material} colors from brands {owner} buys: {filamentConfig.brands.filter(brand => brand.active !== false).map((brand) => brand.name).join(", ") || "none enabled yet"}.
       </p>
 
       {picked && (
         <div
           aria-live="polite"
-          className="mb-[13.2px] flex items-center gap-[13.2px] rounded-card border-[3px] border-ink bg-sun px-[13px] py-[10px]"
+          className="mb-[13.2px] flex flex-col items-center gap-[6px] text-center"
         >
-          <SwatchPhoto swatch={picked} className="w-[120px] flex-none" />
-          <div className="min-w-0 flex-1">
+          <SwatchPhoto swatch={picked} bare sampleOnly retryKey={photoAttempt} onUnavailable={() => setFailedPhotos(previous => new Set(previous).add(picked.id))} className="w-[180px] flex-none" />
+          <div className="min-w-0">
             <p className="m-0 font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-2">Spool to buy</p>
-            <p className="m-0 break-words font-display text-[17px] font-bold leading-[1.2] text-ink">{picked.name}</p>
+            <p className="m-0 break-words font-display text-[17px] font-bold leading-[1.2] text-ink">{colorTitleCase(picked.name)}</p>
             <p className="m-0 text-[13px] text-ink-2">
-              {picked.maker} · {picked.type} ·{" "}
-              <a href={picked.pageUrl} target="_blank" rel="noreferrer noopener" className="font-bold underline underline-offset-2">
-                {fromSpoolman(picked.id) ? "look it up ↗" : "see the real swatch ↗"}
-              </a>
+              {picked.maker} · {picked.type}
             </p>
+            {pickedAmazonUrl && <FilamentPurchase url={pickedAmazonUrl} options={picked.purchaseOptions} className="mt-[5px] text-[12px] text-ink-2" />}
             <button
               type="button"
               onClick={onBack}
@@ -202,7 +237,7 @@ function SpoolFinder({
           if (e.key === "Enter") e.preventDefault();
         }}
         maxLength={80}
-        placeholder="Search a color or maker — galaxy, Polymaker, matte…"
+        placeholder="Search a color or brand — galaxy, Polymaker, matte…"
         className="w-full rounded-card border-[3px] border-ink bg-cream px-[15px] py-[11px] text-[16px] text-ink placeholder:text-ink-3"
       />
 
@@ -230,6 +265,7 @@ function SpoolFinder({
         )}
       </div>
 
+      {failedPhotos.size > 0 && <SamplePhotoRetry onRetry={() => { setFailedPhotos(new Set()); setPhotoAttempt(attempt => attempt + 1); }} />}
       <div className="mt-[13.2px] min-h-[120px]">
         {search.kind === "loading" && (
           <p className="m-0 py-[22px] text-center font-mono text-[12px] uppercase tracking-[0.06em] text-ink-3">
@@ -241,20 +277,20 @@ function SpoolFinder({
             {search.message}
           </p>
         )}
-        {search.kind === "found" && search.found.total === 0 && (
+        {search.kind === "found" && visibleTotal === 0 && (
           <p className="m-0 py-[22px] text-center text-[14px] text-ink-2">
-            No {material} spools match that. Try fewer words, or another color.
+            No swatched {material} spools match that. Try fewer words, or another color.
           </p>
         )}
-        {search.kind === "found" && search.found.total > 0 && (
+        {search.kind === "found" && visibleTotal > 0 && (
           <>
             <div
               role="radiogroup"
               aria-label="Spools to buy"
               aria-busy={search.stale ?? false}
-              className={`${search.stale ? "opacity-50" : ""} grid max-h-[360px] grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-x-[14px] gap-y-[16px] overflow-y-auto p-[8px] transition-opacity`}
+              className={`${search.stale ? "opacity-50" : ""} grid max-h-[360px] grid-cols-1 gap-y-[20px] overflow-y-auto p-[12px] transition-opacity`}
             >
-              {search.found.swatches.map((s) => {
+              {visibleSwatches.map((s) => {
                 const active = s.id === picked?.id;
                 return (
                   <button
@@ -262,49 +298,41 @@ function SpoolFinder({
                     type="button"
                     role="radio"
                     aria-checked={active}
-                    aria-label={`${s.name} by ${s.maker}, ${s.type}`}
+                    aria-label={`${colorTitleCase(s.name)} by ${s.maker}, ${s.type}`}
                     onClick={() => onPick(s)}
-                    // No box around it: the photo, with its name and maker under.
-                    // The chosen one's photo wears a ring.
-                    className="group flex min-w-0 cursor-pointer flex-col items-center gap-[5px] border-0 bg-transparent p-0"
+                    className="group relative flex min-w-0 cursor-pointer flex-col items-center gap-[5px] border-0 bg-transparent p-0 focus-visible:outline-none"
                   >
                     <SwatchPhoto
                       swatch={s}
-                      className={`w-full transition-transform ${
-                        active ? "scale-[1.04] shadow-[0_0_0_3px_#ffffff,0_0_0_6px_#1b2126]" : "group-hover:scale-[1.04]"
-                      }`}
+                      bare
+                      sampleOnly
+                      retryKey={photoAttempt}
+                      onUnavailable={() => setFailedPhotos(previous => new Set(previous).add(s.id))}
+                      className="w-full"
                     />
+                    {active && <span aria-hidden className="absolute right-0 top-0 grid h-[20px] w-[20px] place-items-center rounded-full border-[2px] border-ink bg-sun text-[11px] font-bold text-ink">✓</span>}
                     <span
-                      className={`line-clamp-2 text-center text-[12px] leading-[1.2] text-ink ${active ? "font-extrabold text-cherry-dk" : "font-bold"}`}
+                      className={`line-clamp-2 text-center text-[12px] leading-[1.2] text-ink group-focus-visible:underline group-focus-visible:decoration-2 group-focus-visible:underline-offset-4 ${active ? "font-extrabold text-cherry-dk" : "font-bold"}`}
                     >
-                      {s.name}
+                      {colorTitleCase(s.name)}
                     </span>
                     <span className="line-clamp-1 text-center font-mono text-[10px] uppercase tracking-[0.04em] text-ink-3">
-                      {s.maker}
+                      {s.maker} · {s.type}
                     </span>
+                    <BrandLogo brand={matchingFilamentBrand(s.maker, filamentConfig.brands) ?? { name: s.maker }} className="h-[26px] w-[68px]" />
+                    {s.buyUrl && <FilamentPurchase url={s.buyUrl} options={s.purchaseOptions} link={false} className="text-center text-[10px] text-ink-2" />}
                   </button>
                 );
               })}
             </div>
             <p className="m-0 mt-[8px] font-mono text-[11px] uppercase tracking-[0.04em] text-ink-3">
               {search.stale && "Looking… · "}
-              {search.found.total > search.found.swatches.length
-                ? `First ${search.found.swatches.length} of ${search.found.total} · search to narrow it down`
-                : `${search.found.total} ${search.found.total === 1 ? "spool" : "spools"}`}
+              {visibleTotal > visibleSwatches.length
+                ? `First ${visibleSwatches.length} of ${visibleTotal} · search to narrow it down`
+                : `${visibleTotal} ${visibleTotal === 1 ? "spool" : "spools"}`}
               {" · colors from "}
-              <a href="https://filamentcolors.xyz/" target="_blank" rel="noreferrer noopener" className="underline underline-offset-2">
-                filamentcolors.xyz
-              </a>
-              {search.found.swatches.some((s) => fromSpoolman(s.id)) && (
-                <>
-                  {" and "}
-                  <a href="https://github.com/Donkie/SpoolmanDB" target="_blank" rel="noreferrer noopener" className="underline underline-offset-2">
-                    SpoolmanDB
-                  </a>
-                  {" (as the makers list them)"}
-                </>
-              )}
-              {" · screens are not spools, so check the real swatch"}
+              {"filamentcolors.xyz"}
+              {" · check the listing"}
             </p>
           </>
         )}
@@ -313,207 +341,216 @@ function SpoolFinder({
   );
 }
 
-/** A colour picked from the rainbow: hue in degrees, saturation 0–1, lightness 0–100, opacity 0–1. */
-type Pick = { h: number; s: number; l: number; a: number };
-
-/** Where a fresh pick starts: a pure colour, solid. */
-const FRESH = { s: 1, l: 50, a: 1 };
-
 const clamp = (n: number) => Math.min(1, Math.max(0, n));
 
-const hexOf = (pick: Pick) => hslHex(pick.h % 360, pick.s * 100, pick.l);
-
-/** The pick as "#rrggbbaa", for showing it over the checkerboard. */
-const cssOf = (pick: Pick) => `${hexOf(pick)}${Math.round(pick.a * 255).toString(16).padStart(2, "0")}`;
-
-/** A colour picked before this mounted, back into hue, saturation and lightness. */
-function pickOf(hex: string, a: number): Pick {
-  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255) as [number, number, number];
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const l = (max + min) / 2;
-  const d = max - min;
-  if (d === 0) return { h: 0, s: 0, l: l * 100, a };
-  const h = max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
-  return { h: h * 60, s: d / (1 - Math.abs(2 * l - 1)), l: l * 100, a };
+/** Keep the rainbow on the scanned sample's silhouette, hole and printed texture. */
+function AnyColorSwatch() {
+  const sample = "/filament-swatches/polymaker-cope-white.webp";
+  const mask = `url("${sample}") center / 100% 100% no-repeat`;
+  return (
+    <span aria-hidden className="grid min-h-[40px] w-full place-items-center">
+      <span className="block w-full max-w-[480px] drop-shadow-[0_4px_4px_#1b212640]">
+        <span className="relative block aspect-[15/4] w-full" style={{ background: WHATEVER_STYLE, mask, WebkitMask: mask }}>
+          <img src={sample} alt="" width={480} height={128} className="block h-full w-full grayscale mix-blend-multiply" />
+        </span>
+      </span>
+    </span>
+  );
 }
 
-/** What a screen reader hears for a pick, and what the box says under it: "light orange". */
-function pickName({ h, s, l }: Pick): string {
-  if (l > 97) return "white";
-  if (l < 4) return "black";
-  if (s < 0.12) return l > 70 ? "light grey" : l < 30 ? "dark grey" : "grey";
-  const hue = (
-    [[15, "red"], [45, "orange"], [70, "yellow"], [95, "lime"], [160, "green"], [200, "teal"], [250, "blue"],
-      [280, "violet"], [320, "purple"], [345, "pink"], [361, "red"]] as const
-  ).find(([end]) => h < end)![1];
-  const shade = l > 85 ? "pale " : l > 65 ? "light " : l > 38 ? "" : l > 20 ? "dark " : "very dark ";
-  return `${shade}${s < 0.45 ? "muted " : ""}${hue}`;
-}
-
-/** A colour of your own in words, for a ticket: "light orange", or "see-through light orange". */
-export function colorNameOf(hex: string, alpha = 1): string {
-  return `${alpha < 1 ? "see-through " : ""}${pickName(pickOf(hex, alpha))}`;
-}
-
-/** The pad: every hue across, vivid at the top fading to grey at the bottom. */
-const PAD_BACKGROUND = [
-  "linear-gradient(to bottom, rgba(128,128,128,0), rgba(128,128,128,0.5), rgb(128,128,128))",
-  `linear-gradient(to right, ${Array.from({ length: 13 }, (_, i) => `hsl(${i * 30} 100% 50%)`).join(", ")})`,
-].join(", ");
-
-/** A pale checkerboard, so a see-through colour looks see-through. */
-const CHECKER = "repeating-conic-gradient(#d4d9dd 0% 25%, #ffffff 0% 50%) 0 0 / 12px 12px";
-
-
-const SLIDER_LABEL = "w-[104px] flex-none font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-2";
-
-/** The "your own" circle: the whole rainbow around it. */
-const RAINBOW = `conic-gradient(${Array.from({ length: 13 }, (_, i) => `hsl(${i * 30} 100% 50%)`).join(", ")})`;
-
-/** One circle in the colour menu, with its name under. */
-function MenuCircle({
+/** A shelf choice using the Store's borderless sample layout. */
+function ShelfColorCard({
   label,
+  detail,
   active,
   onClick,
   background,
-  dashed,
-  children,
+  photo,
+  reference,
+  tabIndex,
+  onKeyDown,
 }: {
   label: string;
+  detail?: string;
   active: boolean;
   onClick: () => void;
   background?: string;
-  dashed?: boolean;
-  children?: ReactNode;
+  photo?: ReactNode;
+  reference?: string;
+  tabIndex: number;
+  onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => void;
 }) {
   return (
     <button
       type="button"
       role="radio"
+      aria-label={`${colorTitleCase(label)}${detail ? ` · ${detail}` : ""}`}
+      aria-description={reference}
       aria-checked={active}
+      tabIndex={tabIndex}
       onClick={onClick}
-      className="group flex w-[64px] min-w-0 cursor-pointer flex-col items-center gap-[6px] border-0 bg-transparent p-0"
+      onKeyDown={onKeyDown}
+      className="group relative flex min-w-0 cursor-pointer flex-col items-center border-0 bg-transparent p-0 text-center focus-visible:outline-none"
     >
-      <span
+      {photo ?? <span
         aria-hidden
-        className={`grid h-[44px] w-[44px] place-items-center rounded-full border-[3px] transition-transform ${
-          dashed ? "border-dashed border-ink-3" : "border-ink"
-        } ${active ? "scale-[1.08] shadow-[0_0_0_3px_#ffffff,0_0_0_6px_#1b2126]" : "group-hover:scale-[1.08]"}`}
+        className="grid aspect-[5/3] w-full max-w-[180px] place-items-center rounded-[6px] border border-ink/10"
         style={background ? { background } : undefined}
-      >
-        {children}
+      />}
+      {active && <span aria-hidden className="absolute right-0 top-0 grid h-[20px] w-[20px] place-items-center rounded-full border-[2px] border-ink bg-sun text-[11px] font-bold text-ink">✓</span>}
+      <span className={`mt-[6px] break-words font-display text-[12px] leading-tight group-focus-visible:underline group-focus-visible:decoration-2 group-focus-visible:underline-offset-4 ${active ? "text-cherry-dk" : "text-ink"}`}>
+        {colorTitleCase(label)}
       </span>
-      <span
-        className={`line-clamp-2 text-center font-mono text-[10px] font-bold uppercase leading-[1.2] tracking-[0.04em] ${
-          active ? "text-cherry-dk" : "text-ink-2"
-        }`}
-      >
-        {label}
-      </span>
+      {detail && <span className="mt-[3px] block break-words text-[10px] leading-tight text-ink-2">{detail}</span>}
+      {reference && <span className="mt-[3px] block break-words text-[10px] leading-tight text-ink-2">{reference}</span>}
     </button>
   );
 }
 
 /**
  * The colour menu: every colour on the shelf it is given (one material's, or all of them),
- * as a circle, then "Any color" and a rainbow circle for your own. The full
- * picker — rainbow, dark · light, see-through — only opens from that last
- * circle, or when the colour already picked is none of the shelf's: the
- * circles slide off to the left as it slides in from the right. Dragging
+ * as a filament preview card, plus "Any color". The market filament chart
+ * opens from the "Store" tab, or when the colour already picked is
+ * none of the shelf's: the shelf slides off to the left as it slides in from the right. Dragging
  * sideways slides between the two by hand.
  */
 export function ColorMenu({
+  filamentConfig = DEFAULT_FILAMENT_SETTINGS,
   colors,
   value,
   alpha,
-  onChange,
+  onChange: onSelect,
+  material,
+  personalPalette,
+  otherColors,
+  selectedFilament,
+  selectedShelf: shelfChoice,
+  storeAccess = false,
 }: {
+  filamentConfig?: FilamentSettings;
   colors: CatalogColorChoice[];
   value: string | null;
   alpha: number;
-  onChange: (hex: string | null, alpha: number) => void;
+  onChange: (hex: string | null, alpha: number, filament?: FilamentColor, shelf?: CatalogColorChoice, name?: string) => void;
+  material?: string | null;
+  personalPalette?: PersonalPaletteController;
+  /** Spools to buy are available only while the color chart is showing. */
+  otherColors?: ReactNode;
+  selectedFilament?: FilamentColor | null;
+  selectedShelf?: CatalogColorChoice | null;
+  storeAccess?: boolean;
 }) {
-  // One circle per colour name, the first material's look winning.
-  const shelf: CatalogColorChoice[] = [];
-  const seen = new Set<string>();
-  for (const c of colors) {
-    const key = c.name.toLowerCase();
-    if (c.mode === "whatever" || !/^#[0-9a-f]{6}$/i.test(c.hex) || seen.has(key)) continue;
-    seen.add(key);
-    shelf.push(c);
-  }
+  // Name custom shades here, where the source palette is already loaded.
+  // The request form only needs the selected name and filament snapshot.
+  const onChange = (hex: string | null, alpha: number, filament?: FilamentColor, shelf?: CatalogColorChoice) =>
+    onSelect(hex, alpha, filament, shelf, hex ? colorNameOf(hex, alpha, filamentConfig) : undefined);
+  const shelf = useMemo(() => shelfColors(colors).map(color => ({ ...color, sample: shelfColorSample(color, material ?? "", filamentConfig) })), [colors, material, filamentConfig]);
   const onShelf = (hex: string | null) =>
-    hex !== null && alpha === 1 && shelf.some((c) => c.hex.toLowerCase() === hex.toLowerCase());
+    !selectedFilament && hex !== null && alpha === 1 && shelf.some((c) => c.hex.toLowerCase() === hex.toLowerCase());
+  const selectedShelf = !selectedFilament && alpha === 1 ? shelf.find(c =>
+    c.hex.toLowerCase() === value?.toLowerCase() && (!shelfChoice || c.id === shelfChoice.id
+      || colorDisplayName(c.name).toLowerCase() === colorDisplayName(shelfChoice.name).toLowerCase()
+        && c.mode === shelfChoice.mode && c.style === shelfChoice.style)) : undefined;
 
-  // A colour of your own is one the circles don't have.
+  // A colour of your own is one the shelf doesn't have.
   const ownPicked = value !== null && !onShelf(value);
-  const [own, setOwn] = useState(ownPicked);
-  // The colour of your own, shown in the middle of its rainbow circle.
-  const tint = value ? `${value}${Math.round(alpha * 255).toString(16).padStart(2, "0")}` : "";
-
-  // What slid in gets focus: the rainbow pad, or back to its circle.
+  const [own, setOwn] = useState(storeAccess && ownPicked);
+  // What slid in gets focus: the chart's selected color, or the selected shelf card.
   const pickerRef = useRef<HTMLDivElement>(null);
-  const ownRef = useRef<HTMLDivElement>(null);
+  const shelfRef = useRef<HTMLDivElement>(null);
+  const shelfIndex = selectedShelf ? shelf.indexOf(selectedShelf) + 1 : 0;
+  function navigateShelf(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
+    const count = shelf.length + 1;
+    const next = event.key === "Home" ? 0 : event.key === "End" ? count - 1
+      : event.key === "ArrowRight" || event.key === "ArrowDown" ? (index + 1) % count
+      : event.key === "ArrowLeft" || event.key === "ArrowUp" ? (index + count - 1) % count : null;
+    if (next === null) return;
+    event.preventDefault();
+    const color = next === 0 ? undefined : shelf[next - 1];
+    onChange(color?.hex ?? null, 1, undefined, color);
+    shelfRef.current?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
+  }
   function open(next: boolean) {
     setOwn(next);
     requestAnimationFrame(() =>
       (next
-        ? pickerRef.current?.querySelector<HTMLElement>("[role=slider]")
-        : ownRef.current?.querySelector<HTMLElement>("button")
+        ? pickerRef.current?.querySelector<HTMLElement>('[data-color-chart] [role=radio][tabindex="0"]') ??
+          pickerRef.current?.querySelector<HTMLElement>("[data-color-type]")
+        : shelfRef.current?.querySelector<HTMLElement>('[aria-checked="true"]') ??
+          shelfRef.current?.querySelector<HTMLElement>("button")
       )?.focus({ preventScroll: true }),
     );
   }
 
   return (
-    <SwipePair
-      second={own}
-      onShow={(next, tapped) => (tapped ? open(next) : setOwn(next))}
-      labels={["Shelf colors", "Your own color"]}
-      first={
-        <div role="radiogroup" aria-label="Color you want" className="flex flex-wrap justify-center gap-x-[8px] gap-y-[13.2px]">
-          <MenuCircle label="Any color" active={value === null} dashed onClick={() => onChange(null, 1)} />
-          {shelf.map((c) => (
-            <MenuCircle
-              key={c.id}
-              label={c.name}
-              active={!ownPicked && value !== null && value.toLowerCase() === c.hex.toLowerCase()}
-              background={c.style}
-              onClick={() => onChange(c.hex, 1)}
-            />
-          ))}
-          <div ref={ownRef} className="contents">
-            <MenuCircle label="Your own" active={ownPicked} background={RAINBOW} onClick={() => open(true)}>
-              <span
-                className="h-[20px] w-[20px] rounded-full border-[2.5px] border-ink"
-                style={{ background: ownPicked ? `linear-gradient(${tint}, ${tint}), ${CHECKER}` : "#ffffff" }}
-              />
-            </MenuCircle>
+    <>
+      <SwipePair
+        second={own}
+        onShow={(next, tapped) => (tapped ? open(next) : setOwn(next))}
+        labels={["Library", "Store"]}
+        first={
+          <div ref={shelfRef}>
+            <div role="radiogroup" aria-label="Color you want" className="grid max-h-[380px] grid-cols-1 content-start gap-y-[20px] overflow-y-auto overscroll-contain p-[12px]">
+              <ShelfColorCard label="Any color" active={value === null} photo={<AnyColorSwatch />} onClick={() => onChange(null, 1)} tabIndex={shelfIndex === 0 ? 0 : -1} onKeyDown={event => navigateShelf(event, 0)} />
+              {shelf.map((c, index) => (
+                <ShelfColorCard
+                  key={c.id}
+                  label={colorDisplayName(c.name)}
+                  detail={c.detail}
+                  active={!ownPicked && shelfIndex === index + 1}
+                  background={c.style}
+                  photo={c.sample ? <FilamentPhoto color={c.sample.color} bare sampleOnly className="w-full" /> : undefined}
+                  reference={c.sample ? `${c.sample.exact ? "" : c.sample.baseColorOnly ? "Similar base color · " : "Similar color · "}${c.sample.color.maker} · ${c.sample.color.product}` : c.materialName ?? material ?? undefined}
+                  onClick={() => onChange(c.hex, 1, undefined, c)}
+                  tabIndex={shelfIndex === index + 1 ? 0 : -1}
+                  onKeyDown={event => navigateShelf(event, index + 1)}
+                />
+              ))}
+            </div>
+            {personalPalette && selectedShelf?.mode === "solid" && (
+              <div className="mt-[14px] flex justify-center">
+                <SavePaletteColor color={{ name: selectedShelf.name, hex: selectedShelf.hex, alpha: 1 }} palette={personalPalette} compact={false} />
+              </div>
+            )}
           </div>
-        </div>
-      }
-      secondPanel={
-        <div ref={pickerRef}>
-          <button
-            type="button"
-            onClick={() => open(false)}
-            className="mb-[6px] cursor-pointer border-0 bg-transparent p-0 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-2 underline decoration-2 underline-offset-4 hover:text-cherry-dk"
-          >
-            ← Shelf colors
-          </button>
-          <ColorPicker value={value} alpha={alpha} onChange={onChange} />
-        </div>
-      }
-    />
+        }
+        secondPanel={
+          <div ref={pickerRef}>
+            {!storeAccess && (
+              <div className="rounded-panel border-[3px] border-ink bg-aqua-wash p-[22px] text-center">
+                <div className="mb-[18px] flex h-[100px] items-center justify-center text-ink">
+                  <NavIcon name="lock" size={112} className="drop-shadow-[3px_4px_2px_rgba(34,26,20,0.24)]" />
+                </div>
+                <h3 className="m-0 font-display text-[22px] text-ink">Unlock Store with {MIN_DONATION_LABEL}</h3>
+                <p className="mt-[10px] text-[14px] leading-[1.5] text-ink-2">{STORE_ACCESS_REQUIRED}</p>
+                <Link href="/bin" className="stamp inline-block rounded-chip border-[3px] border-ink bg-sun px-[17px] py-[10px] font-mono text-[12px] font-bold uppercase text-ink">
+                  Go to Donate →
+                </Link>
+              </div>
+            )}
+            {storeAccess && own && personalPalette && (
+              <PersonalPalette palette={personalPalette} value={value} alpha={alpha} onSelect={(color) => {
+                const record = configuredFilamentRecords(filamentConfig).find(swatch => (!material || filamentColorFits(material, swatch)) && swatch.hex === color.hex && filamentColorName(swatch) === colorDisplayName(color.name));
+                onChange(color.hex, color.alpha, record);
+              }} />
+            )}
+            {storeAccess && own && <ColorChart value={value} alpha={alpha} onChange={onChange} material={material} personalPalette={personalPalette} filamentConfig={filamentConfig} selectedFilament={selectedFilament} />}
+            {storeAccess && own && otherColors}
+          </div>
+        }
+      />
+      {personalPalette?.busy && <p role="status" className="sr-only">Updating your palette…</p>}
+      {personalPalette?.error && <p role="alert" className="m-0 mt-[8px] text-center text-[12px] leading-[1.4] text-cherry-dk">{personalPalette.error}</p>}
+    </>
   );
 }
 
 /**
- * Two panels sharing one spot, with two rounded lines above them saying
+ * Two panels sharing one spot, with two labeled buttons above them saying
  * which is showing. The second slides in from the right as the first slides
- * off to the left; tapping a line, or dragging sideways, swaps them. The
+ * off to the left; tapping a button, or dragging sideways, swaps them. The
  * spot grows or shrinks to the panel showing.
- * `onShow` says whether a line was tapped, so the caller can move focus;
+ * `onShow` says whether a button was tapped, so the caller can move focus;
  * a drag leaves focus where it was.
  */
 function SwipePair({
@@ -557,8 +594,8 @@ function SwipePair({
   }
 
   function onPointerDown(e: React.PointerEvent) {
-    // The rainbow pad, the sliders and an open list keep their own drags.
-    if (e.button !== 0 || (e.target as Element).closest("[role=slider], input[type=range], [role=listbox]")) return;
+    // Color controls and text selection keep their own drags.
+    if (e.button !== 0 || (e.target as Element).closest("[data-color-picker], [role=slider], input, [role=listbox]")) return;
     gesture.current = { id: e.pointerId, x: e.clientX, y: e.clientY, dragging: false, lastX: e.clientX, lastT: e.timeStamp, vx: 0 };
   }
 
@@ -600,28 +637,21 @@ function SwipePair({
     transition: "none",
   });
 
-  // How far across the lines show: 0 the first, 1 the second, following a drag.
-  const at = pull ? pull.p : second ? 1 : 0;
-
   return (
-    <div>
-      {/* ---- two lines for the two panels: the one showing is filled in ---- */}
-      <div className="grid grid-cols-2 gap-[12px] px-[4px] pt-[4px] pb-[14px]">
+    <div className="mx-auto w-full max-w-[560px]">
+      <div aria-label="Color options" className="mb-[18px] grid grid-cols-2 gap-[4px] rounded-card border-[2px] border-ink bg-cream-2 p-[4px]">
         {([0, 1] as const).map((i) => (
           <button
             key={i}
             type="button"
             aria-label={labels[i]}
-            aria-current={second === (i === 1) ? "true" : undefined}
+            aria-pressed={second === (i === 1)}
             onClick={() => second !== (i === 1) && onShow(i === 1, true)}
-            className="group cursor-pointer border-0 bg-transparent px-0 py-[6px]"
+            className={`min-h-[40px] min-w-0 cursor-pointer rounded-[8px] border-0 px-[8px] py-[9px] font-display text-[12px] leading-tight transition-colors motion-reduce:transition-none ${
+              second === (i === 1) ? "bg-ink text-cream shadow-soft" : "bg-transparent text-ink-2 hover:bg-porcelain"
+            }`}
           >
-            <span className="relative block h-[5px] overflow-hidden rounded-full bg-rule">
-              <span
-                className="absolute inset-0 rounded-full bg-ink transition-opacity duration-[400ms] ease-out group-hover:bg-cherry-dk motion-reduce:transition-none"
-                style={{ opacity: i === 1 ? at : 1 - at, transition: pull ? "none" : undefined }}
-              />
-            </span>
+            {labels[i]}
           </button>
         ))}
       </div>
@@ -678,190 +708,305 @@ const SWIPE = 0.6;
 /** Pixels per millisecond that count as a flick. */
 const FLICK = 0.4;
 
-/**
- * A colour picker in three parts: a rainbow pad to aim a target at (hue
- * across, vivid to grey down), a big box showing the colour picked, and
- * sliders for how light or dark it is and how see-through. The pad is one
- * tab stop that the arrow keys move around. A colour is handed on once the
- * pointer or slider rests a moment, so the library is not asked again on
- * every pixel of a drag.
- */
-export function ColorPicker({
+/** A chart of actual filament choices. Filters never replace the selected color. */
+export function ColorChart({
+  filamentConfig = DEFAULT_FILAMENT_SETTINGS,
   value,
   alpha,
   onChange,
+  material,
+  personalPalette,
+  selectedFilament,
 }: {
+  filamentConfig?: FilamentSettings;
   value: string | null;
   alpha: number;
-  onChange: (hex: string | null, alpha: number) => void;
+  onChange: (hex: string | null, alpha: number, filament?: FilamentColor) => void;
+  material?: string | null;
+  personalPalette?: PersonalPaletteController;
+  selectedFilament?: FilamentColor | null;
 }) {
-  const [pick, setPick] = useState<Pick | null>(() => (value ? pickOf(value, alpha) : null));
-  const handOn = useRef(onChange);
-  handOn.current = onChange;
-  // The last colour handed on, so it is not mistaken for one from elsewhere.
-  const sent = useRef({ hex: value, a: alpha });
-  // The target was just moved from outside, so it is not handed back.
-  const synced = useRef(false);
+  const id = useId();
+  const [failedPhotos, setFailedPhotos] = useState<Set<string>>(() => new Set());
+  const [photoAttempt, setPhotoAttempt] = useState(0);
+  // Browsing a hue never changes the requested filament until a sample is chosen.
+  const [hueFilter, setHueFilter] = useState<number | null>(null);
+  const hue = hueFilter ?? (value ? Math.round(pickOf(value).h) : 0);
+  const hueName = ["Red", "Orange", "Yellow", "Lime", "Green", "Teal", "Cyan", "Azure", "Blue", "Purple", "Magenta", "Pink"][Math.round(hue / 30) % 12]!;
+  const [colorFilter, setColorFilter] = useState<FilamentColorFilter>(() => selectedFilament ? filamentColorType(selectedFilament) : alpha < 1 ? "Translucent" : "Solid");
+  const filterLabel = colorFilter === "Translucent" ? "Clear" : colorFilter;
+  const palette = useMemo(() => filamentPaletteFor(material, filamentConfig, colorFilter), [material, filamentConfig, colorFilter]);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const filtersRef = useRef<HTMLDivElement>(null);
+  const filterGesture = useRef<{ id: number; x: number; y: number; scroll: number; dragging: boolean; moves: { x: number; time: number }[] } | null>(null);
+  const filterDragged = useRef(false);
+  const filterMomentum = useRef<number | null>(null);
+  const finishPreviews = useMemo(() => FILAMENT_COLOR_FILTERS.map(type => {
+    const examples = filamentPaletteFor(material, filamentConfig, type).colors;
+    const preferred = type === "Solid" ? /^blue$/i : type === "Translucent" ? /^(?:clear|transparent|natural)$/i : type === "Silk" ? /gold/i : type === "Composite" ? /^bronze composite$/i : null;
+    return { type, color: (preferred ? examples.find(color => preferred.test(colorDisplayName(color.name))) : null) ?? examples[0] };
+  }), [material, filamentConfig]);
 
-  // A colour picked elsewhere on the form — a shelf circle, "Any color" —
-  // moves the target there too.
-  useEffect(() => {
-    if (value === sent.current.hex && alpha === sent.current.a) return;
-    sent.current = { hex: value, a: alpha };
-    synced.current = value !== null;
-    setPick(value ? pickOf(value, alpha) : null);
-  }, [value, alpha]);
+  function stopFilterMomentum() {
+    if (filterMomentum.current !== null) cancelAnimationFrame(filterMomentum.current);
+    filterMomentum.current = null;
+  }
 
-  useEffect(() => {
-    if (!pick) return;
-    if (synced.current) {
-      synced.current = false;
-      return;
+  useEffect(() => stopFilterMomentum, []);
+
+  function coastFilters(row: HTMLDivElement, initialVelocity: number) {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let velocity = Math.max(-2.5, Math.min(2.5, initialVelocity));
+    let lastTime = performance.now();
+    function frame(time: number) {
+      const elapsed = Math.max(0, Math.min(time - lastTime, 32));
+      lastTime = time;
+      if (elapsed === 0) {
+        filterMomentum.current = requestAnimationFrame(frame);
+        return;
+      }
+      const speed = Math.max(0, Math.abs(velocity) - elapsed * 0.004);
+      const nextVelocity = Math.sign(velocity) * speed;
+      const before = row.scrollLeft;
+      // Integrate the motion in pixels; category widths never set the destination.
+      row.scrollLeft += (velocity + nextVelocity) * 0.5 * elapsed;
+      velocity = nextVelocity;
+      filterMomentum.current = speed > 0.02 && Math.abs(row.scrollLeft - before) > 0.1
+        ? requestAnimationFrame(frame) : null;
     }
-    const hex = hexOf(pick);
-    if (hex === value && pick.a === alpha) return;
-    const timer = setTimeout(() => {
-      sent.current = { hex, a: pick.a };
-      handOn.current(hex, pick.a);
-    }, 200);
-    return () => clearTimeout(timer);
-  }, [pick]);
-
-  function aim(e: React.PointerEvent<HTMLDivElement>) {
-    if (e.type === "pointerdown") e.currentTarget.setPointerCapture(e.pointerId);
-    else if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
-    const box = e.currentTarget.getBoundingClientRect();
-    const h = clamp((e.clientX - box.left) / box.width) * 360;
-    const s = 1 - clamp((e.clientY - box.top) / box.height);
-    setPick((prev) => ({ ...FRESH, ...prev, h, s }));
+    filterMomentum.current = requestAnimationFrame(frame);
   }
 
-  function nudge(e: React.KeyboardEvent) {
-    const step = e.shiftKey ? 0.1 : 0.025;
-    const dh = { ArrowRight: step, ArrowLeft: -step }[e.key] ?? 0;
-    const ds = { ArrowUp: step, ArrowDown: -step }[e.key] ?? 0;
-    if (!dh && !ds) return;
-    e.preventDefault();
-    setPick((prev) => {
-      const from = prev ?? { h: 0, ...FRESH };
-      return { ...from, h: (from.h + dh * 360 + 360) % 360, s: clamp(from.s + ds) };
-    });
+  // Keep the active finish visible when a saved color or keyboard opens it.
+  useEffect(() => {
+    stopFilterMomentum();
+    const row = filtersRef.current;
+    const button = row?.querySelector<HTMLButtonElement>(`[data-color-type="${colorFilter}"]`);
+    if (!row || !button) return;
+    const bounds = row.getBoundingClientRect();
+    const item = button.getBoundingClientRect();
+    if (item.left < bounds.left) row.scrollLeft -= bounds.left - item.left;
+    else if (item.right > bounds.right) row.scrollLeft += item.right - bounds.right;
+  }, [colorFilter]);
+
+  function dragFilters(event: React.PointerEvent<HTMLDivElement>) {
+    const gesture = filterGesture.current;
+    if (!gesture || gesture.id !== event.pointerId) return;
+    const dx = event.clientX - gesture.x;
+    const dy = event.clientY - gesture.y;
+    if (!gesture.dragging) {
+      if (Math.abs(dy) > DRAG_START && Math.abs(dy) > Math.abs(dx)) {
+        filterGesture.current = null;
+        return;
+      }
+      if (Math.abs(dx) < DRAG_START) return;
+      gesture.dragging = true;
+      filterDragged.current = true;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      event.currentTarget.style.cursor = "grabbing";
+    }
+    event.preventDefault();
+    gesture.moves.push({ x: event.clientX, time: event.timeStamp });
+    while (gesture.moves.length > 2 && gesture.moves[0].time < event.timeStamp - 100) gesture.moves.shift();
+    event.currentTarget.scrollLeft = gesture.scroll - dx;
   }
 
-  const hex = pick ? hexOf(pick) : null;
-  const solid = pick ? hexOf({ ...pick, l: 50 }) : "#808080";
+  function endFilterDrag(event: React.PointerEvent<HTMLDivElement>) {
+    const gesture = filterGesture.current;
+    if (!gesture || gesture.id !== event.pointerId) return;
+    filterGesture.current = null;
+    event.currentTarget.style.cursor = "";
+    // Recent movement sets the flick's speed; a held or cancelled drag stops here.
+    const first = gesture.moves[0];
+    const last = gesture.moves[gesture.moves.length - 1];
+    const elapsed = event.timeStamp - first.time;
+    if (gesture.dragging && event.type === "pointerup" && event.timeStamp - last.time < 80 && elapsed > 0) {
+      const velocity = (first.x - event.clientX) / elapsed;
+      if (Math.abs(velocity) > 0.15) coastFilters(event.currentTarget, velocity);
+    }
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    // Complete touch taps here too: a scrollable row can swallow the
+    // browser's synthetic click immediately after a swipe.
+    if (!gesture.dragging && event.type === "pointerup" && event.pointerType === "touch") {
+      const button = (event.target as Element).closest<HTMLButtonElement>("[data-color-type]");
+      const type = FILAMENT_COLOR_FILTERS.find(type => type === button?.dataset.colorType);
+      if (type) setColorFilter(type);
+    }
+    // The click generated by releasing a drag must not select a finish.
+    if (gesture.dragging) setTimeout(() => { filterDragged.current = false; }, 0);
+  }
+
+  function navigateFilters(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
+    const next = event.key === "Home" ? 0 : event.key === "End" ? FILAMENT_COLOR_FILTERS.length - 1
+      : event.key === "ArrowRight" ? (index + 1) % FILAMENT_COLOR_FILTERS.length
+      : event.key === "ArrowLeft" ? (index + FILAMENT_COLOR_FILTERS.length - 1) % FILAMENT_COLOR_FILTERS.length
+      : null;
+    if (next === null) return;
+    event.preventDefault();
+    setColorFilter(FILAMENT_COLOR_FILTERS[next]!);
+    filtersRef.current?.querySelectorAll<HTMLButtonElement>("[data-color-type]")[next]?.focus();
+  }
+
+  // A shelf or saved-palette selection should open its finish in the chart.
+  useEffect(() => {
+    setColorFilter(held => selectedFilament && filamentMatchesColorFilter(selectedFilament, held)
+      ? held : selectedFilament ? filamentColorType(selectedFilament) : alpha < 1 ? "Translucent" : "Solid");
+  }, [value, alpha, selectedFilament]);
+
+  const selectedPalette = filamentPaletteFor(material, filamentConfig, alpha < 1 ? "Translucent" : "Solid");
+  const swatch = selectedFilament ?? (value ? selectedPalette.colors.find(color => color.hex.toLowerCase() === value.toLowerCase() && filamentAlpha(color) === alpha) : null);
+  const amazonUrl = amazonListingUrl(swatch?.amazonUrl ?? swatch?.pageUrl);
+  const colors = useMemo(() => {
+    return palette.colors
+      .map(color => {
+        const shade = pickOf(color.hex);
+        // Include recorded component hues for gradient and multicolor filaments.
+        const shades = [shade, ...(color.colors ?? []).map(pickOf)];
+        const distance = hueFilter === null ? 0 : Math.min(...shades.filter(sample => sample.s >= 0.12).map(sample => {
+          const difference = Math.abs(sample.h - hueFilter % 360);
+          return Math.min(difference, 360 - difference);
+        }));
+        return { color, shade, distance };
+      })
+      .filter(sample => hueFilter === null || sample.distance <= 30)
+      .sort((a, b) => {
+        const aNeutral = a.shade.s < 0.12;
+        const bNeutral = b.shade.s < 0.12;
+        return a.distance - b.distance
+          || Number(bNeutral) - Number(aNeutral)
+          || (aNeutral && bNeutral ? b.shade.v - a.shade.v : a.shade.h - b.shade.h)
+          || colorDisplayName(a.color.name).localeCompare(colorDisplayName(b.color.name));
+      })
+      .map(({ color }) => color);
+  }, [palette, hueFilter]);
+  const selectedVisible = colors.some(color => color.id === swatch?.id);
+
+  useEffect(() => { gridRef.current?.scrollTo(0, 0); }, [material, colorFilter, hueFilter]);
+
+  function choose(color: FilamentColor) {
+    onChange(color.hex, filamentAlpha(color), color);
+  }
+
+  function navigate(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
+    const next = event.key === "Home" ? 0 : event.key === "End" ? colors.length - 1
+      : event.key === "ArrowRight" || event.key === "ArrowDown" ? (index + 1) % colors.length
+      : event.key === "ArrowLeft" || event.key === "ArrowUp" ? (index + colors.length - 1) % colors.length
+      : null;
+    if (next === null) return;
+    event.preventDefault();
+    choose(colors[next]!);
+    gridRef.current?.querySelectorAll<HTMLButtonElement>("[role=radio]")[next]?.focus();
+  }
 
   return (
-    <div className="mt-[6px] w-full max-w-[560px]">
-      <div className="flex items-start gap-[13.2px]">
-        {/* ---- 1 · the rainbow, with a target where the colour is ---- */}
-        <div
-          role="slider"
-          tabIndex={0}
-          aria-label="Color you want"
-          aria-valuemin={0}
-          aria-valuemax={360}
-          aria-valuenow={pick ? Math.round(pick.h) : undefined}
-          aria-valuetext={pick ? pickName(pick) : "none picked"}
-          onPointerDown={aim}
-          onPointerMove={aim}
-          onKeyDown={nudge}
-          className="relative h-[176px] min-w-0 flex-1 cursor-crosshair touch-none rounded-[14px] border-[3px] border-ink focus-visible:outline-offset-4"
-          style={{ background: PAD_BACKGROUND }}
-        >
-          {pick && (
-            <svg
-              aria-hidden
-              viewBox="0 0 34 34"
-              className="pointer-events-none absolute h-[34px] w-[34px] -translate-x-1/2 -translate-y-1/2"
-              style={{ left: `${(pick.h / 360) * 100}%`, top: `${(1 - pick.s) * 100}%` }}
-            >
-              <g fill="none" strokeLinecap="round">
-                <g stroke="#1b2126" strokeWidth="5">
-                  <circle cx="17" cy="17" r="8" />
-                  <path d="M17 2.5v6M17 25.5v6M2.5 17h6M25.5 17h6" />
-                </g>
-                <g stroke="#ffffff" strokeWidth="2">
-                  <circle cx="17" cy="17" r="8" />
-                  <path d="M17 2.5v6M17 25.5v6M2.5 17h6M25.5 17h6" />
-                </g>
-              </g>
-              <circle cx="17" cy="17" r="2" fill="#ffffff" stroke="#1b2126" strokeWidth="1.2" />
-            </svg>
-          )}
-        </div>
-
-        {/* ---- 2 · the colour picked, big ---- */}
-        <div className="flex w-[96px] flex-none flex-col items-center gap-[6px] sm:w-[120px]">
-          <div
-            aria-hidden
-            className={`grid aspect-square w-full place-items-center overflow-hidden rounded-[14px] border-[3px] ${
-              pick ? "border-ink" : "border-dashed border-ink-3"
-            }`}
-            style={pick ? { background: `linear-gradient(${cssOf(pick)}, ${cssOf(pick)}), ${CHECKER}` } : undefined}
-          >
-            {!pick && (
-              <span className="px-[6px] text-center font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
-                Any color
-              </span>
-            )}
-          </div>
-          {pick && (
-            <p aria-live="polite" className="m-0 text-center text-[12.5px] font-bold leading-[1.25] text-ink">
-              {pickName(pick)}
-              {pick.a < 1 && (
-                <span className="block font-normal text-ink-2">{Math.round((1 - pick.a) * 100)}% see-through</span>
-              )}
-            </p>
-          )}
-          <button
-            type="button"
-            onClick={() => {
-              setPick(null);
-              sent.current = { hex: null, a: 1 };
-              onChange(null, 1);
-            }}
-            // Kept in place when hidden, so picking a colour does not shift anything.
-            className={`cursor-pointer border-0 bg-transparent p-0 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3 underline decoration-2 underline-offset-4 hover:text-cherry-dk ${
-              pick ? "" : "invisible"
-            }`}
-          >
-            Any color
+    <div data-color-picker data-color-chart className="mx-auto w-full max-w-[560px]">
+      <p id={`${id}-filters-help`} className="m-0 mb-[6px] text-[11px] leading-tight text-ink-3">Drag or swipe to browse finishes</p>
+      <div ref={filtersRef} role="group" aria-label="Filament filters" aria-describedby={`${id}-filters-help`}
+        onDragStart={event => event.preventDefault()}
+        onPointerDown={event => {
+          if (event.button !== 0 || !event.isPrimary) return;
+          stopFilterMomentum();
+          filterDragged.current = false;
+          filterGesture.current = { id: event.pointerId, x: event.clientX, y: event.clientY, scroll: event.currentTarget.scrollLeft, dragging: false, moves: [{ x: event.clientX, time: event.timeStamp }] };
+        }}
+        onPointerMove={dragFilters} onPointerUp={endFilterDrag} onPointerCancel={endFilterDrag}
+        onLostPointerCapture={event => {
+          // Touch presses initially capture the button; transferring that
+          // capture to the row must not end the swipe.
+          if (event.target === event.currentTarget) endFilterDrag(event);
+        }}
+        onClickCapture={event => {
+          if (!filterDragged.current) return;
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+        className="scrollbar-none mb-[14px] flex w-full touch-pan-y select-none flex-nowrap gap-[8px] overflow-x-auto overscroll-x-contain p-[4px] cursor-grab">
+        {finishPreviews.map(({ type, color }, index) => (
+          <button key={type} type="button" data-color-type={type} aria-pressed={colorFilter === type}
+            onClick={() => setColorFilter(type)} onKeyDown={event => navigateFilters(event, index)}
+            className={`flex min-h-[108px] w-[116px] shrink-0 cursor-[inherit] flex-col items-center justify-center gap-[8px] whitespace-nowrap rounded-card border-[2px] px-[8px] py-[10px] font-display text-[12px] leading-tight ${colorFilter === type ? "border-ink bg-ink text-cream shadow-soft" : "border-ink/20 bg-cream text-ink-2 hover:border-ink"}`}>
+            {color ? <FilamentPhoto color={color} bare sampleOnly retryKey={photoAttempt} className="h-[64px] w-full [&_img]:max-h-[64px]"
+              onUnavailable={() => setFailedPhotos(previous => new Set(previous).add(color.id))} />
+            : type === "Scented" || type === "Glow" ? (
+              <svg aria-hidden viewBox="0 0 32 20" className="h-[64px] w-[88px]" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                {type === "Scented" ? <path d="M9 18c-6-5 6-7 0-12M16 18c-6-5 6-7 0-12M23 18c-6-5 6-7 0-12" />
+                  : <path d="m16 4 2 4 4 .6-3 3 .7 4.4L16 14l-3.7 2 .7-4.4-3-3 4-.6 2-4ZM16 0v1M16 19v1M5 10H3M29 10h-2M6 2l2 2M24 16l2 2M6 18l2-2M24 4l2-2" />}
+              </svg>
+            ) : <span aria-hidden className="h-[64px] w-full rounded-[6px] border border-white/40" style={{ background: filamentColorStyle({ name: "Rainbow", type: "PLA", hex: type === "Marble" ? "#e6e3dc" : "#2787c9", colorType: type }) }} />}
+            {type === "Translucent" ? "Clear" : type}
           </button>
+        ))}
+      </div>
+      <div data-rainbow-filter className="mb-[16px] rounded-card border-[2px] border-ink/20 bg-cream-2 px-[12px] py-[10px]">
+        <div className="flex min-h-[44px] items-center justify-between gap-[8px]">
+          <label htmlFor={`${id}-hue`} className="font-display text-[13px] text-ink">Filter by color</label>
+          {hueFilter !== null && <button type="button" onClick={() => setHueFilter(null)} className="min-h-[44px] cursor-pointer border-0 bg-transparent p-0 text-[11px] text-ink-2 underline decoration-2 underline-offset-4 hover:text-cherry-dk">All colors</button>}
+        </div>
+        <div className="flex min-h-[44px] items-center">
+          <input id={`${id}-hue`} type="range" min={0} max={360} step={1} value={hue}
+            aria-describedby={`${id}-hue-help`} aria-valuetext={hueFilter === null ? "All colors; move to filter" : `${hueName} shades`}
+            onPointerDown={() => setHueFilter(current => current ?? hue)}
+            onKeyDown={event => {
+              if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key)) setHueFilter(current => current ?? hue);
+            }}
+            onChange={event => setHueFilter(Number(event.target.value))}
+            className={`${SLIDER} min-w-0 touch-none`}
+            style={{ background: "linear-gradient(to right, #ff0000 0%, #ffff00 16.67%, #00ff00 33.33%, #00ffff 50%, #0000ff 66.67%, #ff00ff 83.33%, #ff0000 100%)" }} />
+        </div>
+        <div className="flex items-center gap-[8px]">
+          {hueFilter !== null && <span aria-hidden className="h-[18px] w-[18px] flex-none rounded-full border-[2px] border-ink" style={{ background: hslHex(hue % 360, 100, 50) }} />}
+          <output htmlFor={`${id}-hue`} className="font-display text-[12px] text-ink">{hueFilter === null ? "All colors" : `${hueName} shades`}</output>
+        </div>
+        <p id={`${id}-hue-help`} className="m-0 mt-[6px] text-[11px] leading-[1.4] text-ink-2">Slide along the rainbow to show matching shades, then tap a sample to choose it.</p>
+      </div>
+      {failedPhotos.size > 0 && <SamplePhotoRetry onRetry={() => { setFailedPhotos(new Set()); setPhotoAttempt(attempt => attempt + 1); }} />}
+      <div data-filament-selection className="relative mb-[16px] flex min-h-[52px] flex-col items-center gap-[6px] text-center">
+        {personalPalette && <div className="absolute right-0 top-0">
+          <SavePaletteColor color={swatch ? { name: filamentColorName(swatch), hex: swatch.hex, alpha: filamentAlpha(swatch) } : null} palette={personalPalette} />
+        </div>}
+        {swatch && <div className="flex min-h-[52px] w-full items-center justify-center">
+          <FilamentPhoto key={swatch.id} color={swatch} bare sampleOnly retryKey={photoAttempt} onUnavailable={() => setFailedPhotos(previous => new Set(previous).add(swatch.id))} className={`w-[180px] flex-none ${personalPalette ? "max-w-[calc(100%-112px)]" : ""}`} />
+        </div>}
+        <div className={`min-w-0 ${!swatch && personalPalette ? "px-[50px]" : ""}`}>
+          <p aria-live="polite" aria-atomic="true" className="m-0 break-words font-display text-[18px] leading-tight text-ink">
+            {swatch ? colorTitleCase(swatch.name) : "Choose a filament color"}
+          </p>
+          {!swatch && <p className="m-0 mt-[4px] text-[12px] leading-tight text-ink-2">Browse the filament colors, then tap a color.</p>}
+          {swatch && <div className="mt-[5px] flex items-center justify-center gap-[6px]"><BrandLogo brand={matchingFilamentBrand(swatch.maker, filamentConfig.brands) ?? { name: swatch.maker }} className="h-[24px] w-[48px]" /><p className="m-0 min-w-0 break-words text-[11px] leading-tight text-ink-2"><span className="sr-only">{swatch.maker} · </span>{swatch.product}</p></div>}
+          {amazonUrl && <FilamentPurchase url={amazonUrl} options={swatch?.purchaseOptions} viewOnly className="mt-[6px] text-[11px] text-ink-2" />}
         </div>
       </div>
-
-      {/* ---- 3 · lighter or darker, and how see-through ---- */}
-      <div className="mt-[13.2px] grid gap-[11px]">
-        <label className="flex items-center gap-[11px]">
-          <span className={SLIDER_LABEL}>Dark · light</span>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={pick ? Math.round(pick.l) : 50}
-            disabled={!pick}
-            aria-valuetext={pick ? pickName(pick) : undefined}
-            onChange={(e) => setPick((prev) => prev && { ...prev, l: Number(e.target.value) })}
-            className={SLIDER}
-            style={{ background: `linear-gradient(to right, #000000, ${solid}, #ffffff)` }}
-          />
-        </label>
-        <label className="flex items-center gap-[11px]">
-          <span className={SLIDER_LABEL}>See-through</span>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={pick ? Math.round((1 - pick.a) * 100) : 0}
-            disabled={!pick}
-            aria-valuetext={pick ? `${Math.round((1 - pick.a) * 100)}% see-through` : undefined}
-            onChange={(e) => setPick((prev) => prev && { ...prev, a: 1 - Number(e.target.value) / 100 })}
-            className={SLIDER}
-            style={{ background: `linear-gradient(to right, ${hex ?? "#808080"}, ${hex ?? "#808080"}80, ${hex ?? "#808080"}00), ${CHECKER}` }}
-          />
-        </label>
+      <div className="my-[10px] flex items-baseline justify-between gap-[8px]">
+        <span className="font-display text-[11px] uppercase tracking-[0.08em] text-ink-2">{hueFilter !== null ? `${hueName} shades` : "Color chart"}</span>
+        <span role="status" className="text-[11px] text-ink-3">{colors.length} {colors.length === 1 ? "color" : "colors"}</span>
       </div>
+      {colors.length > 0 ? (
+        <div ref={gridRef} role="radiogroup" aria-label={`${filterLabel} filament colors`} aria-describedby={`${id}-chart-help`}
+          className="grid max-h-[380px] grid-cols-1 content-start gap-y-[20px] overflow-y-auto overscroll-contain p-[12px]">
+          {colors.map((color, index) => {
+            const active = color.id === swatch?.id;
+            return (
+              <button key={color.id} type="button" role="radio" data-filament-color={color.id}
+                aria-label={`${colorTitleCase(color.name)} by ${color.maker}, ${color.product}`} aria-checked={active}
+                tabIndex={active || (!selectedVisible && index === 0) ? 0 : -1}
+                onClick={() => choose(color)} onKeyDown={event => navigate(event, index)}
+                className="group relative flex min-w-0 cursor-pointer flex-col items-center border-0 bg-transparent p-0 text-center focus-visible:outline-none">
+                <FilamentPhoto color={color} bare sampleOnly retryKey={photoAttempt} onUnavailable={() => setFailedPhotos(previous => new Set(previous).add(color.id))} className="w-full" />
+                {active && <span aria-hidden className="absolute right-0 top-0 grid h-[20px] w-[20px] place-items-center rounded-full border-[2px] border-ink bg-sun text-[11px] font-bold text-ink">✓</span>}
+                <span className={`mt-[6px] break-words font-display text-[12px] leading-tight group-focus-visible:underline group-focus-visible:decoration-2 group-focus-visible:underline-offset-4 ${active ? "text-cherry-dk" : "text-ink"}`}>{colorTitleCase(color.name)}</span>
+                <span className="mt-[3px] block break-words text-[10px] leading-tight text-ink-2">{color.maker} · {color.product}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="m-0 py-[24px] text-center text-[13px] leading-[1.45] text-ink-2">
+          {hueFilter !== null
+            ? `No ${hueName.toLowerCase()} shades match this material and finish. Move the rainbow slider or show all colors.`
+            : `No swatched, Amazon-listed ${material ? `${material} ` : ""}${filterLabel.toLowerCase()} colors from the available brands yet. Choose another filter or a shelf color.`}
+        </p>
+      )}
+      <p id={`${id}-chart-help`} className="m-0 mt-[10px] text-[11px] leading-[1.4] text-ink-3">Lighting and screen colors can vary; check the listing before choosing.</p>
     </div>
   );
 }

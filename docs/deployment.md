@@ -2,6 +2,11 @@
 
 [← back to the README](../README.md)
 
+For the optional Gitea workflows, configure repository variables `REGISTRY`,
+`RECORD_DIR`, `STACK_DIR`, and `PROJECT` for your own deployment, plus the
+`REGISTRY_TOKEN` repository secret. Machine addresses and installation paths
+are intentionally not stored in the public workflow files.
+
 ## Running it in containers
 
 The dev stack (`docker-compose.yml`) runs Postgres and Mailpit while the app runs
@@ -361,6 +366,80 @@ The seed is an upsert, so it is safe on every start and keeps the admin's name
 in step with the environment — but it will refuse to create a *second* admin,
 and so will the database, and it never resets a password that already exists.
 
+### Editable brand artwork
+
+The app reads brand images from `$DATA_ROOT/1x`, mounted read-only at
+`/artwork` with `ARTWORK_ROOT=/artwork`. Replace a PNG, then refresh the page;
+no build, restart, or deployment is needed. Keep the filename and preferably
+the original proportions. A missing file uses the bundled image as a fallback.
+Image responses disable caching so a refresh reads the latest file.
+
+| Source filename in `1x` | Used for |
+| --- | --- |
+| `Asset 8.2.png` | Arched header and sign-in logo |
+| `Asset 5.2.png` | Straight logo on the Print It button |
+| `Asset 6.2.png` | Decorative stars throughout the app |
+
+For example, the source folder can be `/srv/print-it/1x` on a NAS.
+A custom compose file needs
+`ARTWORK_ROOT: /artwork` in the app environment and the bind mount
+`/srv/print-it/1x:/artwork:ro`. For local development, set
+`ARTWORK_ROOT` to the source folder's absolute path in `.env.local`.
+Only mapped brand PNGs and sticker SVGs are served publicly.
+
+#### Illustrator sticker master
+
+All 31 sticker images (including the mystery silhouette) use SVG exports from
+the **Print It - All Stickers.ai** master. The three filament-family stickers are
+PLA (layer 30), PETG (layer 31), and TPU (layer 34). Stable numbered layer IDs are
+kept when a sticker is removed. Collection stickers, profile choices, and menu
+avatars share these files. The master stays editable in Illustrator; the site
+reads `stickers/<badge-key>.svg` from the same `ARTWORK_ROOT` folder.
+Refresh the page after saving the master. No image build or app restart is needed.
+
+The Windows watcher checks for a completed save every two seconds, exports the
+saved artboards as vectors, and atomically replaces each SVG. It reloads the
+sticker catalog when that file changes, without needing another Illustrator
+save or a watcher restart. A missing layer or artboard retains only that
+sticker's last export; the remaining stickers continue updating. Added empty
+artboards do not stop exports. An incomplete save or unavailable share retains
+the last good artwork and retries. Numbered layer prefixes identify stickers,
+including Unicode labels, and their artwork positions identify artboards, so
+reordering artboards does not swap sticker identities.
+Keep the numbered layers on separate 3-by-3-inch artboards and keep **Create PDF
+Compatible File** enabled when saving. Font outlines remain vectors. Exports keep
+the usual sticker proportions and scale, expanding their frame only when visible
+artwork reaches its edges. Illustrator clipping masks remain intact, except the
+original boat mask's right edge is extended to preserve the bow's white border.
+Its curved stern and wave masks stay intact; a replacement mask is used as drawn.
+
+Install the export dependency in a local Python environment:
+
+```powershell
+python -m pip install -r scripts/sticker-artwork-requirements.txt
+python scripts/sync-sticker-artwork.py --source "C:\path\Print It - All Stickers.ai" --target "C:\path\to\artwork\stickers" --bundle public
+python scripts/sync-sticker-artwork.py --source "C:\path\Print It - All Stickers.ai" --target "C:\path\to\artwork\stickers" --watch
+```
+
+The initial `--bundle public` exports are committed as fallbacks for an unmounted
+development server or unavailable individual live file. The watcher normally
+updates only the live share. To run on login, configure the Windows task to run
+`scripts/watch-sticker-artwork.ps1` with `-Source`, `-ArtworkRoot`, and the
+Python executable containing the dependency. On startup the helper replaces any
+existing Python watcher matching its exact script, source, target, and Python
+executable. This also retires child processes left running by a Task Scheduler
+restart, so an older exporter cannot keep overwriting corrected artwork.
+The helper accepts `-PythonPackages`
+for a separate dependency directory and `-LogFile` for its rotating error log.
+The current workstation uses the **PrintItStickerArtworkSync** login task;
+its local log is next to the Illustrator export tools. The PC must be running
+and able to reach the share to publish new saves; the NAS keeps serving the last
+export while the PC is offline.
+
+Run `npm run verify:artwork`, `npm run verify:sticker-artwork`, and
+`python scripts/verify-sticker-sync.py` to check the route, catalog coverage,
+vector exports, reordered artboards, and failed-save retention.
+
 ### There is no object store
 
 Model files are files, in `$DATA_ROOT/uploads`. The compose files define no
@@ -534,8 +613,18 @@ checked and what is accepted.
 owner's Ko-fi page; the app never sees a card. Each bin, with its goal and its
 Ko-fi link, is a row in `donationBin`, written by a migration.
 
-Without the webhook, a member logs what they gave and the owner confirms it
-once it shows up on Ko-fi. With it, each payment arrives on its own:
+Members donate on Ko-fi without logging or claiming payments in the app. The
+owner ticks **Donated** next to a member on `/admin/invites` to unlock Store.
+Unticking it locks Store again. This setting saves immediately and is audited;
+it does not add money to the campaign total. Existing members with a confirmed
+$1-or-more gift retain access when this change is migrated.
+
+In the owner's **Member view**, `/member` also offers a **Donated** checkbox to
+try Store with donation status on or off. It changes only the owner's preview
+account; real members keep their admin-managed donation settings.
+
+Without the webhook, the owner logs received gifts on `/bin`. With it, each
+payment arrives on its own:
 
 1. On Ko-fi, open **Settings → More → API** (ko-fi.com/manage/webhooks) and set
    the webhook URL to `<APP_URL>/api/kofi`.
@@ -547,14 +636,21 @@ once it shows up on Ko-fi. With it, each payment arrives on its own:
 
 A payment belongs to the member whose app email is the Ko-fi email, or whose
 waiting entry has the same amount and Ko-fi name. Anything else goes in
-unclaimed under the name it came with, and the giver claims it by logging that
-amount and name. A retried delivery is counted once — the Ko-fi transaction id
+under the name it came with. The owner confirms Store access separately using
+the guest list checkbox, regardless of the email used on Ko-fi. A retried
+delivery is counted once — the Ko-fi transaction id
 is unique. **Remove** takes a gift out of the total — for a test, a refund,
 or a mistake — keeps it in the ledger as *not counted*, and writes it to the
-audit log. Shop orders and commissions are ignored; a payment in another
+audit log. For a refund, also untick **Donated** if Store access should be
+removed. Shop orders and commissions are ignored; a payment in another
 currency is not added, and the owner is told to log it by hand.
 
 The endpoint answers 404 while the token is unset, and 401 to a wrong token.
+It accepts Ko-fi's URL-encoded delivery format and enforces a 64 KiB cap on
+received bytes, including chunked requests without Content-Length. This route
+skips the middleware body buffer used for large uploads. The global security
+headers still apply. A route-specific 64 KiB proxy limit can reject large
+deliveries even earlier; the upload route retains its separate large limit.
 Behind Cloudflare, make sure no WAF rule or Bot Fight Mode challenges `POST
 /api/kofi`: Ko-fi cannot solve a challenge, and it gives up after its retries.
 

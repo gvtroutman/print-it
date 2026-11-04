@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
 import { currentUser, storyRef } from "@/lib/authz";
+import { maintenanceResponse } from "@/lib/maintenance";
 import { storyScope, type Actor } from "@/lib/scope";
 import { record } from "@/lib/audit";
 import { readSlicerToken } from "@/lib/slicer-token";
@@ -83,6 +84,8 @@ export async function GET(
   }
 
   if (!user) return new NextResponse(null, { status: 401 });
+  const paused = await maintenanceResponse(user);
+  if (paused) return paused;
 
   const story = await db.story.findFirst({
     where: { AND: [{ id: storyId }, storyScope(user)] },

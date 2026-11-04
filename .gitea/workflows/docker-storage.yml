@@ -1,0 +1,20 @@
+name: Inspect Docker storage
+
+on:
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Docker disk usage
+        run: |
+          set -eu
+          docker info --format 'root={{.DockerRootDir}} driver={{.Driver}}'
+          docker system df
+          docker ps -a --size --format '{{.Names}} | {{.Image}} | {{.Status}} | {{.Size}}'
+          docker images --format '{{.Repository}}:{{.Tag}} | {{.ID}} | {{.Size}}'
+          root=$(docker info --format '{{.DockerRootDir}}')
+          docker run --rm --pull never \
+            --mount "type=bind,source=$root,target=/docker,readonly" \
+            alpine:3 sh -ec 'df -h /docker; df -i /docker; du -x -h -d 1 /docker'

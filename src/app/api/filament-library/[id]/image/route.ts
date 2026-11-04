@@ -2,7 +2,7 @@ import { fail, withActor } from "@/lib/api";
 import { LibraryUnavailable, swatchPhoto } from "@/lib/filament-library";
 
 /**
- * A library swatch's photo — the printed card filamentcolors.xyz shot of it —
+ * A library swatch's photo, with the table removed and transparency preserved —
  * served from this origin so `img-src` stays at 'self', and so a requester's
  * browser never calls the library itself.
  *

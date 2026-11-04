@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 8 8">
+  <!-- Four-pixel cells with continuous curves and a little space between them. -->
+  <defs>
+    <path id="cell" d="M2 .2C3.62 .2 3.8 .38 3.8 2S3.62 3.8 2 3.8 .2 3.62 .2 2 .38 .2 2 .2Z"/>
+  </defs>
+  <g fill="#fff" fill-opacity=".18">
+    <use href="#cell"/>
+    <use href="#cell" x="4" y="4"/>
+  </g>
+  <g fill="#00413e" fill-opacity=".08">
+    <use href="#cell" x="4"/>
+    <use href="#cell" y="4"/>
+  </g>
+</svg>

@@ -1,0 +1,219 @@
+[
+  {
+    "key": "first-request",
+    "name": "Idea in Motion",
+    "layer": 1,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "first-print",
+    "name": "First completed print",
+    "layer": 2,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "three-prints",
+    "name": "Three’s a Charm",
+    "layer": 3,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "five-prints",
+    "name": "High Five",
+    "layer": 4,
+    "width": 160,
+    "height": 181
+  },
+  {
+    "key": "eight-prints",
+    "name": "Leaning Tower of Prints",
+    "layer": 5,
+    "width": 160,
+    "height": 181
+  },
+  {
+    "key": "ten-prints",
+    "name": "Double Digits",
+    "layer": 6,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "making-tracks",
+    "name": "Making Tracks",
+    "layer": 7,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "two-spools",
+    "name": "2 Spools’ Worth",
+    "layer": 8,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "five-spools",
+    "name": "5 Spools’ Worth",
+    "layer": 9,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "peak-performance",
+    "name": "Peak Performance",
+    "layer": 11,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "hundred-prints",
+    "name": "100 Prints",
+    "layer": 12,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "material-explorer",
+    "name": "Material Explorer",
+    "layer": 13,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "daily-fiber",
+    "name": "Daily Fiber",
+    "layer": 14,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "member-anniversary",
+    "name": "Maker Anniversary",
+    "layer": 15,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "new-years-day",
+    "name": "New Year, New Print",
+    "layer": 16,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "valentines-day",
+    "name": "Made with Love",
+    "layer": 17,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "st-patricks-day",
+    "name": "Lucky Layers",
+    "layer": 18,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "independence-day",
+    "name": "Stars & Spools",
+    "layer": 19,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "print-it-birthday",
+    "name": "Happy Birthday, Print It!",
+    "layer": 20,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "halloween",
+    "name": "Spooky Spools",
+    "layer": 21,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "thanksgiving",
+    "name": "Grateful Maker",
+    "layer": 22,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "3d-printing-day",
+    "name": "Happy 3D Day",
+    "layer": 23,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "christmas",
+    "name": "Merry Printmas",
+    "layer": 24,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "stop-and-smell-the-filament",
+    "name": "Stop & Smell the Filament 🌹",
+    "layer": 25,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "love-of-my-life",
+    "name": "Love of My Life",
+    "layer": 26,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "roy-g-biv",
+    "name": "Roy G Biv",
+    "layer": 27,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "flying-spaghetti-monster",
+    "name": "Flying Spaghetti Monster 🍝",
+    "layer": 28,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "mystery",
+    "name": "Mystery sticker",
+    "layer": 29,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "pla-corn",
+    "name": "A-maize-ing",
+    "layer": 30,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "petg-bottle",
+    "name": "Bottle Rocket",
+    "layer": 31,
+    "width": 160,
+    "height": 160
+  },
+  {
+    "key": "tpu-flex",
+    "name": "Flex Appeal",
+    "layer": 34,
+    "width": 160,
+    "height": 160
+  }
+]

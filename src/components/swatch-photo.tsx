@@ -1,41 +1,14 @@
-"use client";
-
-import { useState } from "react";
-
 import type { SwatchChoice } from "@/lib/catalog";
+import { FilamentPhoto } from "./filament-photo";
 
-/**
- * A library swatch as filamentcolors.xyz photographed it: the printed card,
- * served through this app (`swatchImagePath`). The swatch's colour sits
- * underneath, so the tile is the right colour while the photo loads, and is
- * all that shows when there is no photo or it fails. The card is about 3:1;
- * size the tile with a width on `className`.
- */
-export function SwatchPhoto({
-  swatch,
-  className = "",
-}: {
-  swatch: Pick<SwatchChoice, "image" | "hex">;
+/** Buying and saved swatches keep their photographed sample, with the linked product as fallback. */
+export function SwatchPhoto({ swatch, className = "", bare = false, sampleOnly = false, retryKey, onUnavailable }: {
+  swatch: Pick<SwatchChoice, "image" | "hex"> & Partial<SwatchChoice>;
   className?: string;
+  bare?: boolean;
+  sampleOnly?: boolean;
+  onUnavailable?: () => void;
+  retryKey?: number;
 }) {
-  const [failed, setFailed] = useState(false);
-  return (
-    <span
-      aria-hidden
-      className={`block aspect-[288/89] overflow-hidden rounded-[6px] ${className}`}
-      style={{ background: swatch.hex }}
-    >
-      {swatch.image && !failed && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={swatch.image}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          onError={() => setFailed(true)}
-          className="block h-full w-full object-cover"
-        />
-      )}
-    </span>
-  );
+  return <FilamentPhoto color={{ name: "", type: "", ...swatch, amazonUrl: swatch.buyUrl ?? undefined }} image={swatch.image} className={className} bare={bare} sampleOnly={sampleOnly} retryKey={retryKey} onUnavailable={onUnavailable} />;
 }

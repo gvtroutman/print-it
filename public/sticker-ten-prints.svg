@@ -1,0 +1,121 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" version="1.1" width="160" height="160" viewBox="12 12 192 192">
+<defs>
+<clipPath id="clip_1">
+<path transform="matrix(1,0,0,-1,0,216)" d="M0 216H216V0H0Z" />
+</clipPath>
+<clipPath id="clip_2">
+<path transform="matrix(1,0,0,-1,0,216)" d="M22.59 18.5962H197.01V190.204H22.59Z" />
+</clipPath>
+<clipPath id="clip_3">
+<path transform="matrix(1,0,0,-1,0,216)" d="M24.39 25.7962H191.61V190.204H24.39Z" />
+</clipPath>
+<clipPath id="clip_4">
+<path transform="matrix(1,0,0,-1,0,216)" d="M46.5 46.5H169.5V169.5H46.5Z" />
+</clipPath>
+<clipPath id="clip_5">
+<path transform="matrix(1,0,0,-1,0,216)" d="M51 121.8H95.4V165H51Z" />
+</clipPath>
+<clipPath id="clip_6">
+<path transform="matrix(1,0,0,-1,0,216)" d="M0 216H216V0H0Z" />
+</clipPath>
+</defs>
+<g>
+<g inkscape:groupmode="layer" inkscape:label="01 - Idea in Motion">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="02 - First completed print">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="03 - Three’s a Charm">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="04 - High Five">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="05 - Leaning Tower of Prints">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="06 - Double Digits">
+<g clip-path="url(#clip_1)">
+<g opacity=".179993">
+<g clip-path="url(#clip_2)">
+<path transform="matrix(1,0,0,-1,109.8,32.399995)" d="M0 0C13.176 4.912 24.632 2.296 34.368-7.848 48.368-9.128 57.552-16.452 61.92-29.82 73.976-37.052 79.076-47.636 77.22-61.572 84.94-73.324 84.94-85.076 77.22-96.828 79.076-110.764 73.976-121.348 61.92-128.58 57.552-141.948 48.368-149.272 34.368-150.552 24.632-160.696 13.176-163.312 0-158.4-13.176-163.312-24.632-160.696-34.368-150.552-48.368-149.272-57.552-141.948-61.92-128.58-73.976-121.348-79.076-110.764-77.22-96.828-84.94-85.076-84.94-73.324-77.22-61.572-79.076-47.636-73.976-37.052-61.92-29.82-57.552-16.452-48.368-9.128-34.368-7.848-24.632 2.296-13.176 4.912 0 0" fill="#221a14" />
+<path transform="matrix(1,0,0,-1,109.8,32.399995)" stroke-width="8.4" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#221a14" d="M0 0C13.176 4.912 24.632 2.296 34.368-7.848 48.368-9.128 57.552-16.452 61.92-29.82 73.976-37.052 79.076-47.636 77.22-61.572 84.94-73.324 84.94-85.076 77.22-96.828 79.076-110.764 73.976-121.348 61.92-128.58 57.552-141.948 48.368-149.272 34.368-150.552 24.632-160.696 13.176-163.312 0-158.4-13.176-163.312-24.632-160.696-34.368-150.552-48.368-149.272-57.552-141.948-61.92-128.58-73.976-121.348-79.076-110.764-77.22-96.828-84.94-85.076-84.94-73.324-77.22-61.572-79.076-47.636-73.976-37.052-61.92-29.82-57.552-16.452-48.368-9.128-34.368-7.848-24.632 2.296-13.176 4.912 0 0Z" />
+</g>
+</g>
+<path transform="matrix(1,0,0,-1,108,28.800004)" d="M0 0C13.176 4.912 24.632 2.296 34.368-7.848 48.368-9.128 57.552-16.452 61.92-29.82 73.976-37.052 79.076-47.636 77.22-61.572 84.94-73.324 84.94-85.076 77.22-96.828 79.076-110.764 73.976-121.348 61.92-128.58 57.552-141.948 48.368-149.272 34.368-150.552 24.632-160.696 13.176-163.312 0-158.4-13.176-163.312-24.632-160.696-34.368-150.552-48.368-149.272-57.552-141.948-61.92-128.58-73.976-121.348-79.076-110.764-77.22-96.828-84.94-85.076-84.94-73.324-77.22-61.572-79.076-47.636-73.976-37.052-61.92-29.82-57.552-16.452-48.368-9.128-34.368-7.848-24.632 2.296-13.176 4.912 0 0" fill="#ffffff" />
+<g opacity=".199997">
+<g clip-path="url(#clip_3)">
+<path transform="matrix(1,0,0,-1,108,28.800004)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#221a14" d="M0 0C13.176 4.912 24.632 2.296 34.368-7.848 48.368-9.128 57.552-16.452 61.92-29.82 73.976-37.052 79.076-47.636 77.22-61.572 84.94-73.324 84.94-85.076 77.22-96.828 79.076-110.764 73.976-121.348 61.92-128.58 57.552-141.948 48.368-149.272 34.368-150.552 24.632-160.696 13.176-163.312 0-158.4-13.176-163.312-24.632-160.696-34.368-150.552-48.368-149.272-57.552-141.948-61.92-128.58-73.976-121.348-79.076-110.764-77.22-96.828-84.94-85.076-84.94-73.324-77.22-61.572-79.076-47.636-73.976-37.052-61.92-29.82-57.552-16.452-48.368-9.128-34.368-7.848-24.632 2.296-13.176 4.912 0 0Z" />
+</g>
+</g>
+<path transform="matrix(1,0,0,-1,108,38.399995)" d="M0 0C38.439 0 69.6-31.161 69.6-69.6 69.6-108.039 38.439-139.2 0-139.2-38.439-139.2-69.6-108.039-69.6-69.6-69.6-31.161-38.439 0 0 0" fill="#d9edf5" />
+<path transform="matrix(1,0,0,-1,108,38.399995)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#221a14" d="M0 0C38.439 0 69.6-31.161 69.6-69.6 69.6-108.039 38.439-139.2 0-139.2-38.439-139.2-69.6-108.039-69.6-69.6-69.6-31.161-38.439 0 0 0Z" />
+<g opacity=".160004">
+<g clip-path="url(#clip_4)">
+<path transform="matrix(1,0,0,-1,108,47.399995)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#221a14" d="M0 0C33.468 0 60.6-27.132 60.6-60.6 60.6-94.068 33.468-121.2 0-121.2-33.468-121.2-60.6-94.068-60.6-60.6-60.6-27.132-33.468 0 0 0Z" />
+</g>
+</g>
+<g opacity=".649994">
+<g clip-path="url(#clip_5)">
+<path transform="matrix(1,0,0,-1,52.8,92.4)" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#ffffff" d="M0 0C5.683 19.46 21.179 34.5 40.8 39.6" />
+</g>
+</g>
+</g>
+<path transform="matrix(1,0,0,-1,135.6,111.6)" d="M0 0 9.6-42-12-32.4-27.6-48-36 0M-55.2 0-64.8-42-43.2-32.4-27.6-48-19.2 0" fill="#ee8c83" />
+<path transform="matrix(1,0,0,-1,135.6,111.6)" stroke-width="2.64" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#221a14" d="M0 0 9.6-42-12-32.4-27.6-48-36 0M-55.2 0-64.8-42-43.2-32.4-27.6-48-19.2 0" />
+<g clip-path="url(#clip_6)">
+<path transform="matrix(1,0,0,-1,108,54)" d="M0 0C23.859 0 43.2-19.341 43.2-43.2 43.2-67.059 23.859-86.4 0-86.4-23.859-86.4-43.2-67.059-43.2-43.2-43.2-19.341-23.859 0 0 0" fill="#f4c55f" />
+<path transform="matrix(1,0,0,-1,108,54)" stroke-width="2.64" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#221a14" d="M0 0C23.859 0 43.2-19.341 43.2-43.2 43.2-67.059 23.859-86.4 0-86.4-23.859-86.4-43.2-67.059-43.2-43.2-43.2-19.341-23.859 0 0 0Z" />
+<path transform="matrix(1,0,0,-1,108,62.399995)" d="M0 0C19.219 0 34.8-15.58 34.8-34.8 34.8-54.02 19.219-69.6 0-69.6-19.22-69.6-34.8-54.02-34.8-34.8-34.8-15.58-19.22 0 0 0" fill="#ffe3a0" />
+<path transform="matrix(1,0,0,-1,108,62.399995)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#cc9641" d="M0 0C19.219 0 34.8-15.58 34.8-34.8 34.8-54.02 19.219-69.6 0-69.6-19.22-69.6-34.8-54.02-34.8-34.8-34.8-15.58-19.22 0 0 0Z" />
+<path transform="matrix(1,0,0,-1,88.9992,118.8)" d="M0 0C-.973 0-1.718 .258-2.234 .775-2.751 1.292-3.01 2.006-3.01 2.918-3.01 3.861-2.751 4.575-2.234 5.062-1.718 5.548-.973 5.791 0 5.791H4.606V26.357H7.934L1.277 22.298C.578 21.873-.068 21.706-.661 21.797-1.254 21.888-1.763 22.146-2.189 22.572-2.614 22.998-2.896 23.507-3.032 24.1-3.169 24.692-3.116 25.285-2.873 25.878-2.63 26.471-2.174 26.98-1.505 27.406L4.834 31.236C5.472 31.631 6.118 31.95 6.772 32.194 7.425 32.437 8.071 32.558 8.71 32.558 9.622 32.558 10.344 32.323 10.876 31.852 11.408 31.38 11.674 30.658 11.674 29.686V5.791H15.823C16.766 5.791 17.495 5.548 18.012 5.062 18.529 4.575 18.787 3.861 18.787 2.918 18.787 1.976 18.529 1.254 18.012 .752 17.495 .251 16.766 0 15.823 0Z" fill="#221a14" />
+<path transform="matrix(1,0,0,-1,120.4801,113.556)" d="M0 0C1.763 0 3.07 .874 3.922 2.622 4.773 4.37 5.198 7.144 5.198 10.944 5.198 14.744 4.773 17.48 3.922 19.152 3.07 20.824 1.763 21.66 0 21.66-1.763 21.66-3.07 20.824-3.922 19.152-4.773 17.48-5.198 14.744-5.198 10.944-5.198 7.144-4.773 4.37-3.922 2.622-3.07 .874-1.763 0 0 0M0-5.746C-3.891-5.746-6.863-4.294-8.915-1.391-10.967 1.512-11.993 5.624-11.993 10.944-11.993 14.501-11.529 17.503-10.602 19.95-9.675 22.397-8.322 24.252-6.544 25.513-4.765 26.775-2.584 27.406 0 27.406 3.922 27.406 6.901 26 8.938 23.188 10.974 20.376 11.993 16.294 11.993 10.944 11.993 7.387 11.529 4.37 10.602 1.892 9.675-.585 8.33-2.478 6.566-3.785 4.803-5.092 2.614-5.746 0-5.746" fill="#221a14" />
+<path transform="matrix(1,0,0,-1,106.8672,70.0876)" d="M0 0 2.4-6 8.4-8.4 2.4-10.8 0-16.8-2.4-10.8-8.4-8.4-2.4-6Z" fill="#f4c55f" />
+<path transform="matrix(1,0,0,-1,106.8672,70.0876)" stroke-width="1.56" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#221a14" d="M0 0 2.4-6 8.4-8.4 2.4-10.8 0-16.8-2.4-10.8-8.4-8.4-2.4-6 0 0Z" />
+<g inkscape:groupmode="layer" inkscape:label="07 - Making Tracks">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="08 - 2 Spools’ Worth">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="09 - 5 Spools’ Worth">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="10 - Around the World">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="11 - Peak Performance">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="12 - 100 Prints">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="13 - Material Explorer">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="14 - Daily Fiber">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="15 - Maker Anniversary">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="16 - New Year, New Print">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="17 - Made with Love">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="18 - Lucky Layers">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="19 - Stars &amp; Spools">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="20 - Happy Birthday, Print It!">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="21 - Spooky Spools">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="22 - Grateful Maker">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="23 - Happy 3D Day">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="24 - Merry Printmas">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="25 - Stop &amp; Smell the Filament">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="26 - Love of My Life">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="27 - Roy G Biv">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="28 - Flying Spaghetti Monster">
+</g>
+<g inkscape:groupmode="layer" inkscape:label="29 - Mystery sticker">
+</g>
+</g>
+</g>
+</g>
+</svg>

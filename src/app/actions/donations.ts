@@ -2,13 +2,12 @@
 
 import { redirect } from "next/navigation";
 
-import { requireAdmin, requireUser } from "@/lib/authz";
+import { requireAdmin } from "@/lib/authz";
 import {
   DonationProblem,
   decideDonation,
   pledge as makePledge,
   removeDonation,
-  withdrawDonation,
 } from "@/lib/donations";
 
 /**
@@ -36,16 +35,13 @@ async function run(op: () => Promise<string>): Promise<never> {
 }
 
 export async function pledge(formData: FormData): Promise<void> {
-  const user = await requireUser();
+  const user = await requireAdmin();
   await run(async () => {
     const done = await makePledge(user, {
       amount: formData.get("amount") ?? "",
       note: formData.get("note") ?? "",
     });
-    if (user.role === "admin") return `${done.amount} is in the bin`;
-    return done.claimed
-      ? `${done.amount} found on Ko-fi · it is yours, and in the bin`
-      : `${done.amount} logged · it counts once it shows up on Ko-fi`;
+    return `${done.amount} is in the bin`;
   });
 }
 
@@ -70,13 +66,5 @@ export async function removeGift(formData: FormData): Promise<void> {
   await run(async () => {
     const done = await removeDonation(admin, String(formData.get("id") ?? ""));
     return `${done.amount} from ${done.from} taken out of the bin`;
-  });
-}
-
-export async function withdrawPledge(formData: FormData): Promise<void> {
-  const user = await requireUser();
-  await run(async () => {
-    const done = await withdrawDonation(user, String(formData.get("id") ?? ""));
-    return `${done.amount} entry withdrawn`;
   });
 }

@@ -3,10 +3,10 @@ import Link from "next/link";
 import { requireUser, printerName } from "@/lib/authz";
 import { storyRef } from "@/lib/scope";
 import { HISTORY_STATUSES, listHistory } from "@/lib/stories";
-import { relativeTime } from "@/lib/catalog";
 import { knownMaterialNames } from "@/lib/catalog-data";
 import { tornClass } from "@/lib/torn";
 import { AppHeader } from "@/components/app-header";
+import { OrderTimestamp } from "@/components/order-timestamp";
 import { Kicker, StatusChip } from "@/components/ui";
 import { FilamentSpool } from "@/components/color-swatch";
 import { RequeueStory } from "@/components/requeue-story";
@@ -165,7 +165,7 @@ export default async function HistoryPage({
                     </Link>
                     <p className="m-0 mt-[3px] font-mono text-[11px] uppercase tracking-[0.04em] text-ink-3">
                       {storyRef(story.id)} · {story.material}
-                      {isAdmin ? ` · ${story.uploader.name}` : ""} · {relativeTime(story.createdAt)}
+                      {isAdmin ? ` · ${story.uploader.name}` : ""} · <OrderTimestamp iso={story.createdAt.toISOString()} />
                     </p>
                   </div>
                   <StatusChip status={story.status} />

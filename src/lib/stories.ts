@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { Prisma, StoryStatus } from "@prisma/client";
 
 import { db } from "@/lib/db";
+import { awardCompletedPrintBadges, createStoryWithBadges } from "@/lib/badges";
 import { record } from "@/lib/audit";
 import { notify, printerName, printerOwner } from "@/lib/authz";
 import {
@@ -18,7 +19,10 @@ import {
 import { copyModel, deleteModel, storageKeyFor } from "@/lib/storage";
 import { extensionOf } from "@/lib/models";
 import { SELECTION_REFUSAL, resolveSelection } from "@/lib/catalog-data";
-import { MAX_STORY_PRIORITY, StoryPrioritySchema, WishSchema, priorityBand } from "@/lib/catalog";
+import { WishSchema } from "@/lib/catalog";
+import { isStoreSelection, STORE_ACCESS_REQUIRED } from "@/lib/donation-policy";
+import { hasStoreAccess } from "@/lib/store-access";
+import { preparationBlockers } from "@/lib/print-pipeline";
 
 /**
  * Everything that can happen to a ticket, in one place.
@@ -102,7 +106,9 @@ export function storyIdOr400(raw: unknown): number {
 
 function refresh(id: number) {
   revalidatePath("/queue");
+  revalidatePath("/admin/prints");
   revalidatePath("/me");
+  revalidatePath("/member");
   revalidatePath(`/story/${id}`);
 }
 
@@ -128,7 +134,9 @@ export const STORY_FIELDS = {
   flagged: true,
   flagReason: true,
   quantity: true,
-  priority: true,
+  filamentMeters: true,
+  printHours: true,
+  preparedAt: true,
   material: true,
   colorName: true,
   colorHex: true,
@@ -361,16 +369,36 @@ async function loadForAdmin(actor: Actor, id: number) {
 // The printer owner's actions
 // ---------------------------------------------------------------------------
 
-/**
- * Move a ticket one step along the flow. This is both "Accept it" — which is
- * simply `Requested → Accepted` — and every later hop; the button label
- * differs, the operation does not.
- */
-export async function advanceStory(actor: Actor, id: number) {
+const RecordedUsageSchema = z.number().finite().min(0).max(1_000_000).multipleOf(0.001);
+
+/** Plain forms send strings; the API sends numbers. Blank means unknown. */
+export function filamentMetersOr400(raw: unknown): number | null {
+  if (raw === null || raw === undefined || (typeof raw === "string" && !raw.trim())) return null;
+  const parsed = RecordedUsageSchema.safeParse(typeof raw === "string" ? Number(raw) : raw);
+  if (!parsed.success) throw problem(400, "Enter filament used in meters, from 0 to 1,000,000, with up to three decimal places.");
+  return parsed.data;
+}
+
+/** Actual hours, with the same precision and blank/unknown handling as meters. */
+export function printHoursOr400(raw: unknown): number | null {
+  if (raw === null || raw === undefined || (typeof raw === "string" && !raw.trim())) return null;
+  const parsed = RecordedUsageSchema.safeParse(typeof raw === "string" ? Number(raw) : raw);
+  if (!parsed.success) throw problem(400, "Enter actual print time in hours, from 0 to 1,000,000, with up to three decimal places.");
+  return parsed.data;
+}
+
+/** Move one step forwards, optionally recording actual usage at completion. */
+export async function advanceStory(actor: Actor, id: number, rawFilamentMeters?: unknown, rawPrintHours?: unknown) {
   const story = await loadForAdmin(actor, id);
 
   const next = nextStatus(story.status);
   if (!next) throw problem(409, `${story.status} is the end of the line.`);
+  if (next === "Printing") {
+    const blockers = preparationBlockers(story);
+    if (blockers.length || !story.storageKey || !story.preparedAt) {
+      throw problem(409, blockers[0] ?? "Confirm the preparation checklist before starting this print.");
+    }
+  }
 
   try {
     assertTransition(actor, story.status, next);
@@ -378,7 +406,25 @@ export async function advanceStory(actor: Actor, id: number) {
     asProblem(e);
   }
 
-  await db.story.update({ where: { id: story.id }, data: { status: next } });
+  const usageProvided = rawFilamentMeters !== undefined;
+  const timeProvided = rawPrintHours !== undefined;
+  if ((usageProvided || timeProvided) && next !== "Delivery" && next !== "Done") {
+    throw problem(409, "Print time and filament usage are recorded when a print is completed.");
+  }
+  const filamentMeters = usageProvided ? filamentMetersOr400(rawFilamentMeters) : undefined;
+  const printHours = timeProvided ? printHoursOr400(rawPrintHours) : undefined;
+  await db.$transaction(async (tx) => {
+    // All completions and usage edits for this member serialize, including
+    // separate requests completed together. An optimistic status check also
+    // prevents simultaneous clicks from advancing the same request twice.
+    await tx.$queryRaw`SELECT "id" FROM "user" WHERE "id" = ${story.uploaderId} FOR UPDATE`;
+    const moved = await tx.story.updateMany({
+      where: { id: story.id, status: story.status, ...(next === "Printing" ? { preparedAt: story.preparedAt, flagged: false, storageKey: story.storageKey } : {}) },
+      data: { status: next, ...(usageProvided ? { filamentMeters } : {}), ...(timeProvided ? { printHours } : {}) },
+    });
+    if (moved.count === 0) throw problem(409, "This request has already moved. Refresh and try again.");
+    if (next === "Delivery" || next === "Done") await awardCompletedPrintBadges(tx, story.uploaderId, story.id);
+  });
 
   await notify({
     recipientId: story.uploaderId,
@@ -389,7 +435,7 @@ export async function advanceStory(actor: Actor, id: number) {
     action: "story.status_changed",
     actor,
     subject: storyRef(story.id),
-    detail: { from: story.status, to: next, title: story.title },
+    detail: { from: story.status, to: next, title: story.title, ...(usageProvided ? { filamentMeters } : {}), ...(timeProvided ? { printHours } : {}) },
   });
 
   refresh(story.id);
@@ -401,6 +447,40 @@ export async function advanceStory(actor: Actor, id: number) {
     to: next,
     uploaderName: story.uploader.name,
   };
+}
+
+/** Add or correct actual usage on a completed print, including old requests. */
+export async function recordStoryFilament(actor: Actor, id: number, rawFilamentMeters: unknown) {
+  const story = await loadForAdmin(actor, id);
+  if (story.status !== "Delivery" && story.status !== "Done") throw problem(409, "Only completed prints have filament usage to record.");
+  const filamentMeters = filamentMetersOr400(rawFilamentMeters);
+  await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "user" WHERE "id" = ${story.uploaderId} FOR UPDATE`;
+    const saved = await tx.story.updateMany({
+      where: { id: story.id, status: { in: ["Delivery", "Done"] } },
+      data: { filamentMeters },
+    });
+    if (saved.count === 0) throw problem(409, "This request has changed. Refresh and try again.");
+    await awardCompletedPrintBadges(tx, story.uploaderId, story.id);
+  });
+  await record({ action: "story.filament_recorded", actor, subject: storyRef(story.id), detail: { filamentMeters } });
+  refresh(story.id);
+  return { id: story.id, ref: storyRef(story.id), title: story.title, filamentMeters };
+}
+
+/** Add or correct actual runtime on a completed print, including old requests. */
+export async function recordStoryPrintTime(actor: Actor, id: number, rawPrintHours: unknown) {
+  const story = await loadForAdmin(actor, id);
+  if (story.status !== "Delivery" && story.status !== "Done") throw problem(409, "Only completed prints have print time to record.");
+  const printHours = printHoursOr400(rawPrintHours);
+  const saved = await db.story.updateMany({
+    where: { id: story.id, status: { in: ["Delivery", "Done"] } },
+    data: { printHours },
+  });
+  if (saved.count === 0) throw problem(409, "This request has changed. Refresh and try again.");
+  await record({ action: "story.print_time_recorded", actor, subject: storyRef(story.id), detail: { printHours } });
+  refresh(story.id);
+  return { id: story.id, ref: storyRef(story.id), title: story.title, printHours };
 }
 
 /**
@@ -416,7 +496,11 @@ export async function declineStory(actor: Actor, id: number) {
     asProblem(e);
   }
 
-  await db.story.update({ where: { id: story.id }, data: { status: "Declined" } });
+  const declined = await db.story.updateMany({
+    where: { id: story.id, status: "Requested" },
+    data: { status: "Declined" },
+  });
+  if (declined.count === 0) throw problem(409, "This request has already moved. Refresh and try again.");
 
   await notify({
     recipientId: story.uploaderId,
@@ -460,7 +544,7 @@ export async function flagStory(actor: Actor, id: number, rawReason: unknown) {
 
   await db.story.update({
     where: { id: story.id },
-    data: { flagged: true, flagReason: reason },
+    data: { flagged: true, flagReason: reason, preparedAt: null },
   });
 
   await notify({
@@ -577,7 +661,12 @@ export async function withdrawStory(actor: Actor, id: number) {
   const ref = storyRef(story.id);
   const owner = await printerOwner();
 
-  await db.story.delete({ where: { id: story.id } });
+  // The owner may have started printing since the read above. Match the
+  // snapshot's status and ownership in the delete itself before removing files.
+  const withdrawn = await db.story.deleteMany({
+    where: { id: story.id, uploaderId: actor.id, status: story.status },
+  });
+  if (withdrawn.count === 0) throw problem(409, "This request has changed. Refresh and try again.");
 
   // After the row is gone, so a failure here cannot leave a story pointing at
   // an object that is not there. The reverse would be worse: an orphaned
@@ -642,7 +731,7 @@ export async function requeueStory(
   const src = await db.story.findFirst({
     where: { AND: [{ id }, storyScope(actor)] },
     select: {
-      id: true, title: true, quantity: true, priority: true, material: true,
+      id: true, title: true, quantity: true, material: true,
       colorName: true, colorHex: true, swatchId: true, note: true, printSettings: true,
       filename: true, fileSize: true,
       mimeType: true, storageKey: true, dims: true, sourceUrl: true, uploaderId: true,
@@ -676,9 +765,9 @@ export async function requeueStory(
     colorName: recoloured ? changes.colorName ?? "" : src.colorName,
     // Only an Auto ticket's own colour reads it; a shelf colour goes by name.
     colorHex: recoloured ? changes.colorHex : src.colorHex,
+    filamentColorId: changes.filamentColorId,
     swatchId: recoloured ? changes.swatchId : src.swatchId,
     quantity: pick("quantity"),
-    priority: pick("priority"),
     note: pick("note"),
     printSettings: pick("printSettings"),
   });
@@ -686,6 +775,10 @@ export async function requeueStory(
     throw problem(400, parsed.error.issues[0]?.message ?? "Check the form.");
   }
   const wish = parsed.data;
+
+  if (isStoreSelection(wish) && !await hasStoreAccess(actor)) {
+    throw problem(403, STORE_ACCESS_REQUIRED);
+  }
 
   // A re-queue is a new request, so it answers to the shelf as it is today —
   // the same lookup the upload makes. Without it this was the one way to ask
@@ -734,14 +827,13 @@ export async function requeueStory(
     throw problem(502, "The file could not be copied. Try again in a moment.");
   }
 
-  const created = await db.story.create({
-    data: {
+  let created;
+  try {
+    created = await createStoryWithBadges({
       title: wish.title || src.title,
       uploaderId: actor.id,
       status: "Requested",
       quantity: wish.quantity,
-      priority: wish.priority,
-      legacyPriority: priorityBand(wish.priority),
       material: wish.material,
       colorName: selection.colorName,
       colorHex: selection.hex,
@@ -770,16 +862,19 @@ export async function requeueStory(
           sortOrder: a.sortOrder,
         })),
       },
-    },
-    select: { id: true },
-  });
+    });
+  } catch (error) {
+    console.error(`[requeue] ${storyRef(src.id)}: request save failed`, error);
+    for (const key of copied) await deleteModel(key).catch(() => undefined);
+    throw problem(500, "The request could not be saved. Try again.");
+  }
 
   const title = wish.title || src.title;
   // Which fields differ from the old ticket — names only, for the trail. The
   // values are on the two tickets, and a note is not something to copy into
   // a log.
   const now = { ...wish, title, colorName: selection.colorName, swatchId: selection.toBuy?.swatchId ?? null };
-  const changed = (["title", "material", "colorName", "swatchId", "quantity", "priority", "note", "printSettings"] as const)
+  const changed = (["title", "material", "colorName", "swatchId", "quantity", "note", "printSettings"] as const)
     .filter((key) => now[key] !== src[key]);
 
   const owner = await printerOwner();
@@ -795,7 +890,7 @@ export async function requeueStory(
     action: "story.requeued",
     actor,
     subject: storyRef(created.id),
-    detail: { title, from: storyRef(src.id), changed },
+    detail: { title, material: wish.material, from: storyRef(src.id), changed },
   });
 
   refresh(created.id);
@@ -805,77 +900,6 @@ export async function requeueStory(
     title,
     fromRef: storyRef(src.id),
   };
-}
-
-/**
- * Change how much a print matters.
- *
- * The requester sets a priority when they file, and things change: the part
- * is suddenly holding up a build, or it turns out there is no rush after all.
- * Open to the two people it concerns — the requester on their own ticket, and
- * the printer owner on any, who may have a view about what goes on the bed
- * first. Somebody else's ticket is a 404 through the scope, like every read.
- *
- * Only while the ticket is still on the rail. Once it is `Done` or `Declined`
- * there is nothing left to order, and a priority edited afterwards would only
- * rewrite what the history says was asked for. (A feature request allows the
- * edit in any status; a closed request there is still a statement of what
- * someone wants. A printed part is finished.)
- *
- * It orders the owner's queue and promises nothing else: 100 is a request,
- * not a booking. 1–100, or one of the old words for a client that still
- * sends them.
- */
-export async function changeStoryPriority(actor: Actor, id: number, rawPriority: unknown) {
-  const parsed = StoryPrioritySchema.safeParse(rawPriority);
-  if (!parsed.success) throw problem(400, "That is not a priority.");
-  const priority = parsed.data;
-
-  const story = await db.story.findFirst({
-    where: { AND: [{ id }, storyScope(actor)] },
-    select: { id: true, title: true, status: true, priority: true, uploaderId: true },
-  });
-  if (!story) throw problem(404, "That ticket no longer exists.");
-
-  if (actor.role !== "admin" && story.uploaderId !== actor.id) {
-    throw problem(403, "Only the person who asked for it, or the printer owner, can reprioritise it.");
-  }
-  if (story.status === "Done" || story.status === "Declined") {
-    throw problem(409, `${storyRef(story.id)} is ${story.status.toLowerCase()} — there is nothing left to prioritise.`);
-  }
-
-  const result = {
-    id: story.id, ref: storyRef(story.id), title: story.title,
-    from: story.priority, to: priority,
-  };
-  // Setting it to what it already is writes nothing and tells nobody.
-  if (priority === story.priority) return { ...result, unchanged: true };
-
-  await db.story.update({
-    where: { id: story.id },
-    data: { priority, legacyPriority: priorityBand(priority) },
-  });
-
-  // The other side, the same direction a comment travels.
-  const recipientId =
-    actor.role === "admin" ? story.uploaderId : (await printerOwner())?.id;
-  if (recipientId && recipientId !== actor.id) {
-    await notify({
-      recipientId,
-      storyId: story.id,
-      text: `${firstName(actor.name)} set “${story.title}” to priority ${priority} of ${MAX_STORY_PRIORITY}.`,
-    });
-  }
-
-  await record({
-    action: "story.priority_changed",
-    actor,
-    subject: storyRef(story.id),
-    detail: { title: story.title, from: story.priority, to: priority },
-  });
-
-  refresh(story.id);
-  return { ...result, unchanged: false };
 }
 
 // ---------------------------------------------------------------------------

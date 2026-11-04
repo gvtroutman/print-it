@@ -2,12 +2,15 @@ import "server-only";
 import { NextResponse } from "next/server";
 
 import { currentUser } from "@/lib/authz";
-import { storyRef, type Actor } from "@/lib/scope";
+import { featureRef, storyRef, type Actor } from "@/lib/scope";
+import type { NOTIFICATION_FIELDS } from "@/lib/notifications";
 import { StoryProblem, type CommentRow, type StoryRow } from "@/lib/stories";
 import { trustedSourceLink } from "@/lib/import-source";
 import { displayLink } from "@/lib/links";
 import { storySwatch } from "@/lib/catalog";
 import type { Prisma } from "@prisma/client";
+import { crossOriginWrite } from "@/lib/request-origin";
+import { maintenanceResponse } from "@/lib/maintenance";
 
 /**
  * The JSON API's boundary.
@@ -41,34 +44,11 @@ import type { Prisma } from "@prisma/client";
  * bearer token useful.
  */
 
-const appOrigin = () => {
-  try {
-    return new URL(process.env.BETTER_AUTH_URL ?? "http://localhost:3000").origin;
-  } catch {
-    return "http://localhost:3000";
-  }
-};
-
 /** The error envelope the upload route has always used. One shape, everywhere. */
 export const fail = (status: number, error: string) =>
   NextResponse.json({ error }, { status });
 
 export const ok = <T>(data: T, status = 200) => NextResponse.json(data, { status });
-
-const WRITES = new Set(["POST", "PUT", "PATCH", "DELETE"]);
-
-/**
- * Refuse a write that a browser sent from somewhere else.
- *
- * Absent is fine — that is `curl`, or a same-origin GET. Present and wrong is
- * not, and no legitimate caller produces it.
- */
-function crossOrigin(request: Request): boolean {
-  if (!WRITES.has(request.method)) return false;
-  const origin = request.headers.get("origin");
-  if (!origin) return false;
-  return origin !== appOrigin();
-}
 
 type Handler<P> = (
   request: Request,
@@ -104,7 +84,7 @@ export function withActor<P = Record<string, string>>(
   options: Options = {},
 ) {
   return async (request: Request, context: Context<P>): Promise<Response> => {
-    if (crossOrigin(request)) {
+    if (crossOriginWrite(request)) {
       return fail(403, "Cross-origin writes are refused.");
     }
 
@@ -116,6 +96,8 @@ export function withActor<P = Record<string, string>>(
     }
 
     try {
+      const paused = await maintenanceResponse(actor);
+      if (paused) return paused;
       // Optional at runtime even though the type is not: a route with no
       // dynamic segment is called with nothing to unwrap.
       const params = ((await context?.params) ?? {}) as P;
@@ -178,7 +160,9 @@ export function storyResource(story: StoryRow) {
     flagged: story.flagged,
     flagReason: story.flagReason,
     quantity: story.quantity,
-    priority: story.priority,
+    filamentMeters: story.filamentMeters?.toNumber() ?? null,
+    printHours: story.printHours?.toNumber() ?? null,
+    preparedAt: story.preparedAt?.toISOString() ?? null,
     material: story.material,
     color: {
       name: story.colorName,
@@ -251,16 +235,17 @@ export function commentResource(comment: CommentRow) {
 }
 
 export type NotificationRow = Prisma.NotificationGetPayload<{
-  select: { id: true; storyId: true; text: true; read: true; createdAt: true };
+  select: typeof NOTIFICATION_FIELDS;
 }>;
 
 export function notificationResource(n: NotificationRow) {
   return {
     id: n.id,
     storyId: n.storyId,
-    // Null when the story it referred to has been withdrawn — the notification
-    // survives the ticket, so the reference has to be allowed to go missing.
-    ref: n.storyId === null ? null : storyRef(n.storyId),
+    featureId: n.featureId,
+    badgeKey: n.badgeKey,
+    // A withdrawn target or a badge-only notice has no ticket reference.
+    ref: n.storyId !== null ? storyRef(n.storyId) : n.featureId !== null ? featureRef(n.featureId) : null,
     text: n.text,
     read: n.read,
     createdAt: n.createdAt.toISOString(),

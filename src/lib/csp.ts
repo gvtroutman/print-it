@@ -32,7 +32,7 @@ export function buildCsp(nonce: string, isProd: boolean): string {
     "style-src-attr 'unsafe-inline'",
     "font-src 'self'",
     "img-src 'self' data: blob:",
-    // This app talks to its own origin only. No analytics, CDN or beacons.
+    // This app talks to its own origin only, including screen-size counts.
     // Model files are streamed by /api/models/[id], so the viewer needs
     // nothing wider than this — except `data:`, because a self-contained
     // .gltf carries its geometry as data: URIs and three.js reads those with

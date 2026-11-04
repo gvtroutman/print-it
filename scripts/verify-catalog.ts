@@ -220,7 +220,7 @@ async function main() {
 
   const black = colors[0]!;
   page = await (await owner.go(`${APP}/admin/catalog`)).text();
-  await owner.submit(`${APP}/admin/catalog`, page, findForm(page, [`value="${black.id}"`, ">On<"]), {});
+  await owner.submit(`${APP}/admin/catalog`, page, findForm(page, [`value="${black.id}"`, 'aria-label="Hide Black for ASA"']), {});
   check("a colour can be turned off", (await db.catalogColor.findUnique({ where: { id: black.id } }))?.active === false);
 
   section("the owner's own chart ratings");

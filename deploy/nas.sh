@@ -16,6 +16,6 @@ exec docker run --rm -i --network host \
   -v /var/run/docker.sock:/var/run/docker.sock \
   --mount "type=bind,source=$STACK_DIR,target=$STACK_DIR" \
   -e PROJECT -e REPO -e TAG -e OWNER -e REGISTRY_TOKEN \
-  -e STRATEGY -e LABEL -e READY_TIMEOUT -e MEASURE_DOCKER_HEALTH -e SKIP_MIGRATE \
+  -e STRATEGY -e LABEL -e READY_TIMEOUT -e MEASURE_DOCKER_HEALTH -e SKIP_MIGRATE -e FORCE_RECREATE_APP \
   -e COMPOSE_FILE="$STACK_DIR/${COMPOSE_NAME:-docker-compose.yml}" \
   docker:29-cli sh -s < "$here/nas-deploy.sh"

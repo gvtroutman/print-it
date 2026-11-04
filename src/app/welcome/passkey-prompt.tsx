@@ -26,6 +26,11 @@ export function PasskeyPrompt({ deviceHint }: { deviceHint: string }) {
     const res = await authClient.passkey.addPasskey({ name: deviceHint });
 
     if (res?.error) {
+      // The session can age out while this page or the device prompt is open.
+      if ("code" in res.error && res.error.code === "SESSION_NOT_FRESH") {
+        window.location.assign("/reauth?next=%2Fwelcome");
+        return;
+      }
       // A cancelled system prompt is a choice, not a failure — say so plainly.
       setState("error");
       setMessage(

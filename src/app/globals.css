@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+@utility scrollbar-none {
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /*
  * Print It! — fun and play. A 3D printer is a machine for making
  * toys, and the app should feel like one: bright colours, thick outlines,
@@ -180,6 +188,29 @@
     drop-shadow(2px 7px 7px rgba(34, 26, 20, 0.35));
 }
 
+/* Spin the button lettering through the rainbow.
+   Hover is limited to devices that support it so a touch press cannot stick. */
+@keyframes print-logo-hue {
+  from { filter: hue-rotate(120deg); }
+  to { filter: hue-rotate(480deg); }
+}
+
+.print-button-logo {
+  --print-logo-animation: print-logo-hue 1.8s linear infinite;
+}
+
+[data-send-request]:enabled:is(:active, :focus-visible, [data-logo-pressed="true"]) .print-button-logo {
+  filter: hue-rotate(120deg);
+  animation: var(--print-logo-animation);
+}
+
+@media (hover: hover) {
+  [data-send-request]:enabled:hover .print-button-logo {
+    filter: hue-rotate(120deg);
+    animation: var(--print-logo-animation);
+  }
+}
+
 /* A checkerboard, like a game board, as a trim strip. */
 .checker {
   background-image:
@@ -311,10 +342,270 @@
   filter: drop-shadow(3px 3px 0 var(--color-ink));
 }
 
+/* The paper sits between the rear plate and the upper plate's slot lip. */
+.order-receipt {
+  position: relative;
+  isolation: isolate;
+  padding: 32px 24px 0;
+}
+.order-receipt-plate {
+  position: absolute;
+  pointer-events: none;
+  inset: 0 0 auto;
+  height: 76px;
+  border: 3px solid var(--color-ink);
+  border-radius: 12px;
+  background:
+    linear-gradient(115deg, transparent 8%, rgba(255, 255, 255, 0.5) 9%, rgba(255, 255, 255, 0.08) 30%, transparent 31%, transparent 58%, rgba(255, 255, 255, 0.25) 59%, transparent 78%),
+    linear-gradient(rgba(255, 255, 255, 0.35), transparent 55%),
+    linear-gradient(var(--color-chrome), var(--color-chrome-dk));
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.65);
+}
+.order-receipt-plate-back {
+  z-index: 0;
+  box-shadow: var(--shadow-stamp), inset 0 2px 0 rgba(255, 255, 255, 0.65);
+}
+.order-receipt-plate-front {
+  z-index: 2;
+  clip-path: inset(0 0 40px 0);
+}
+.order-receipt-plate::after {
+  content: "";
+  position: absolute;
+  top: 29px;
+  right: 18px;
+  left: 18px;
+  height: 8px;
+  border: 2px solid var(--color-ink);
+  border-radius: 6px;
+  background: var(--color-ink-2);
+  box-shadow: inset 0 2px 0 var(--color-ink);
+}
+.order-receipt-feed {
+  position: relative;
+  z-index: 1;
+}
+.order-receipt-paper {
+  --tooth: 7px;
+  --lift: 4.25px;
+  --tear-down: url("/receipt-tear-mask.svg");
+  position: relative;
+  border-top: 0;
+  border-bottom: 0;
+  padding-bottom: calc(var(--tooth) + var(--lift) + 1px);
+  border-radius: 12px 12px 0 0;
+  /* Padding keeps the side borders straight instead of beveling their ends. */
+  /* Fit whole tiles, each with a half tooth at both ends, to meet the sides. */
+  -webkit-mask:
+    linear-gradient(#000 0 0) top / 100% calc(100% - var(--tooth)) no-repeat,
+    var(--tear-down) left bottom / calc(2 * var(--tooth)) var(--tooth) round no-repeat;
+  mask:
+    linear-gradient(#000 0 0) top / 100% calc(100% - var(--tooth)) no-repeat,
+    var(--tear-down) left bottom / calc(2 * var(--tooth)) var(--tooth) round no-repeat;
+}
+.order-receipt-paper::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 16px;
+  background: linear-gradient(rgba(34, 26, 20, 0.22), transparent);
+  pointer-events: none;
+}
+.order-receipt-paper::after {
+  content: "";
+  position: absolute;
+  inset: auto -3px 0;
+  height: calc(var(--tooth) + var(--lift) + 1px);
+  background: var(--color-ink);
+  pointer-events: none;
+  /* Clip a 6px stroke to the paper for a consistent 3px inner outline. */
+  -webkit-mask: url("/receipt-tear-outline.svg") left bottom / calc(2 * var(--tooth)) 100% round no-repeat;
+  mask: url("/receipt-tear-outline.svg") left bottom / calc(2 * var(--tooth)) 100% round no-repeat;
+}
+.order-receipt-leader {
+  height: 28px;
+  border-bottom: 2px dashed var(--color-rule);
+  background: var(--color-porcelain);
+}
+
+/* A little puppet theater: an open arch, pulled-back curtains, and a red stage. */
+.community-benefits {
+  --benefits-backdrop: url("/community-benefits-backdrop.svg");
+  margin-top: 26.4px;
+  filter: drop-shadow(5px 5px 0 var(--color-ink));
+}
+.community-benefits-sign {
+  position: relative;
+  z-index: 1;
+  height: clamp(250px, 65vw, 330px);
+}
+.community-benefits-sign::before {
+  content: "";
+  position: absolute;
+  inset: 62.5% 0 0;
+  background-color: var(--color-cherry-dk);
+  background-image: var(--benefits-backdrop);
+  background-size: 100% 480px;
+  background-repeat: repeat-y;
+  pointer-events: none;
+}
+.community-benefits-sign-artwork {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.community-benefits-sign-title {
+  position: absolute;
+  inset: 0 0 25%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding-top: clamp(30px, 6vw, 48px);
+}
+.community-benefits-sign-lettering {
+  display: block;
+  width: min(53%, 320px);
+  height: auto;
+}
+.community-benefits-content {
+  position: relative;
+  overflow: hidden;
+  margin: -1px 0 0;
+  border: 3px solid var(--color-ink);
+  border-top: 0;
+  padding: 0 clamp(24px, 5%, 44px) 26.4px;
+  background-color: var(--color-cherry-dk);
+  background-image: var(--benefits-backdrop);
+  background-size: 100% 480px;
+  background-repeat: repeat-y;
+  color: var(--color-cream);
+}
+.community-benefits-content::before,
+.community-benefits-content::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: calc(3.333% - 1.5px);
+  background: var(--color-chrome);
+  pointer-events: none;
+}
+.community-benefits-content::before {
+  left: 0;
+  border-right: 3px solid var(--color-ink);
+  box-shadow: inset 2px 0 0 var(--color-cream);
+}
+.community-benefits-content::after {
+  right: 0;
+  border-left: 3px solid var(--color-ink);
+  box-shadow: inset -2px 0 0 var(--color-cream);
+}
+.community-benefits-content figcaption {
+  color: var(--color-cream);
+}
+.community-benefits-content h3 {
+  text-shadow: 1px 2px 0 var(--color-ink);
+}
+.community-benefits-stage {
+  position: relative;
+  height: 26px;
+  margin-top: -3px;
+  border: 3px solid var(--color-ink);
+  border-radius: 0 0 var(--radius-panel) var(--radius-panel);
+  background: var(--color-cream);
+  box-shadow: inset 0 -8px 0 var(--color-chrome);
+}
+
 /* ---------------------------------------------------------------------------
-   Motion. Kept to the 150–300ms band; every one of these is interruptible and
-   none of them animate layout.
+   Motion. Brief, interruptible movement; none of these animate layout.
    --------------------------------------------------------------------------- */
+
+:root {
+  --header-toggle-duration: 0.8s;
+}
+
+.notification-bell {
+  --notification-clapper-direction: 1;
+  --notification-bell-easing: cubic-bezier(0.37, 0, 0.63, 1);
+  display: flex;
+  transform-origin: 50% 0;
+}
+
+.notification-bell [data-flipped="true"] {
+  --notification-clapper-direction: -1;
+}
+
+.notification-bell .bell-clapper {
+  transform-box: fill-box;
+  transform-origin: 50% -3.5px;
+  animation: var(--notification-clapper-animation, none);
+}
+
+/* Four diminishing swings keep the bell brisk without rushing its turns.
+   Each half-swing still takes 200ms; the reminder repeats the same 0.8s motion
+   as opening, followed by a quiet pause. */
+@keyframes notification-bell-ring {
+  0%, 16.667%, 100% { transform: rotate(0deg); }
+  2.083% { transform: rotate(-12deg); }
+  6.25% { transform: rotate(6deg); }
+  10.417% { transform: rotate(-2.4deg); }
+  14.583% { transform: rotate(0.5deg); }
+}
+
+/* A distinct animation restarts the swing on every click or tap to open,
+   even if the reminder or hover animation was already running. */
+@keyframes notification-bell-open {
+  0%, 100% { transform: rotate(0deg); }
+  12.5% { transform: rotate(-12deg); }
+  37.5% { transform: rotate(6deg); }
+  62.5% { transform: rotate(-2.4deg); }
+  87.5% { transform: rotate(0.5deg); }
+}
+
+/* The clapper follows 50ms behind with a restrained counter-swing.
+   Mirrored bells keep the same physical direction; ink and edge stay aligned. */
+@keyframes notification-clapper-ring {
+  0%, 1.042%, 16.667%, 100% { transform: rotate(0deg); }
+  3.125% { transform: rotate(calc(14deg * var(--notification-clapper-direction))); }
+  7.292% { transform: rotate(calc(-7deg * var(--notification-clapper-direction))); }
+  11.458% { transform: rotate(calc(3deg * var(--notification-clapper-direction))); }
+  15.625% { transform: rotate(calc(-0.6deg * var(--notification-clapper-direction))); }
+}
+
+@keyframes notification-clapper-open {
+  0%, 6.25%, 100% { transform: rotate(0deg); }
+  18.75% { transform: rotate(calc(14deg * var(--notification-clapper-direction))); }
+  43.75% { transform: rotate(calc(-7deg * var(--notification-clapper-direction))); }
+  68.75% { transform: rotate(calc(3deg * var(--notification-clapper-direction))); }
+  93.75% { transform: rotate(calc(-0.6deg * var(--notification-clapper-direction))); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .notification-trigger[aria-expanded="true"] .notification-bell {
+    --notification-clapper-animation: notification-clapper-open var(--header-toggle-duration) var(--notification-bell-easing);
+    animation: notification-bell-open var(--header-toggle-duration) var(--notification-bell-easing);
+  }
+
+  .notification-trigger[aria-expanded="false"]:focus-visible .notification-bell {
+    --notification-clapper-animation: notification-clapper-ring 4.8s var(--notification-bell-easing);
+    animation: notification-bell-ring 4.8s var(--notification-bell-easing);
+  }
+
+  @media (hover: hover) {
+    .notification-trigger[aria-expanded="false"]:hover .notification-bell {
+      --notification-clapper-animation: notification-clapper-ring 4.8s var(--notification-bell-easing);
+      animation: notification-bell-ring 4.8s var(--notification-bell-easing);
+    }
+  }
+
+  .notification-trigger[data-unread="true"][aria-expanded="false"] .notification-bell {
+    --notification-clapper-animation: notification-clapper-ring 4.8s var(--notification-bell-easing) infinite;
+    animation: notification-bell-ring 4.8s var(--notification-bell-easing) infinite;
+  }
+}
 
 @keyframes ppp-in {
   from {
@@ -393,6 +684,106 @@
   transform: translate(3px, 3px);
   box-shadow: 0 0 0 var(--color-ink);
 }
+
+/* Fixed 4px square cells stay the same size on buttons and taller panels. */
+.pixel-surface {
+  --pixel-face: var(--color-aqua);
+  border: 3px solid var(--color-ink);
+  background-color: var(--pixel-face);
+  background-image: url("./textures/sync-pixels.svg");
+  background-size: 32px 96px;
+  background-position: left bottom;
+  background-repeat: repeat-x;
+  box-shadow: none;
+}
+.pixel-surface-cream {
+  --pixel-face: var(--color-cream-2);
+}
+.pixel-surface-copies {
+  background-image: url("./textures/copies-pixels.svg");
+  background-origin: border-box;
+}
+
+/* Light from the top left raises the menu; opening it reverses the relief. */
+.mobile-menu-trigger {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  box-shadow:
+    -4px -4px 9px rgb(255 255 255 / 75%),
+    4px 4px 9px rgb(85 72 62 / 28%),
+    inset -2px -2px 4px rgb(5 82 79 / 40%),
+    inset 2px 2px 4px rgb(255 255 255 / 65%);
+  transition: box-shadow var(--header-toggle-duration) ease-out;
+}
+
+.mobile-menu-trigger[aria-expanded="true"] {
+  box-shadow:
+    -1px -1px 3px rgb(255 255 255 / 30%),
+    1px 1px 3px rgb(85 72 62 / 12%),
+    inset 4px 4px 7px rgb(5 82 79 / 65%),
+    inset -3px -3px 6px rgb(255 255 255 / 70%);
+}
+
+/* Every press goes deeper, including a tap to close an already inset menu. */
+.mobile-menu-trigger:is([data-pressing="true"], :focus-visible:active) {
+  box-shadow:
+    0 0 2px rgb(255 255 255 / 15%),
+    0 0 2px rgb(85 72 62 / 8%),
+    inset 5px 5px 9px rgb(5 82 79 / 75%),
+    inset -2px -2px 5px rgb(255 255 255 / 50%);
+  transition-duration: 55ms;
+}
+
+.mobile-menu-line {
+  transform-origin: center;
+  transition:
+    transform var(--header-toggle-duration) cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity var(--header-toggle-duration) ease-out;
+}
+
+.mobile-menu-trigger[aria-expanded="true"] .mobile-menu-line:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+.mobile-menu-trigger[aria-expanded="true"] .mobile-menu-line:nth-child(2) {
+  opacity: 0;
+  transform: scaleX(0.35);
+}
+.mobile-menu-trigger[aria-expanded="true"] .mobile-menu-line:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mobile-menu-trigger {
+    transition:
+      box-shadow var(--header-toggle-duration) ease-out,
+      transform var(--header-toggle-duration) cubic-bezier(0.2, 0.8, 0.3, 1.25);
+  }
+
+  .mobile-menu-trigger[aria-expanded="true"] {
+    transform: translateY(1px) scale(0.99);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .mobile-menu-trigger[aria-expanded="false"]:hover {
+      transform: translateY(-1px) scale(1.015);
+    }
+  }
+
+  .mobile-menu-trigger:is([data-pressing="true"], :focus-visible:active) {
+    transform: translateY(2px) scale(0.96);
+    transition-duration: 55ms;
+    transition-timing-function: ease-out;
+  }
+}
+
+/* Keep the connected sections still and fade the others while one is open. */
+.order-section {
+  transition: opacity 180ms ease-out;
+}
+[data-request-board][data-has-open="true"] > .order-section:not([data-open="true"]) {
+  opacity: 0.35;
+}
 /* A stamp that stays down: the owner's card while the member view is on. */
 .stamp-pressed,
 .stamp-pressed:hover {
@@ -401,6 +792,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .print-button-logo {
+    --print-logo-animation: none;
+  }
   .ppp-in,
   .ppp-toast,
   .ppp-neon,

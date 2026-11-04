@@ -11,9 +11,12 @@
  * into the browser bundle.
  */
 import { unzipSync } from "fflate";
+import { inspectGltf } from "@/lib/gltf";
 
 import {
   ACCEPTED_EXTENSIONS,
+  MAX_3MF_OBJECT_VISITS,
+  MAX_3MF_WORK,
   MAX_INFLATED_BYTES,
   MAX_TRIANGLES,
   MAX_UPLOAD_BYTES,
@@ -31,6 +34,7 @@ export type ModelFormat = "stl" | "3mf" | "obj" | "ply" | "amf" | "step" | "glb"
 export type Rejection =
   | "empty"
   | "too_large"
+  | "too_complex"
   | "bad_extension"
   | "not_a_model"
   | "corrupt"
@@ -40,6 +44,7 @@ export type Rejection =
 export const REJECTION_COPY: Record<Rejection, string> = {
   empty: "That file is empty.",
   too_large: `That file is over ${formatBytes(MAX_UPLOAD_BYTES)}.`,
+  too_complex: "That model has too much geometry or needs too much memory. Simplify it or export separate parts.",
   bad_extension: `3D models can be ${MODEL_FORMATS_TEXT}.`,
   not_a_model:
     "That does not look like the 3D format its name says it is.",
@@ -226,7 +231,9 @@ const attr = (tag: string, name: string): string | undefined =>
 /** Zip member names have no leading slash; a 3MF `p:path` usually does. */
 const normalizePart = (p: string): string => p.replace(/^\/+/, "").toLowerCase();
 
-function parsePart(xml: string): Part3mf {
+class ModelWorkLimit extends Error {}
+
+function parsePart(xml: string, spend: (work?: number) => void): Part3mf {
   const unit = /<model[^>]*\bunit\s*=\s*"([^"]+)"/i.exec(xml)?.[1]?.toLowerCase();
   const unitScale = UNIT_TO_MM[unit ?? "millimeter"] ?? 1;
 
@@ -236,6 +243,7 @@ function parsePart(xml: string): Part3mf {
   const objRe = /<object\b([^>]*)>([\s\S]*?)<\/object>/gi;
   let om: RegExpExecArray | null;
   while ((om = objRe.exec(xml)) !== null) {
+    spend();
     const id = attr(om[1]!, "id");
     if (id === undefined) continue;
     const body = om[2]!;
@@ -244,6 +252,7 @@ function parsePart(xml: string): Part3mf {
     const vertexTag = /<vertex\b[^>]*\/?>/g;
     let vt: RegExpExecArray | null;
     while ((vt = vertexTag.exec(body)) !== null) {
+      spend();
       const s = vt[0];
       // Attribute order is not fixed by the spec, so match each separately.
       const x = /\bx\s*=\s*"(-?[\d.eE+-]+)"/.exec(s)?.[1];
@@ -257,6 +266,7 @@ function parsePart(xml: string): Part3mf {
     const compTag = /<component\b[^>]*\/?>/g;
     let ct: RegExpExecArray | null;
     while ((ct = compTag.exec(body)) !== null) {
+      spend();
       const objectid = attr(ct[0], "objectid");
       if (objectid === undefined) continue;
       // The path attribute is namespaced (`p:path`); match it prefix-agnostically.
@@ -272,6 +282,7 @@ function parsePart(xml: string): Part3mf {
   const itemTag = /<item\b[^>]*\/?>/g;
   let it: RegExpExecArray | null;
   while ((it = itemTag.exec(buildBlock)) !== null) {
+    spend();
     const objectid = attr(it[0], "objectid");
     if (objectid === undefined) continue;
     buildItems.push({ objectid, tf: parseTransform(attr(it[0], "transform")) });
@@ -307,30 +318,47 @@ function measure3mf(bytes: Uint8Array): { box: Box; triangles: number } | null {
     return null;
   }
 
+  let work = 0;
+  const spend = (amount = 1) => {
+    work += amount;
+    if (work > MAX_3MF_WORK) throw new ModelWorkLimit();
+  };
   const parts = new Map<string, Part3mf>();
   let triangles = 0;
   for (const name of Object.keys(files)) {
     if (!/\.model$/i.test(name)) continue;
     const xml = new TextDecoder("utf-8", { fatal: false }).decode(files[name]!);
-    parts.set(name.toLowerCase(), parsePart(xml));
-    triangles += (xml.match(/<triangle\b/g) ?? []).length;
+    spend();
+    parts.set(name.toLowerCase(), parsePart(xml, spend));
+    for (const _triangle of xml.matchAll(/<triangle\b/g)) {
+      spend();
+      if (++triangles > MAX_TRIANGLES) throw new ModelWorkLimit();
+    }
   }
   if (parts.size === 0) return null;
 
   const box = emptyBox();
   let placed = 0;
+  let visits = 0;
+  const active = new Set<Obj3mf>();
 
   // Walk from each build item down through components, composing transforms and
   // expanding the box with every mesh vertex in its final placed position. A
-  // visited set (keyed by part+object at a given depth) plus a depth cap guards
-  // against a malformed file whose components reference each other in a cycle.
+  // path-local set rejects cycles while allowing the same mesh at different
+  // transforms. Budgets span all roots, parts and instances. Any exhausted
+  // budget rejects the file; a partial box or raw fallback would be misleading.
   const walk = (partKey: string, objectId: string, m: Mat, depth: number) => {
-    if (depth > 50) return;
+    spend();
+    if (++visits > MAX_3MF_OBJECT_VISITS) throw new ModelWorkLimit();
+    if (depth > 50) throw new ModelWorkLimit();
     const part = parts.get(partKey);
     const obj = part?.objects.get(objectId);
     if (!part || !obj) return;
+    if (active.has(obj)) throw new Error("3MF component cycle");
+    active.add(obj);
 
     const s = part.unitScale;
+    spend(obj.verts.length / 3);
     for (let i = 0; i + 2 < obj.verts.length; i += 3) {
       const x = obj.verts[i]!, y = obj.verts[i + 1]!, z = obj.verts[i + 2]!;
       expand(
@@ -345,6 +373,7 @@ function measure3mf(bytes: Uint8Array): { box: Box; triangles: number } | null {
       const childKey = c.path ? normalizePart(c.path) : partKey;
       walk(childKey, c.objectid, matMul(c.tf, m), depth + 1);
     }
+    active.delete(obj);
   };
 
   // The root part is the one that carries the build. Fall back to any part with
@@ -368,6 +397,7 @@ function measure3mf(bytes: Uint8Array): { box: Box; triangles: number } | null {
   if (placed === 0) {
     for (const part of parts.values()) {
       for (const obj of part.objects.values()) {
+        spend(1 + obj.verts.length / 3);
         for (let i = 0; i + 2 < obj.verts.length; i += 3) {
           expand(box, obj.verts[i]! * part.unitScale, obj.verts[i + 1]! * part.unitScale, obj.verts[i + 2]! * part.unitScale);
           placed++;
@@ -592,68 +622,6 @@ function isStep(bytes: Uint8Array): boolean {
 // are accepted: a .gltf that names buffers or textures by relative path is one
 // file of several, and the rest did not come with it.
 
-type GltfJson = {
-  asset?: { version?: unknown };
-  meshes?: unknown;
-  accessors?: unknown;
-  buffers?: unknown;
-  images?: unknown;
-};
-
-const GLB_MAGIC = [0x67, 0x6c, 0x54, 0x46]; // "glTF"
-const GLB_JSON_CHUNK = 0x4e4f534a; // "JSON"
-
-function gltfJsonFromGlb(bytes: Uint8Array): GltfJson | null {
-  if (bytes.length < 20 || !startsWith(bytes, GLB_MAGIC)) return null;
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (view.getUint32(4, true) !== 2 || view.getUint32(8, true) !== bytes.length) return null;
-  const chunkLength = view.getUint32(12, true);
-  if (view.getUint32(16, true) !== GLB_JSON_CHUNK || 20 + chunkLength > bytes.length) return null;
-  try {
-    return JSON.parse(new TextDecoder("utf-8").decode(bytes.subarray(20, 20 + chunkLength))) as GltfJson;
-  } catch {
-    return null;
-  }
-}
-
-function gltfJsonFromText(bytes: Uint8Array): GltfJson | null {
-  const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes).replace(/^﻿/, "");
-  if (!text.trimStart().startsWith("{")) return null;
-  try {
-    return JSON.parse(text) as GltfJson;
-  } catch {
-    return null;
-  }
-}
-
-const list = (value: unknown): Record<string, unknown>[] =>
-  Array.isArray(value) ? value.filter((v): v is Record<string, unknown> => !!v && typeof v === "object") : [];
-
-function checkGltf(json: GltfJson): { triangles: number } | "external_refs" | null {
-  if (typeof json !== "object" || json === null) return null;
-  if (String(json.asset?.version ?? "").split(".")[0] !== "2") return null;
-
-  const external = (uri: unknown) => typeof uri === "string" && !uri.startsWith("data:");
-  if (list(json.buffers).some((b) => external(b.uri)) || list(json.images).some((i) => external(i.uri))) {
-    return "external_refs";
-  }
-
-  const accessors = list(json.accessors);
-  let triangles = 0;
-  for (const mesh of list(json.meshes)) {
-    for (const primitive of list(mesh.primitives)) {
-      const mode = typeof primitive.mode === "number" ? primitive.mode : 4;
-      // Points and lines (modes 0–3) are not surfaces anything can print.
-      if (mode < 4) continue;
-      const attributes = (primitive.attributes ?? {}) as Record<string, unknown>;
-      const index = typeof primitive.indices === "number" ? primitive.indices : attributes.POSITION;
-      const count = typeof index === "number" ? Number(accessors[index]?.count ?? 0) : 0;
-      triangles += mode === 4 ? Math.floor(count / 3) : Math.max(0, count - 2);
-    }
-  }
-  return { triangles };
-}
-
 // ---------------------------------------------------------------------------
 // Presentation
 // ---------------------------------------------------------------------------
@@ -745,17 +713,15 @@ export function inspectModel(filename: string, bytes: Uint8Array): Inspection {
         return { ok: true, format: "step", triangles: null, size: null, dims: null };
       case ".glb":
       case ".gltf": {
-        const json = ext === ".glb" ? gltfJsonFromGlb(bytes) : gltfJsonFromText(bytes);
-        const checked = json ? checkGltf(json) : null;
-        if (!checked) return { ok: false, reason: "not_a_model" };
-        if (checked === "external_refs") return { ok: false, reason: "external_refs" };
-        if (checked.triangles === 0) return { ok: false, reason: "no_geometry" };
+        const checked = inspectGltf(bytes, ext === ".glb" ? "glb" : "gltf");
+        if (!checked.ok) return checked;
         return { ok: true, format: ext === ".glb" ? "glb" : "gltf", triangles: checked.triangles, size: null, dims: null };
       }
       default:
         return { ok: false, reason: "bad_extension" };
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof ModelWorkLimit) return { ok: false, reason: "too_complex" };
     return { ok: false, reason: "corrupt" };
   }
 

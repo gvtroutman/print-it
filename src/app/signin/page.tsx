@@ -3,6 +3,7 @@ import { currentUser } from "@/lib/authz";
 import { AuthShell, H1, Lead, Notice } from "@/components/ui";
 import { SignInForm } from "./signin-form";
 import { safeRedirect } from "@/lib/safe-redirect";
+import { maintenanceFor, maintenanceStatus } from "@/lib/maintenance";
 
 const ERRORS: Record<string, string> = {
   invite_required:
@@ -24,10 +25,13 @@ export default async function SignInPage({
   const { next, error, reset } = await searchParams;
 
   const user = await currentUser();
+  if (user && await maintenanceFor(user)) redirect("/maintenance");
   if (user) redirect(safeRedirect(next));
+  const maintenance = await maintenanceStatus();
 
   return (
-    <AuthShell>
+    <AuthShell closed={maintenance.enabled} shopSign>
+      {maintenance.enabled && <div className="mb-6"><Notice tone="warn"><strong className="block">Printer repair break</strong><span className="whitespace-pre-wrap break-words">{maintenance.message}</span></Notice></div>}
       <H1>Welcome back!</H1>
       <Lead>Got a link from the printer owner? Just open it &mdash; no password needed.</Lead>
 

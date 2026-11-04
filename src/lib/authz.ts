@@ -6,7 +6,10 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { PREVIEW_COOKIE } from "@/lib/auth-rules";
 import { db } from "@/lib/db";
+import { isCardFlair } from "@/lib/card-flair";
 import { storyScope, type Actor } from "@/lib/scope";
+import { notificationScope } from "@/lib/notifications";
+import { maintenanceFor } from "@/lib/maintenance";
 
 // The pure rules live in `scope.ts` so they can be imported without pulling in
 // `server-only`. Re-exported here so callers have one import to reach for.
@@ -45,16 +48,13 @@ export async function currentUser(): Promise<Actor | null> {
   const signedIn = await signedInUser();
   if (!signedIn) return null;
 
-  const { actor, sessionId } = signedIn;
-  if (actor.role === "admin" && (await isPreviewing(sessionId))) {
-    // Not just the role: the name goes too. The preview is "what a member
-    // sees", and the owner reading their own name on the member pages kept
-    // breaking that. Anything written while previewing — a notification
-    // text, say — therefore reads "Member" as well, which is the truth of
-    // who did it.
+  const { actor, previewing } = signedIn;
+  if (previewing) {
+    // Use Member for the member preview and Admin for the owner view below.
+    // Both views belong to the same account, with separate saved icons.
     return { ...actor, role: "client", previewing: true, name: "Member", initials: "ME" };
   }
-  return actor;
+  return actor.role === "admin" ? { ...actor, name: "Admin", initials: "AD" } : actor;
 }
 
 /**
@@ -109,13 +109,16 @@ async function setPreviewCookie(value: string, maxAge?: number): Promise<void> {
   });
 }
 
-/** The account behind the session, as it really is — no preview applied. */
-async function signedInUser(): Promise<{ actor: Actor; sessionId: string } | null> {
+/** The account's actual role, with its icon resolved for the active view. */
+async function signedInUser(): Promise<{ actor: Actor; sessionId: string; previewing: boolean } | null> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) return null;
 
   const u = session.user as typeof session.user & {
     initials?: string | null;
+    cardFlair?: string | null;
+    previewCardFlair?: string | null;
+    stickersEnabled?: boolean;
     role?: string | null;
     banned?: boolean | null;
     canAddDevice?: boolean | null;
@@ -125,19 +128,29 @@ async function signedInUser(): Promise<{ actor: Actor; sessionId: string } | nul
   if (u.banned) return null;
 
   const admin = u.role === "admin";
+  const previewing = admin && await isPreviewing(session.session.id);
+  const selectedFlair = previewing ? u.previewCardFlair : u.cardFlair;
+  const cardFlair = u.stickersEnabled !== false && isCardFlair(selectedFlair) && await db.memberBadge.findUnique({
+    where: { userId_badgeKey: { userId: u.id, badgeKey: selectedFlair } },
+    select: { id: true },
+  }) ? selectedFlair : null;
   return {
     actor: {
       id: u.id,
       name: u.name,
       email: u.email,
       initials: u.initials ?? "??",
+      joinedAt: u.createdAt.toISOString(),
+      cardFlair,
+      stickersEnabled: u.stickersEnabled !== false,
       role: admin ? "admin" : "client",
       // The owner's switches are for members; the owner holds both so the
-      // member preview shows the full menu.
+      // member preview shows every action on the Member page.
       canAddDevice: admin || u.canAddDevice === true,
       canAddMember: admin || u.canAddMember === true,
     },
     sessionId: session.session.id,
+    previewing,
   };
 }
 
@@ -148,6 +161,7 @@ async function signedInUser(): Promise<{ actor: Actor; sessionId: string } | nul
  */
 export async function requireUser(returnTo?: string): Promise<Actor> {
   const user = await currentUser();
+  if (await maintenanceFor(user)) redirect("/maintenance");
   if (user) return user;
 
   const target = returnTo
@@ -237,6 +251,6 @@ export async function notify(opts: {
 /** Notifications are per recipient, and scoped the same way stories are. */
 export function unreadCount(actor: Actor) {
   return db.notification.count({
-    where: { recipientId: actor.id, read: false },
+    where: { ...notificationScope(actor), read: false },
   });
 }

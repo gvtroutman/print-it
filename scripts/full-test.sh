@@ -5,7 +5,7 @@
 # "Green CI is not enough" is this project's own rule: a change is merged after
 # the whole stack has been raised from the working copy on a FRESH data
 # directory and every suite has run against the built image. Doing that by hand
-# is nine commands, three env files and a teardown, and each of them has been
+# is ten commands, three env files and a teardown, and each of them has been
 # got wrong at least once. This script is that run, the same every time.
 #
 # What it does, in order:
@@ -18,7 +18,7 @@
 #   3. Saves .env, .env.backup and .env.docker, writes a throwaway .env.docker
 #      and raises the stack under its own project name on a data directory
 #      outside the repository.
-#   4. The nine integration suites in CI's order, all of them even after one
+#   4. The ten integration suites in CI's order, all of them even after one
 #      fails, then the two image pins CI keeps.
 #   5. Takes the stack down, removes its data and puts the three env files
 #      back exactly as they were — on success, on failure and on Ctrl-C.
@@ -113,7 +113,7 @@ PORTS="${PPP_FULLTEST_PORTS:-3000 5432 1025 8025 4010}"
 # In CI's order (the `verify` job of .github/workflows/ci.yml). A test pins
 # this list to that file, because the hand-rolled predecessor of this script
 # had quietly lost verify:catalog.
-SUITES="verify:auth verify:upload verify:import verify:queue verify:frr verify:catalog verify:api verify:passkey probe:security"
+SUITES="verify:auth verify:upload verify:badges verify:import verify:queue verify:frr verify:catalog verify:palette verify:admin-filaments verify:api verify:passkey probe:security"
 
 ENV_FILES=".env .env.backup .env.docker"
 

@@ -22,3 +22,18 @@ public/docs/
 
 # Agent worktrees and other local Claude state — never committed.
 .claude/
+
+# Private runtime files and local work products.
+.env*
+!.env.example
+!.env.docker.example
+output/
+.codex-attachments/
+.codex-remote-attachments/
+*.pem
+*.key
+*.p12
+*.pfx
+*.db
+*.sqlite
+*.sqlite3

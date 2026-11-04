@@ -18,9 +18,8 @@ export const dynamic = "force-dynamic";
 /**
  * File a feature request. A plain server-rendered form posting to the
  * `createFeature` action — no file to carry, so unlike an upload it needs no
- * client bundle and works with JavaScript off. Title, description, priority
- * and category, exactly as the catalogue defines them; the server validates
- * against the same schema the form renders from.
+ * client bundle and works with JavaScript off. Members only need a title and
+ * description; priority and category keep their defaults in optional details.
  */
 export default async function NewFeaturePage({
   searchParams,
@@ -29,12 +28,13 @@ export default async function NewFeaturePage({
 }) {
   const [{ error }, user] = await Promise.all([searchParams, requireUser("/frr/new")]);
   const owner = await printerName();
+  const isAdmin = user.role === "admin";
 
   return (
     <>
       <AppHeader user={user} active="/frr" />
 
-      <main className="mx-auto w-full max-w-[780px] px-[26.4px] pb-[80px] pt-[35.2px]">
+      <main className="mx-auto w-full max-w-[780px] px-[20px] pb-[80px] pt-[35.2px] sm:px-[26.4px]">
         <Link
           href="/frr"
           className="inline-block font-mono text-[12px] font-bold uppercase tracking-[0.08em] text-ink-2 underline underline-offset-4 hover:text-cherry-dk"
@@ -45,11 +45,10 @@ export default async function NewFeaturePage({
         <div className="mt-[13.2px] mb-[22px]">
           <Kicker>New request</Kicker>
           <h1 className="m-0 mt-[6px] font-display text-[30px] leading-[1.05] text-ink">
-            Ask for a feature
+            {isAdmin ? "Ask for a feature" : "Suggest a change"}
           </h1>
           <p className="m-0 mt-[8px] text-[15px] text-ink-2">
-            Say what you are hoping for and why. {owner} sees it on the board and takes
-            it from there.
+            Tell us what could be better. {owner} will review your request and reply here.
           </p>
         </div>
 
@@ -61,62 +60,67 @@ export default async function NewFeaturePage({
 
         <form action={createFeature} className="flex flex-col gap-[17.6px]">
           <div>
-            <Label htmlFor="title">Title</Label>
-            <Input id="title" name="title" required maxLength={120} placeholder="A short summary" />
+            <Label htmlFor="title">What would you like to change?</Label>
+            <Input id="title" name="title" required maxLength={120} placeholder="Give your idea or problem a short title" />
           </div>
 
           <div>
-            <Label htmlFor="description">What &amp; why</Label>
+            <Label htmlFor="description">Tell us a little more</Label>
             <textarea
               id="description"
               name="description"
               required
               maxLength={4000}
               rows={6}
-              placeholder="What you'd like, and what it would let you do."
+              placeholder="What would help, or what isn't working?"
               className="w-full rounded-card border-[3px] border-ink bg-porcelain px-[15px] py-[12px] text-[16px] leading-[1.5] text-ink placeholder:text-ink-3"
             />
           </div>
 
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-[17.6px]">
-            <div>
-              <Label htmlFor="priority">Priority</Label>
-              <select
-                id="priority"
-                name="priority"
-                defaultValue={DEFAULT_FEATURE_PRIORITY}
-                className="w-full rounded-card border-[3px] border-ink bg-porcelain px-[15px] py-[12px] text-[16px] text-ink"
-              >
-                {FEATURE_PRIORITIES.map((p) => (
-                  <option key={p} value={p}>
-                    {PRIORITY_CHIP[p]?.label ?? p}
-                  </option>
-                ))}
-              </select>
+          <details open={isAdmin}>
+            <summary className="w-fit cursor-pointer py-[8px] text-[14px] font-bold text-ink-2">
+              {isAdmin ? "Request details" : "More options (optional)"}
+            </summary>
+            <div className="mt-[13.2px] grid grid-cols-1 gap-[17.6px] sm:grid-cols-2">
+              <div>
+                <Label htmlFor="priority">Priority</Label>
+                <select
+                  id="priority"
+                  name="priority"
+                  defaultValue={DEFAULT_FEATURE_PRIORITY}
+                  className="w-full rounded-card border-[3px] border-ink bg-porcelain px-[15px] py-[12px] text-[16px] text-ink"
+                >
+                  {FEATURE_PRIORITIES.map((p) => (
+                    <option key={p} value={p}>
+                      {PRIORITY_CHIP[p]?.label ?? p}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="category">Category</Label>
+                <select
+                  id="category"
+                  name="category"
+                  defaultValue={DEFAULT_FEATURE_CATEGORY}
+                  className="w-full rounded-card border-[3px] border-ink bg-porcelain px-[15px] py-[12px] text-[16px] text-ink"
+                >
+                  {FEATURE_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>
+                      {CATEGORY_LABEL[c] ?? c}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div>
-              <Label htmlFor="category">Category</Label>
-              <select
-                id="category"
-                name="category"
-                defaultValue={DEFAULT_FEATURE_CATEGORY}
-                className="w-full rounded-card border-[3px] border-ink bg-porcelain px-[15px] py-[12px] text-[16px] text-ink"
-              >
-                {FEATURE_CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {CATEGORY_LABEL[c] ?? c}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+          </details>
 
           <div>
             <button
               type="submit"
               className="stamp cursor-pointer rounded-chip border-[3px] border-ink bg-cherry-dk px-[28px] py-[13px] text-[16px] font-bold text-cream hover:bg-cherry"
             >
-              File the request
+              {isAdmin ? "File the request" : "Send request"}
             </button>
           </div>
         </form>

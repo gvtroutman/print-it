@@ -2,8 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getStoryOr404, printerName, requireUser, storyRef, FLOW } from "@/lib/authz";
-import { MAX_STORY_PRIORITY, fromSpoolman, quantityText, relativeTime, storySwatch } from "@/lib/catalog";
-import { changeStoryPriority } from "@/app/actions/stories";
+import { quantityText, relativeTime, storySwatch } from "@/lib/catalog";
+import { colorDisplayName } from "@/lib/filament-color-types";
 import { formatBytes } from "@/lib/models";
 import { trustedSourceLink } from "@/lib/import-source";
 import { AppHeader } from "@/components/app-header";
@@ -13,13 +13,18 @@ import { Conversation } from "@/components/conversation";
 import { OrderMedia, type MediaItem } from "@/components/order-media";
 import { displayLink } from "@/lib/links";
 import { OpenInSlicer } from "@/components/open-in-slicer";
+import { BambuStudioButton } from "@/components/bambu-studio-button";
+import { BambuJobPanel } from "@/components/bambu-job-panel";
+import { TicketModelUpload } from "@/components/ticket-model-upload";
 import { DownloadModel } from "@/components/download-model";
 import { Toast } from "@/components/toast";
 import { ColorSwatch } from "@/components/color-swatch";
 import { SwatchPhoto } from "@/components/swatch-photo";
-import { PrioritySlider } from "@/components/priority-slider";
 import { WithdrawStory } from "@/components/withdraw-story";
 import { RequeueStory } from "@/components/requeue-story";
+import { db } from "@/lib/db";
+import { MEMBER_BADGES } from "@/lib/badge-catalog";
+import { BadgeSticker } from "@/components/member-badges";
 
 export const dynamic = "force-dynamic";
 
@@ -46,16 +51,16 @@ export default async function StoryPage({
   // a 403 would confirm it exists.
   const story = await getStoryOr404(storyId, user);
   const owner = await printerName();
+  const earned = sent && user.stickersEnabled !== false ? await db.memberBadge.findMany({
+    where: { userId: user.id, storyId: story.id },
+    select: { badgeKey: true },
+  }) : [];
+  const earnedBadges = MEMBER_BADGES.filter((badge) => earned.some((award) => award.badgeKey === badge.key));
 
   const currentIndex = (FLOW as readonly string[]).indexOf(story.status);
   // Null for an upload — and for anything in the column that is not a link
   // this app could have written, because it is about to become an href.
   const source = trustedSourceLink(story.sourceUrl);
-  // Matches `changeStoryPriority` in src/lib/stories.ts: the requester or the
-  // owner, and only while there is still something to order.
-  const canReprioritise =
-    (user.role === "admin" || story.uploader.id === user.id) &&
-    story.status !== "Done" && story.status !== "Declined";
 
   // The main model first, then everything else in the order it was added. A
   // request filed as words alone has no main model.
@@ -104,9 +109,21 @@ export default async function StoryPage({
           ← {user.role === "admin" ? "All orders" : "My orders"}
         </Link>
 
-        <div className="mt-[13.2px] grid grid-cols-[repeat(auto-fit,minmax(330px,1fr))] items-start gap-[26.4px]">
+        {earnedBadges.map((badge) => (
+          <aside key={badge.key} aria-label="Sticker earned" className="mt-[17.6px] flex flex-wrap items-center gap-[17.6px] rounded-panel border-[3px] border-ink bg-aqua-wash p-[17.6px] shadow-stamp">
+            <BadgeSticker badgeKey={badge.key} className="h-[90px] w-[88px] flex-none -rotate-6" />
+            <div className="min-w-0 flex-[1_1_200px]">
+              <h2 className="m-0 text-[24px] text-ink">{`You earned the ${badge.name} sticker!`}</h2>
+              <p className="mb-0 mt-[5px] text-[15px] text-ink-2">{badge.name} · {badge.description}</p>
+            </div>
+            <Link href="/member#badges" className="rounded-chip border-2 border-ink bg-porcelain px-[13px] py-[7px] text-[13px] font-bold text-ink hover:bg-sun">See your stickers →</Link>
+          </aside>
+        ))}
+
+        {/* Keep the preferred column width without overflowing narrow phones. */}
+        <div className="mt-[13.2px] grid grid-cols-[repeat(auto-fit,minmax(min(100%,330px),1fr))] items-start gap-[26.4px]">
           {/* ---------- left: the file ---------- */}
-          <div>
+          <div className="min-w-0">
             {media.length > 0 ? (
               <OrderMedia colorHex={story.colorHex} items={media} />
             ) : (
@@ -118,6 +135,7 @@ export default async function StoryPage({
               </div>
             )}
 
+            {user.role === "admin" && (story.status === "Requested" || story.status === "Accepted") && <TicketModelUpload storyId={story.id} hasModel={Boolean(model)} />}
             {/* Both measured from the file itself. Nothing inferred. */}
             {model && (
               <div className="mt-[13.2px] flex flex-wrap gap-[8px]">
@@ -158,6 +176,7 @@ export default async function StoryPage({
             {model && (
               <>
                 <DownloadModel storyId={story.id} filename={model.filename} />
+                <div className="mt-[13px]"><BambuStudioButton storyId={story.id} userId={user.id} filename={model.filename} /></div>
                 <OpenInSlicer storyId={story.id} userId={user.id} />
               </>
             )}
@@ -171,7 +190,7 @@ export default async function StoryPage({
           </div>
 
           {/* ---------- right: the wish and the flow ---------- */}
-          <div>
+          <div className="min-w-0">
             <div className="mb-[8.8px] flex flex-wrap items-center gap-[8.8px]">
               <span className="rounded-chip border-2 border-ink bg-porcelain px-[11px] py-[3px] font-mono text-[12px] font-bold tracking-[0.06em] text-ink">
                 {storyRef(story.id)}
@@ -191,6 +210,12 @@ export default async function StoryPage({
               <p className="m-0 mb-[22px] text-[16px] leading-[1.55] text-ink-2 text-pretty">
                 {story.note}
               </p>
+            )}
+            {story.filamentMeters !== null && (
+              <p className="m-0 mb-[13.2px] font-mono text-[12px] font-bold text-ink-2">Filament used: {story.filamentMeters.toNumber().toLocaleString("en-US", { maximumFractionDigits: 3 })} meters total</p>
+            )}
+            {story.printHours !== null && (
+              <p className="m-0 mb-[13.2px] font-mono text-[12px] font-bold text-ink-2">Print time: {story.printHours.toNumber().toLocaleString("en-US", { maximumFractionDigits: 3 })} hours total</p>
             )}
 
             {/* Links the requester sent along. Typed by a person, so they open
@@ -221,7 +246,6 @@ export default async function StoryPage({
               <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-[17.6px]">
                 <Fact label="Asked by">{story.uploader.name}</Fact>
                 <Fact label="Quantity">{quantityText(story.quantity)}</Fact>
-                <Fact label="Priority">{story.priority} of {MAX_STORY_PRIORITY}</Fact>
                 <Fact label="Material">{story.material}</Fact>
                 <Fact label="Color wish">
                   <span className="flex items-center gap-[8.8px]">
@@ -230,7 +254,7 @@ export default async function StoryPage({
                       style={story.colorStyle ?? story.colorHex}
                       className="h-[18px] w-[18px] rounded-full border-2 border-ink"
                     />
-                    {story.colorName}
+                    {colorDisplayName(story.colorName)}
                   </span>
                 </Fact>
               </div>
@@ -241,48 +265,18 @@ export default async function StoryPage({
                   <SpoolToBuyChip />
                   <SwatchPhoto swatch={toBuy} className="w-[120px] flex-none" />
                   <span className="text-[14.5px] text-ink-2">
-                    <strong className="text-ink">{toBuy.maker}</strong> {toBuy.type} in {toBuy.name}
+                    <strong className="text-ink">{toBuy.maker}</strong> {toBuy.type} in {colorDisplayName(toBuy.name)}
                   </span>
                   <span className="flex flex-wrap gap-x-[13.2px] font-mono text-[12.5px] font-bold">
                     {toBuy.buyUrl && (
                       <a href={toBuy.buyUrl} target="_blank" rel="noreferrer noopener" className="text-ink-2 underline underline-offset-4 hover:text-cherry-dk">
-                        Buy it ↗
+                        View on Amazon ↗
                       </a>
                     )}
-                    <a href={toBuy.pageUrl} target="_blank" rel="noreferrer noopener" className="text-ink-2 underline underline-offset-4 hover:text-cherry-dk">
-                      {fromSpoolman(toBuy.id) ? "Look it up online ↗" : "Real swatch on filamentcolors.xyz ↗"}
-                    </a>
                   </span>
                 </div>
               )}
 
-              {/* Change the priority after filing — the requester's on their
-                  own ticket, the owner's on any, while it is still on the
-                  rail. A plain form, so it works with JavaScript off. The
-                  service decides; this only decides whether to draw it. */}
-              {canReprioritise && (
-                <form
-                  action={changeStoryPriority}
-                  className="mt-[17.6px] flex flex-wrap items-end gap-[8.8px] border-t-2 border-dashed border-rule pt-[17.6px]"
-                >
-                  <input type="hidden" name="storyId" value={story.id} />
-                  <div className="min-w-[240px] max-w-[420px] flex-1">
-                    <label
-                      htmlFor="priority"
-                      className="mb-[4px] block font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-ink-3"
-                    >
-                      Change priority
-                    </label>
-                    <PrioritySlider id="priority" name="priority" defaultValue={story.priority} />
-                  </div>
-                  <button
-                    type="submit"
-                    className="stamp cursor-pointer rounded-chip border-[3px] border-ink bg-aqua px-[18px] py-[9px] text-[14px] font-bold text-ink hover:bg-sun"
-                  >
-                    Set
-                  </button>
-                </form>
-              )}
             </div>
 
             {/* Optional slicer settings the requester noted (FRR-103). Shown so
@@ -395,8 +389,13 @@ export default async function StoryPage({
                   status={story.status}
                   flagged={story.flagged}
                   flagReason={story.flagReason}
+                  filamentMeters={story.filamentMeters?.toString() ?? null}
+                  printHours={story.printHours?.toString() ?? null}
+                  prepared={Boolean(story.preparedAt)}
+                  hasModel={Boolean(story.filename && story.storageKey)}
                   from={`/story/${story.id}`}
                 />
+                <BambuJobPanel storyId={story.id} status={story.status} />
               </section>
             )}
           </div>

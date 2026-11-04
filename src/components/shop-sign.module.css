@@ -1,0 +1,109 @@
+.sign {
+  position: relative;
+  width: 240px;
+  height: 154px;
+  max-width: 100%;
+  margin: -12px auto 24px;
+}
+
+.hanging {
+  position: relative;
+  height: 144px;
+  transform: rotate(-3deg);
+  transform-origin: 50% 9px;
+}
+
+.twine,
+.knots {
+  position: absolute;
+  left: -5.8333%;
+  width: 111.6667%;
+  background: url("/shop-sign-jute.png") center / 100% 100% no-repeat;
+  pointer-events: none;
+  filter: drop-shadow(1px 2px 1px #35231566);
+}
+
+.twine {
+  top: -1px;
+  height: 92px;
+}
+
+.board {
+  position: absolute;
+  inset: 61px 0 0;
+  border: 3px solid var(--color-ink);
+  border-radius: 12px;
+  box-shadow: 3px 4px 0 var(--color-ink), inset 0 0 0 4px #ffffff55;
+  background-image: repeating-linear-gradient(0deg, transparent 0 3px, #221a1408 3px 4px);
+  color: var(--color-ink);
+  text-align: center;
+}
+
+.open { background-color: var(--color-aqua); }
+.closed { background-color: var(--color-sun); }
+
+.status {
+  margin: 8px 0 0;
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.caption {
+  margin: 5px 0 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.eyelet {
+  position: absolute;
+  top: 7px;
+  width: 11px;
+  height: 11px;
+  border: 3px solid #c29c63;
+  border-radius: 50%;
+  background: #493725;
+  box-shadow: 0 0 0 1px #695139, 0 1px 1px #fff9;
+}
+
+.left { left: 20px; }
+.right { right: 20px; }
+
+.knots {
+  /* Crop each knot independently so scaling keeps it on its eyelet.
+     Only the knot and tail show in front; the incoming cord stays hidden. */
+  top: 71px;
+  width: 20px;
+  height: 21px;
+  background-size: 180px 120px;
+  filter: drop-shadow(0.5px 1px 0.5px #35231566);
+}
+
+.knotLeft {
+  left: 18px;
+  background-position: -17px -95px;
+}
+
+.knotRight {
+  left: auto;
+  right: 18px;
+  background-position: -141px -95px;
+}
+
+.pin {
+  position: absolute;
+  top: 4px;
+  left: calc(50% - 5px);
+  width: 10px;
+  height: 10px;
+  border: 1px solid #55483e;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #f6e7ce, #8a7a6c 65%);
+  box-shadow: 1px 2px 2px #221a1466;
+}

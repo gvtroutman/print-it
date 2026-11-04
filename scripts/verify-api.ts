@@ -221,8 +221,10 @@ async function main() {
   for (const expected of [
     "/api/health", "/api/stories", "/api/stories/{id}",
     "/api/stories/{id}/advance", "/api/stories/{id}/decline",
+    "/api/stories/{id}/filament",
+    "/api/stories/{id}/time",
     "/api/stories/{id}/flag", "/api/stories/{id}/comments",
-    "/api/stories/{id}/requeue", "/api/stories/{id}/priority",
+    "/api/stories/{id}/requeue",
     "/api/notifications", "/api/notifications/read",
     "/api/catalog", "/api/upload", "/api/models/{id}",
     "/api/import", "/api/import/files", "/api/import/search",
@@ -341,10 +343,18 @@ async function main() {
   check("an Accepted ticket cannot be declined",
         declineLate.status === 403, `status ${declineLate.status} ${declineLate.body.error}`);
 
+  const prepared = await ruben.json(`${APP}/api/stories/${mine.id}/prepare`, {
+    method: "POST", body: JSON.stringify({ ready: true, confirmed: true }),
+  });
+  check("owner confirms preparation before printing", prepared.status === 200);
   for (const expected of ["Printing", "Delivery", "Done"]) {
     const r = await ruben.json<{ moved?: { to: string } }>(
       `${APP}/api/stories/${mine.id}/advance`, { method: "POST" });
     check(`advanced to ${expected}`, r.body.moved?.to === expected, JSON.stringify(r.body).slice(0, 120));
+    const completed = expected !== "Printing";
+    check(`first completed print ${completed ? "is earned" : "stays locked"} at ${expected}`,
+          (await db.memberBadge.count({ where: { userId: ayla.id, badgeKey: "first-print" } })) === Number(completed));
+    check("completion sends one sticker announcement", (await db.notification.count({ where: { recipientId: ayla.id, badgeKey: "first-print" } })) === Number(completed));
   }
 
   const past = await ruben.json<{ error?: string }>(
@@ -433,68 +443,19 @@ async function main() {
   check("an absurdly long list of people is refused", tooMany.status === 400, `status ${tooMany.status}`);
 
   // ------------------------------------------------------------------
-  section("priority: the requester's and the owner's, while it is on the rail");
-
-  const urgent = await makeStory(ayla.id, "Bracket holding up the build");
-  const setPriority = (b: Client, id: number, priority: unknown) =>
-    b.json<{ story?: { priority?: number }; changed?: { from?: number; to?: number; unchanged?: boolean }; error?: string }>(
-      `${APP}/api/stories/${id}/priority`, { method: "POST", body: JSON.stringify({ priority }) });
-
-  const starting = await client.json<{ priority?: number }>(`${APP}/api/stories/${urgent.id}`);
-  check("a ticket starts in the middle, at 50", starting.body.priority === 50, `${starting.body.priority}`);
-
-  await db.notification.deleteMany({ where: { storyId: urgent.id } });
-  const raised = await setPriority(client, urgent.id, 90);
-  check("the requester raises their own ticket",
-        raised.status === 200 && raised.body.story?.priority === 90 &&
-        raised.body.changed?.from === 50 && raised.body.changed?.to === 90,
-        `status ${raised.status} ${JSON.stringify(raised.body.changed)}`);
-  check("the printer owner is told, because it changes what they do next",
-        (await db.notification.count({ where: { recipientId: admin.id, storyId: urgent.id } })) === 1);
-  check("and it is in the trail with where it came from",
-        (await db.auditEvent.count({
-          where: { action: "story.priority_changed", subject: `PI-${urgent.id}`, actorId: ayla.id },
-        })) === 1);
-
-  check("the retired three-step column is kept in step, for a rolled-back image",
-        (await db.story.findUnique({ where: { id: urgent.id } }))?.legacyPriority === "high");
-
-  const same = await setPriority(client, urgent.id, 90);
-  check("setting it to what it already is changes nothing and tells nobody",
-        same.status === 200 && same.body.changed?.unchanged === true &&
-        (await db.notification.count({ where: { recipientId: admin.id, storyId: urgent.id } })) === 1 &&
-        (await db.auditEvent.count({ where: { action: "story.priority_changed", subject: `PI-${urgent.id}` } })) === 1,
-        `status ${same.status}`);
-
-  const lowered = await setPriority(ruben, urgent.id, 10);
-  check("the printer owner can set anybody's",
-        lowered.status === 200 && lowered.body.story?.priority === 10, `status ${lowered.status}`);
-  check("and then it is the requester who is told",
-        (await db.notification.count({ where: { recipientId: ayla.id, storyId: urgent.id } })) === 1);
-
-  const nonsense = await setPriority(client, urgent.id, "yesterday");
-  check("a priority that is not one is refused", nonsense.status === 400, `status ${nonsense.status}`);
-  const outside = await Promise.all([0, 101, 50.5].map((p) => setPriority(client, urgent.id, p)));
-  check("and so is one off the slider, or between its stops",
-        outside.every((r) => r.status === 400), outside.map((r) => r.status).join(" "));
-  const noPriority = await setPriority(client, urgent.id, undefined);
-  check("and so is none at all", noPriority.status === 400, `status ${noPriority.status}`);
-  const notTheirs = await setPriority(other, urgent.id, 90);
-  check("another client's attempt finds no such ticket",
-        notTheirs.status === 404 &&
-        (await db.story.findUnique({ where: { id: urgent.id } }))?.priority === 10,
-        `status ${notTheirs.status}`);
-  const worded = await setPriority(client, urgent.id, "high");
-  check("an old client's word still lands, at the middle of its third",
-        worded.status === 200 && worded.body.story?.priority === 75, `status ${worded.status} ${worded.body.story?.priority}`);
-
-  await db.story.update({ where: { id: urgent.id }, data: { status: "Done" } });
-  const finished = await setPriority(client, urgent.id, 90);
-  check("a finished ticket's priority is not rewritten", finished.status === 409, `status ${finished.status}`);
-  await db.story.update({ where: { id: urgent.id }, data: { status: "Declined" } });
-  check("nor a declined one's, even by the owner",
-        (await setPriority(ruben, urgent.id, "high")).status === 409);
-  await db.story.delete({ where: { id: urgent.id } });
+  section("ticket priority has been removed");
+  const ticket = await makeStory(ayla.id, "Bracket without priority");
+  const resource = await client.json<Record<string, unknown>>(APP + "/api/stories/" + ticket.id);
+  check("ticket resources omit priority", resource.status === 200 && !("priority" in resource.body));
+  check("the priority endpoint is absent from OpenAPI", !paths.includes("/api/stories/{id}/priority"));
+  for (const browser of [client, ruben]) {
+    const response = await browser.raw(APP + "/api/stories/" + ticket.id + "/priority", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ priority: 90 }),
+    });
+    check("members and admins cannot set priority", response.status === 404);
+  }
+  check("the retired value was not changed", (await db.story.findUnique({ where: { id: ticket.id } }))?.priority === 50);
+  await db.story.delete({ where: { id: ticket.id } });
 
   // ------------------------------------------------------------------
   section("withdrawing is the requester's, and only while nobody has acted");
@@ -709,6 +670,55 @@ async function main() {
         !bundle.includes("sourceMappingURL"));
   check("Swagger UI's licence travels with the copy",
         (await ruben.raw(`${APP}/docs/LICENSE.swagger-ui.txt`)).status === 200);
+
+  section("actual completed extrusion and the hidden legendary sticker");
+  // The bearer-revocation check above signed the original client out.
+  const noodleClient = await signIn(ayla);
+  const monsterKey = "flying-spaghetti-monster";
+  const hidden = await (await noodleClient.raw(`${APP}/stickers`)).text();
+  check("an undiscovered sticker shows only a silhouette without its identity or unlock clues", hidden.includes('data-badge="mystery" data-earned="false"') && !hidden.includes(monsterKey) && !hidden.includes("Flying Spaghetti Monster") && !hidden.includes("Ten kilometers") && !hidden.includes("Discovered!"));
+  const oldPrint = await db.story.create({ data: { uploaderId: ayla.id, title: "Old noodle print", status: "Done", quantity: 100, colorName: "Slate", colorHex: "#4a5d78" } });
+  const finishing = await db.story.create({ data: { uploaderId: ayla.id, title: "Nearly a noodle legend", status: "Printing", colorName: "Slate", colorHex: "#4a5d78" } });
+  const filamentUrl = (id: number) => `${APP}/api/stories/${id}/filament`;
+  const saveMeters = (id: number, meters: unknown, as = ruben) => as.json<{ story?: { filamentMeters?: number | null } }>(filamentUrl(id), { method: "PATCH", body: JSON.stringify({ filamentMeters: meters }) });
+  const legendary = () => db.memberBadge.findUnique({ where: { userId_badgeKey: { userId: ayla.id, badgeKey: monsterKey } } });
+  check("a member cannot log their own usage", (await saveMeters(oldPrint.id, 10_000, noodleClient)).status === 403);
+  check("a member cannot log somebody else's usage", (await saveMeters(oldPrint.id, 10_000, other)).status === 403);
+  check("cross-origin usage writes are refused", (await ruben.raw(filamentUrl(oldPrint.id), { method: "PATCH", headers: { origin: "https://elsewhere.example", "content-type": "application/json" }, body: '{"filamentMeters":10000}' })).status === 403);
+  check("usage edits require a completed print", (await saveMeters(finishing.id, 10_000)).status === 409);
+  check("the field must be supplied", (await ruben.json(filamentUrl(oldPrint.id), { method: "PATCH", body: "{}" })).status === 400);
+  for (const bad of [-1, 1_000_001, 0.0001, true, "noodles"]) check(`invalid usage ${JSON.stringify(bad)} is refused`, (await saveMeters(oldPrint.id, bad)).status === 400);
+  const logged = await saveMeters(oldPrint.id, 4000);
+  check("the owner can log historical usage as numeric meters", logged.status === 200 && logged.body.story?.filamentMeters === 4000);
+  check("recording historical usage is audited", (await db.auditEvent.count({ where: { action: "story.filament_recorded", subject: storyRef(oldPrint.id) } })) === 1);
+  const refusedCompletion = await ruben.json(`${APP}/api/stories/${finishing.id}/advance`, { method: "POST", body: '{"filamentMeters":-1}' });
+  check("an invalid completion measurement leaves the status alone", refusedCompletion.status === 400 && (await db.story.findUniqueOrThrow({ where: { id: finishing.id } })).status === "Printing");
+  const almostLegend = await ruben.json<{ story?: { status?: string; filamentMeters?: number; printHours?: number } }>(`${APP}/api/stories/${finishing.id}/advance`, { method: "POST", body: '{"filamentMeters":5999.999,"printHours":1.5}' });
+  check("completion stores actual meters and moves to Delivery", almostLegend.status === 200 && almostLegend.body.story?.status === "Delivery" && almostLegend.body.story?.filamentMeters === 5999.999);
+  check("completion stores actual printer runtime", almostLegend.body.story?.printHours === 1.5);
+  check("9,999.999 meters stays locked; quantity does not multiply the measurement", await legendary() === null);
+  await db.story.create({ data: { uploaderId: ayla.id, title: "Unfinished noodle spool", status: "Printing", filamentMeters: 100_000, colorName: "Slate", colorHex: "#4a5d78" } });
+  await saveMeters(oldPrint.id, 4000);
+  check("unfinished usage does not count", await legendary() === null);
+  await saveMeters(finishing.id, 6000);
+  const foundLegend = await legendary();
+  check("exactly 10,000 meters reveals the legendary badge", Boolean(foundLegend) && foundLegend?.storyId === finishing.id);
+  const revealed = await (await noodleClient.raw(`${APP}/stickers`)).text();
+  check("the discovered sticker has its artwork and legendary label", revealed.includes(`data-badge="${monsterKey}" data-earned="true"`) && revealed.includes("Flying Spaghetti Monster") && revealed.includes("Legendary"));
+  const otherMystery = await (await other.raw(`${APP}/stickers`)).text();
+  check("another member sees only the undiscovered silhouette", otherMystery.includes('data-badge="mystery" data-earned="false"') && !otherMystery.includes(monsterKey));
+  const completedPage = (await (await ruben.raw(`${APP}/story/${finishing.id}`)).text()).replace(/<!--[\s\S]*?-->/g, "");
+  check("the owner can see and correct completed usage on the ticket", completedPage.includes("Record filament used") && completedPage.includes('value="6000"') && completedPage.includes("6,000 meters total"));
+  const reprinted = await noodleClient.json<{ story?: { filamentMeters?: number | null; printHours?: number | null } }>(`${APP}/api/stories/${finishing.id}/requeue`, { method: "POST", body: "{}" });
+  check("a reprint starts without the previous print's usage", reprinted.status === 201 && reprinted.body.story?.filamentMeters === null && reprinted.body.story?.printHours === null);
+  await ruben.json(`${APP}/api/stories/${finishing.id}/advance`, { method: "POST" });
+  await saveMeters(finishing.id, 6000);
+  await saveMeters(finishing.id, null);
+  check("collection, repeated logs and corrections preserve one discovery date", (await legendary())?.earnedAt.getTime() === foundLegend?.earnedAt.getTime());
+  check("the discovery notification is sent once", (await db.notification.count({ where: { recipientId: ayla.id, badgeKey: monsterKey } })) === 1);
+  const simultaneous = await Promise.all([1, 2].map((n) => db.story.create({ data: { uploaderId: mallory.id, title: `Together ${n}`, status: "Printing", colorName: "Slate", colorHex: "#4a5d78" } })));
+  const togetherResponses = await Promise.all(simultaneous.map((story) => ruben.json(`${APP}/api/stories/${story.id}/advance`, { method: "POST", body: '{"filamentMeters":5000}' })));
+  check("simultaneous completions combine to award once", togetherResponses.every((r) => r.status === 200) && (await db.memberBadge.count({ where: { userId: mallory.id, badgeKey: monsterKey } })) === 1 && (await db.notification.count({ where: { recipientId: mallory.id, badgeKey: monsterKey } })) === 1);
 
   console.info(
     `\n${passed} checks passed, ${failures.length} failed` +

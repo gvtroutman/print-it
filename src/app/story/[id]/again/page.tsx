@@ -1,9 +1,15 @@
 import { notFound } from "next/navigation";
 
 import { getStoryOr404, printerName, requireUser, storyRef } from "@/lib/authz";
-import { storySwatch } from "@/lib/catalog";
+import { AUTO_MATERIAL, storySwatch } from "@/lib/catalog";
+import { configuredFilamentRecords } from "@/lib/filament-settings-data";
+import { recordedSwatchId } from "@/lib/filament-ids";
+import { colorDisplayName, filamentColorName } from "@/lib/filament-color-types";
 import { availableCatalog } from "@/lib/catalog-data";
 import { warmLibrary } from "@/lib/filament-library";
+import { listPalette } from "@/lib/palette";
+import { filamentSettings } from "@/lib/filament-settings";
+import { hasStoreAccess } from "@/lib/store-access";
 import { AppHeader } from "@/components/app-header";
 import { Kicker, Notice } from "@/components/ui";
 import { UploadForm } from "@/app/upload/upload-form";
@@ -38,10 +44,14 @@ export default async function PrintAgainPage({
   const story = await getStoryOr404(storyId, user);
   if (story.uploader.id !== user.id) notFound();
 
-  const [owner, catalog] = await Promise.all([printerName(), availableCatalog()]);
+  const [owner, catalog, savedColors, filamentConfig, storeAccess] = await Promise.all([printerName(), availableCatalog(), listPalette(user), filamentSettings(), hasStoreAccess(user)]);
   // So the "can get" picker finds the library ready by the time it is opened.
-  warmLibrary();
+  if (storeAccess) warmLibrary();
   const ref = storyRef(story.id);
+  const swatch = storySwatch(story);
+  const filament = storeAccess ? configuredFilamentRecords(filamentConfig).find(color => swatch
+    ? recordedSwatchId(color.id) === swatch.id
+    : story.material === AUTO_MATERIAL && color.hex === story.colorHex && filamentColorName(color) === colorDisplayName(story.colorName)) ?? null : null;
 
   return (
     <>
@@ -62,6 +72,9 @@ export default async function PrintAgainPage({
           <UploadForm
             owner={owner}
             catalog={catalog}
+            savedColors={savedColors}
+            filamentConfig={filamentConfig}
+            storeAccess={storeAccess}
             again={{
               id: story.id,
               ref,
@@ -70,9 +83,10 @@ export default async function PrintAgainPage({
               title: story.title,
               material: story.material,
               colorName: story.colorName,
-              swatch: storySwatch(story),
+              colorHex: story.colorHex,
+              swatch,
+              filament,
               quantity: story.quantity,
-              priority: story.priority,
               note: story.note,
             }}
           />

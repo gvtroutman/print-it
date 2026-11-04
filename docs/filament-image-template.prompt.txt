@@ -1,0 +1,15 @@
+Created with the built-in imagegen tool in edit mode.
+Edit source: Creality's official Hyper PLA grey spool product photo.
+Source page: https://store.creality.com/products/hyper-series-pla-3d-printing-filament-1kg
+Source photo: https://cdn.shopify.com/s/files/1/0893/0603/8637/files/Hyper_Series_PLA_7.png?v=1768970723
+The app tints this edited close-up using each filament's saved color and finish.
+These are illustrative previews, rather than photographs of individual products.
+
+Use case: precise-object-edit
+Edit target: the supplied official Creality Hyper PLA grey spool product photograph.
+Task: turn the existing photograph into a reusable close-up crop of the actual wound filament. Edit this source photograph rather than creating a new material image.
+
+Crop into the upper-left section of the visible grey filament between the cardboard spool flanges, where the existing strands naturally sweep from lower left toward upper right and curve around the reel. Fill a landscape 5:3 image completely with this photographed filament. Use an oblique crop with the strands leaning gently right, roughly 25–35 degrees from vertical, keeping the real bowed curvature of the windings. Preserve the source photograph's fine, closely spaced round strands, original lighting, narrow highlights and real surface detail. The windings should be thin and tightly packed, like the source, not broad stylized tubes.
+Localized cleanup: remove only the single loose crossing strand if present in the selected crop. Keep all the underlying winding structure intact.
+Keep a neutral grey filament color with enough highlight and shadow detail to recolor it for other filament colors later.
+Output only the close-up photographic texture. Crop away the cardboard flange, labels, logos, spool holes, loose end and white background. No card, no border, no text, no invented spool or new strand layout, no dramatic change to the lighting or finish.

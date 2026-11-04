@@ -1,25 +1,26 @@
 import type { ComponentProps, ReactNode } from "react";
 
-import { PRIORITY_CHIP, priorityBand } from "@/lib/catalog";
+import { StarFlare } from "@/components/star-flare";
+import { ARTWORK } from "@/lib/artwork-assets";
+import { ShopSign } from "@/components/shop-sign";
 
 /**
  * The logotype: the block-letter wordmark on its own — the sign over the
  * door. The printer mark lives only in the favicon (src/app/icon.svg).
  *
- * A PNG in /public rather than an import, so the sign-in screen can show it:
- * middleware lets `.png` through without a session. `size` is the height the
+ * A linked PNG, so edits to the mounted source appear on the next refresh.
+ * Middleware lets `.png` through without a session. `size` is the height the
  * old script wordmark was set at. The letters arch, so they fill only about
  * half the image's height; the image is drawn taller than `size` to keep them
  * at roughly the old wordmark's width.
  *
- * Each version of the artwork gets its own filename, so a cached copy of the
- * last one — in a browser or at Cloudflare — can never stand in for it.
+ * The artwork route reads the source on every request and disables caching.
  *
  * `lit` runs the warm-up flicker once on load. Off by default so it fires on
  * the sign-in and claim screens only, where it is the first thing you see;
  * anywhere else it would be a tic.
  */
-const WORDMARK = { src: "/print-it-wordmark-arched.png", width: 834, height: 191 };
+const WORDMARK = { src: ARTWORK.wordmarkArched, width: 905, height: 246 };
 
 export function Brand({
   size = 34,
@@ -62,18 +63,21 @@ export function Kicker({ children }: { children: ReactNode }) {
  * over the counter is the first thing you see; one lit card on it,
  * checkerboard along the bottom edge.
  */
-export function AuthShell({ children }: { children: ReactNode }) {
+export function AuthShell({ children, closed = false, shopSign = false }: { children: ReactNode; closed?: boolean; shopSign?: boolean }) {
   return (
     <main className="kraft-tile flex min-h-screen flex-col items-center justify-center px-[26.4px] py-[35.2px]">
-      <div className="mb-[26.4px]">
-        <Brand size={56} lit />
+      <div className="relative mb-[26.4px] w-fit max-w-full px-[28px] sm:px-[44px]">
+        <StarFlare size={22} className="absolute left-0 top-0 -rotate-12 sm:w-[28px]" />
+        <Brand size={56} lit className="h-auto max-w-full" />
+        <StarFlare size={30} className="absolute bottom-[-4px] right-0 rotate-12 sm:w-[38px]" />
       </div>
+      {shopSign && <ShopSign closed={closed} />}
       <div className="w-full max-w-[520px] overflow-hidden rounded-panel border-[3px] border-ink bg-porcelain shadow-stamp-lg">
-        <div className="layers border-b-[3px] border-ink bg-aqua px-[26.4px] py-[13.2px]">
+        {!shopSign && <div className={`layers border-b-[3px] border-ink ${closed ? "bg-sun" : "bg-aqua"} px-[26.4px] py-[13.2px]`}>
           <p className="m-0 font-mono text-[12px] font-bold uppercase tracking-[0.14em] text-ink">
-            Open · come on in
+            {closed ? "Closed · printer repairs" : "Open · come on in"}
           </p>
-        </div>
+        </div>}
         <div className="p-[35.2px]">{children}</div>
         <div className="checker h-[10px]" aria-hidden />
       </div>
@@ -207,33 +211,6 @@ const CHIP_SKIN: Record<string, string> = {
   InProgress: "bg-sun text-ink",
   Shipped: "bg-cherry text-ink",
 };
-
-/**
- * A ticket's priority, 1–100, coloured by its third in the colours a feature
- * request already uses.
- *
- * `quiet` leaves the middle third undrawn. On a board card almost everything
- * sits in the middle, and a chip on every card is a chip nobody reads — there
- * the mark should mean "this one is not like the others". In a list the owner
- * is triaging, every row says what it is.
- */
-export function PriorityChip({
-  priority,
-  quiet = false,
-}: {
-  priority: number;
-  quiet?: boolean;
-}) {
-  const band = priorityBand(priority);
-  if (quiet && band === "medium") return null;
-  return (
-    <span
-      className={`inline-block flex-none rounded-chip border-2 border-ink px-[8px] py-[1px] font-mono text-[10.5px] font-bold uppercase tracking-[0.06em] text-ink ${PRIORITY_CHIP[band]!.bg}`}
-    >
-      Priority {priority}
-    </span>
-  );
-}
 
 /** A range input as a thick bar with a ringed thumb; its track is its own background. */
 export const SLIDER =

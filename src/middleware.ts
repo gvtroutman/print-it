@@ -33,7 +33,7 @@ import { deviceMarkerFor, tokenFromSessionCookie } from "@/lib/device-marker";
  * nothing on its own — the token is checked by the page and again by the
  * action behind it.
  */
-const PUBLIC_PREFIXES = ["/signin", "/invite", "/set-password", "/device"];
+const PUBLIC_PREFIXES = ["/signin", "/invite", "/set-password", "/device", "/maintenance"];
 
 const isProd = process.env.NODE_ENV === "production";
 
@@ -132,7 +132,7 @@ export async function middleware(request: NextRequest) {
   // how; there is a probe (A01-anon-api) that an unauthenticated POST to
   // /api/upload comes back 401.
   const isApi = pathname.startsWith("/api/");
-  const isPublic = PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
+  const isPublic = pathname === "/install" || PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
   const hasCookie = getSessionCookie(request, { cookiePrefix: "ppp" });
 
   if (isApi || isPublic || hasCookie) {
@@ -173,8 +173,8 @@ export async function middleware(request: NextRequest) {
  * themselves — and re-stamping there would resurrect the one that
  * `/api/auth/sign-out` had just deleted.
  *
- * A member's device session is left alone. It lasts four hundred days, its
- * cookie was written with that `Max-Age`, and cutting it to twenty minutes
+ * Device sessions and explicitly remembered sign-ins are left alone. Their
+ * cookies already have the correct lifetime, and cutting them to twenty minutes
  * here would sign the member out of a device they have no password to get
  * back into. `ppp.device` says which session that is — by digest, so a marker
  * left over from a member cannot spare a later sign-in on the same browser.
@@ -203,12 +203,16 @@ async function restampSession(request: NextRequest, response: NextResponse): Pro
 }
 
 export const config = {
-  // Everything except static assets, which need no nonce and no session.
+  // Static assets and Ko-fi need no nonce or session. Excluding the webhook
+  // also avoids Next's middleware body clone (sized for 250 MB uploads): its
+  // own handler reads at most 64 KiB before parsing. Global security headers
+  // still apply through next.config.ts.
   //
   // `icon.svg` is on this list because leaving it off put the favicon behind
   // the sign-in redirect: a signed-out browser asked for it, got a 307 to
   // /signin, and rendered no icon at all — on precisely the pages where the
   // brand is doing the most work. It is a public brand asset; there is
-  // nothing there to protect.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|.*\\.png$).*)"],
+  // nothing there to protect. Artwork SVGs likewise go straight to the
+  // allowlisted artwork route so a sign-in page never replaces an image.
+  matcher: ["/((?!_next/static|_next/image|api/kofi/?$|favicon.ico|icon.svg|artwork/|manifest.webmanifest$|sw.js$|pwa/|.*\\.png$).*)"],
 };

@@ -1,190 +1,80 @@
 import Link from "next/link";
-
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { nextStatus, storyRef } from "@/lib/scope";
-import { printerName, requireAdmin } from "@/lib/authz";
-import { formatBytes } from "@/lib/models";
-import { quantityText, relativeTime } from "@/lib/catalog";
-import { tornClass } from "@/lib/torn";
+import { storyRef, BOARD } from "@/lib/scope";
+import { requireAdmin } from "@/lib/authz";
+import { quantityText } from "@/lib/catalog";
+import { bambuLink, syncIfStale } from "@/lib/bambu";
+import { completedJobHours, isActiveJob, pipelineStage, preparationBlockers } from "@/lib/print-pipeline";
 import { AppHeader } from "@/components/app-header";
+import { OrderTimestamp } from "@/components/order-timestamp";
 import { AdminActions } from "@/components/admin-actions";
-import { Kicker, Notice, StatusChip, PriorityChip, SpoolToBuyChip } from "@/components/ui";
+import { BambuStudioButton } from "@/components/bambu-studio-button";
+import { Kicker, Notice, SpoolToBuyChip } from "@/components/ui";
 import { Toast } from "@/components/toast";
 import { FilamentSpool } from "@/components/color-swatch";
-
-import { PrinterHours } from "./printer-hours";
+import { PipelineBoard, type PipelineTicket } from "./pipeline-board";
+import { PrinterHoursRefresh } from "./printer-hours-refresh";
 
 export const dynamic = "force-dynamic";
+const include = { uploader: { select: { name: true, initials: true } }, printJobs: { orderBy: { startedAt: "desc" as const } } } satisfies Prisma.StoryInclude;
+type Ticket = Prisma.StoryGetPayload<{ include: typeof include }>;
 
-/**
- * The pass — the printer owner's home. Handoff §5.
- *
- * Two halves, because they answer different questions. "Waiting on you" is
- * the only part that needs a decision, so it comes first, is the loudest
- * thing on the page, and disappears entirely when it is empty. Everything
- * already accepted is a list you scan rather than act on, with one button
- * each to move it along.
- *
- * Admin-only: `requireAdmin` answers 404, so a client learns nothing about
- * whether this route exists.
- */
-export default async function QueuePage({
-  searchParams,
-}: {
-  searchParams: Promise<{ toast?: string; error?: string }>;
-}) {
-  const [{ toast, error }, admin] = await Promise.all([searchParams, requireAdmin()]);
-  const owner = await printerName();
+function QueueTicket({ story, userId }: { story: Ticket; userId: string }) {
+  const blockers = preparationBlockers(story);
+  const failed = story.printJobs.filter(j => j.outcome === "failed").length;
+  const active = story.printJobs.filter(j => isActiveJob(j.outcome)).length;
+  const finished = story.printJobs.filter(j => j.outcome === "finished").length;
+  const hours = completedJobHours(story.printJobs);
+  return <article className="rounded-card border-2 border-ink bg-porcelain p-[13px] shadow-stamp">
+    <div className="mb-[9px] flex flex-wrap items-center justify-between gap-[6px]">
+      <Link href={`/story/${story.id}`} className="font-mono text-[11px] font-bold tracking-[0.05em] text-ink-3 hover:text-cherry-dk">{storyRef(story.id)}</Link>
+    </div>
+    <Link href={`/story/${story.id}`} className="block break-words font-display text-[20px] leading-[1.15] text-ink hover:text-cherry-dk">{story.title}</Link>
+    <p className="mb-[11px] mt-[5px] text-[12px] text-ink-3">{story.uploader.name} · <OrderTimestamp iso={story.createdAt.toISOString()} /></p>
+    <div className="flex items-center gap-[9px] border-y border-rule py-[10px]">
+      <FilamentSpool mode={story.colorMode} style={story.colorStyle ?? story.colorHex} className="h-[33px] w-[24px] flex-none" />
+      <p className="m-0 min-w-0 text-[12px] leading-[1.6] text-ink"><strong>{quantityText(story.quantity)}</strong> · {story.material}<br />{story.colorName}</p>
+    </div>
+    <p className="my-[10px] break-all text-[11px] text-ink-3">{story.filename ?? "No model yet"}</p>
+    {story.swatchId !== null && <div className="mb-[9px]"><SpoolToBuyChip /></div>}
+    {blockers.length > 0 && <p className="mb-[10px] mt-0 rounded-[8px] bg-sun-wash px-[9px] py-[7px] text-[12px] font-bold text-ink">{blockers.join(" · ")}{story.flagReason ? `: ${story.flagReason}` : ""}</p>}
+    {story.printJobs.length > 0 && <div className="mb-[11px] rounded-[8px] bg-aqua-wash px-[9px] py-[8px] text-[12px] leading-[1.6] text-ink">
+      <strong>Bambu</strong> · {[active ? `${active} printing` : "", finished ? `${finished} finished` : "", failed ? `${failed} failed / cancelled` : ""].filter(Boolean).join(" · ") || "Outcome pending"}
+      {hours !== null && <span className="block">{hours} actual hours · {story.status === "Printing" ? "Check the print before pickup" : "Successful jobs"}</span>}
+    </div>}
+    {story.filename && <div className="mb-[12px]"><BambuStudioButton storyId={story.id} userId={userId} filename={story.filename} compact /></div>}
+    <AdminActions storyId={story.id} status={story.status} flagged={story.flagged} flagReason={story.flagReason} prepared={Boolean(story.preparedAt)} hasModel={Boolean(story.storageKey && story.filename)} filamentMeters={story.filamentMeters?.toString() ?? null} printHours={story.printHours?.toString() ?? null} from="/queue" compact />
+    <Link href={`/story/${story.id}`} className="mt-[12px] block text-[12px] font-bold text-ink-2 underline underline-offset-2">{story.status === "Requested" ? "Review ticket & conversation →" : "Ticket & Bambu jobs →"}</Link>
+  </article>;
+}
 
-  const stories = await db.story.findMany({
-    orderBy: { createdAt: "asc" },
-    include: { uploader: { select: { name: true, initials: true } } },
+export default async function QueuePage({ searchParams }: { searchParams: Promise<{ toast?: string; error?: string }> }) {
+  const [{ toast, error }, admin, link] = await Promise.all([searchParams, requireAdmin(), bambuLink()]);
+  const working = await db.story.count({ where: { status: { in: ["Accepted", "Printing"] } } });
+  await syncIfStale(link, working > 0);
+  const [stories, completed] = await Promise.all([
+    db.story.findMany({ where: { status: { in: [...BOARD] } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], include }),
+    db.story.count({ where: { status: "Done" } }),
+  ]);
+  const tickets: PipelineTicket[] = stories.flatMap(story => {
+    const stage = pipelineStage(story);
+    return stage ? [{ id: story.id, stage, search: [storyRef(story.id), story.title, story.filename, story.uploader.name, story.material, story.colorName].filter(Boolean).join(" "), blocked: preparationBlockers(story).length > 0 || story.printJobs.some(j => j.outcome === "failed"), card: <QueueTicket story={story} userId={admin.id} /> }] : [];
   });
-
-  // Highest priority first, then oldest first among equals — the query is
-  // already oldest-first and the sort is stable.
-  const waiting = stories
-    .filter((s) => s.status === "Requested")
-    .sort((a, b) => b.priority - a.priority);
-  const working = stories.filter(
-    (s) => s.status !== "Requested" && s.status !== "Declined",
-  );
-
-  return (
-    <>
-      <AppHeader user={admin} active="/queue" />
-
-      <main className="mx-auto w-full max-w-[1180px] px-[26.4px] pb-[80px] pt-[35.2px]">
-        <Kicker>Printer view · the machine by the window</Kicker>
-        <h1 className="m-0 mb-[11px] text-[46px] leading-[0.95] text-ink">
-          {owner}&rsquo;s queue
-        </h1>
-        <p className="m-0 mb-[26.4px] text-[16.5px] leading-[1.5] text-ink-2">
-          {waiting.length
-            ? `${waiting.length} ${waiting.length === 1 ? "ticket is" : "tickets are"} waiting for a yes.`
-            : "Nothing waiting. Enjoy the quiet."}
-        </p>
-
-        {error && (
-          <div className="mb-[22px] max-w-[640px]">
-            <Notice tone="warn">{error}</Notice>
-          </div>
-        )}
-
-        {/* ---- the only part that needs a decision ---- */}
-        {waiting.length > 0 && (
-          <section className="mb-[26.4px] overflow-hidden rounded-panel border-[3px] border-ink bg-sun shadow-stamp-lg">
-            <div className="layers border-b-[3px] border-ink px-[22px] py-[11px]">
-              <h2 className="m-0 font-display text-[20px] text-ink">Waiting on you</h2>
-            </div>
-            <div className="flex flex-col gap-[13.2px] p-[17.6px]">
-              {waiting.map((story) => (
-                <article
-                  key={story.id}
-                  className="flex flex-wrap items-start gap-[17.6px] rounded-card border-[3px] border-ink bg-porcelain p-[15px] torn"
-                >
-                  <div className="min-w-[220px] flex-[1_1_280px]">
-                    <p className="m-0 flex flex-wrap items-center gap-[8px] font-mono text-[11.5px] font-bold tracking-[0.06em] text-ink-3">
-                      <PriorityChip priority={story.priority} />
-                      {story.swatchId !== null && <SpoolToBuyChip />}
-                      <span>
-                        {[storyRef(story.id), story.filename, story.fileSize !== null ? formatBytes(story.fileSize) : "no model yet"]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </span>
-                    </p>
-                    <Link
-                      href={`/story/${story.id}`}
-                      className="mt-[4px] block font-display text-[20px] leading-[1.15] text-ink hover:text-cherry-dk"
-                    >
-                      {story.title}
-                    </Link>
-                    <p className="m-0 mt-[6px] text-[14px] text-ink-2">
-                      {quantityText(story.quantity)} · {story.material} ·{" "}
-                      {story.colorName}
-                    </p>
-                    <p className="m-0 mt-[4px] font-mono text-[11.5px] uppercase tracking-[0.05em] text-ink-3">
-                      {story.uploader.name} · {relativeTime(story.createdAt)}
-                    </p>
-                  </div>
-                  <AdminActions
-                    storyId={story.id}
-                    status={story.status}
-                    flagged={story.flagged}
-                    flagReason={story.flagReason}
-                    from="/queue"
-                    compact
-                  />
-                </article>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* ---- everything already said yes to ---- */}
-        <h2 className="m-0 mb-[13.2px] font-display text-[24px] text-ink">
-          Rest of the queue
-        </h2>
-        <div className="torn-stamp">
-          <div className={`overflow-hidden rounded-panel border-[3px] border-ink bg-porcelain ${tornClass(working.length)}`}>
-            {working.length === 0 ? (
-              <p className="m-0 p-[22px] font-mono text-[12px] uppercase tracking-[0.06em] text-ink-3">
-                Nothing on the go.
-              </p>
-            ) : (
-              working.map((story, i) => (
-                <div
-                  key={story.id}
-                  className={`flex flex-wrap items-center gap-[15px] p-[15px] ${
-                    i < working.length - 1 ? "border-b-2 border-dashed border-rule" : ""
-                  }`}
-                >
-                  <FilamentSpool
-                    mode={story.colorMode}
-                    style={story.colorStyle ?? story.colorHex}
-                    className="h-[40px] w-[28px] flex-none"
-                  />
-                  <div className="min-w-[180px] flex-[1_1_240px]">
-                    <Link
-                      href={`/story/${story.id}`}
-                      className="block font-display text-[17px] leading-[1.2] text-ink hover:text-cherry-dk"
-                    >
-                      {story.title}
-                    </Link>
-                    <p className="m-0 mt-[3px] font-mono text-[11px] uppercase tracking-[0.04em] text-ink-3">
-                      {story.filename ?? "no model yet"} · {story.uploader.name} ·{" "}
-                      {relativeTime(story.createdAt)}
-                    </p>
-                  </div>
-                  <StatusChip status={story.status} />
-                  {story.swatchId !== null && <SpoolToBuyChip />}
-                  {story.flagged && (
-                    <span className="rounded-chip border-2 border-ink bg-cherry px-[9px] py-[2px] font-mono text-[10.5px] font-bold uppercase text-ink">
-                      needs a look
-                    </span>
-                  )}
-                  {nextStatus(story.status) && (
-                    <AdminActions
-                      storyId={story.id}
-                      status={story.status}
-                      flagged={story.flagged}
-                      flagReason={story.flagReason}
-                      from="/queue"
-                      compact
-                    />
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div className="mt-[35.2px]">
-          <PrinterHours />
-        </div>
-      </main>
-
-      {toast && <Toast>{toast}</Toast>}
-    </>
-  );
+  const ready = tickets.filter(t => t.stage === "ready").length;
+  const printing = tickets.filter(t => t.stage === "printing").length;
+  return <>
+    <AppHeader user={admin} active="/queue" />
+    <main className="mx-auto w-full max-w-[1660px] px-[18px] pb-[80px] pt-[32px] sm:px-[26px]">
+      {link && <PrinterHoursRefresh />}
+      <div className="mb-[24px] flex flex-wrap items-end justify-between gap-[18px]">
+        <div><Kicker>Printer view · ticket pipeline</Kicker><h1 className="m-0 mb-[9px] text-[42px] leading-[1] text-ink">Print Queue</h1><p className="m-0 text-[15px] text-ink-2">From request to pickup, with the model and print jobs in one place.</p></div>
+        <div className="flex flex-wrap gap-[8px] text-[12px] font-bold text-ink"><span className="rounded-chip border-2 border-ink bg-mint px-[12px] py-[8px]">{ready} ready</span><span className="rounded-chip border-2 border-ink bg-aqua px-[12px] py-[8px]">{printing} printing</span><Link href="/history" className="rounded-chip border-2 border-ink bg-porcelain px-[12px] py-[8px] hover:bg-sun">{completed} completed · History ↗</Link></div>
+      </div>
+      {error && <div className="mb-[20px]"><Notice tone="warn">{error}</Notice></div>}
+      <PipelineBoard tickets={tickets} />
+      <div className="mt-[24px] flex flex-wrap items-center justify-between gap-[10px] rounded-panel border-2 border-ink bg-cream-2 px-[16px] py-[13px] text-[12px] text-ink-2"><span>Oldest request first in each column.</span><Link href="/bambu-studio" className="font-bold underline underline-offset-2">Set up Bambu Studio handoff ↗</Link></div>
+    </main>
+    {toast && <Toast>{toast}</Toast>}
+  </>;
 }
